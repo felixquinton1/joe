@@ -82,6 +82,11 @@ the interface reports the local routing duration separately from provider
 processing. Naming exactly one provider in a request (for example, "teste
 Gemini") routes directly to that provider unless the menu explicitly overrides
 it.
+Provider health checks such as "fais un petit test de Gemini" are deliberately
+minimal: Joe omits project and conversation context, selects Gemini Flash,
+forbids tools, and stops after 30 seconds. A Gemini `429 RESOURCE_EXHAUSTED`
+stops immediately instead of waiting through CLI backoff retries, and the test
+does not silently fall back to another provider.
 Claude routing uses the official local cache refreshed by `/usage`; Joe does
 not send `/usage` as a paid non-interactive model prompt.
 For requests that are moderately complex, Joe dynamically selects the first

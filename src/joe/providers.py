@@ -188,6 +188,15 @@ def classify_error(stderr: str, returncode: int) -> str | None:
     return "process"
 
 
+def _terminal_gemini_quota(line: str) -> bool:
+    lower = line.lower()
+    return (
+        "resource_exhausted" in lower
+        or "exceeded your current quota" in lower
+        or "status 429" in lower
+    )
+
+
 def default_providers() -> dict[str, Provider]:
     return {
         name: Provider(name, name)
@@ -261,6 +270,12 @@ def _collect_streams(
                 "gemini",
             }:
                 callback(stream_name, line)
+        if (
+            provider == "gemini"
+            and stream_name == "stderr"
+            and _terminal_gemini_quota(line)
+        ):
+            _stop_process(process)
     process.wait()
     return "".join(output["stdout"]), "".join(output["stderr"])
 

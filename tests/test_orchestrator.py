@@ -146,3 +146,27 @@ def test_consensus_emits_structured_completed_opinions(tmp_path):
         for event in completed
         if event["stage"] != "synthesis"
     )
+
+
+def test_health_check_skips_project_context_and_uses_short_timeout(tmp_path):
+    providers = {
+        name: FakeProvider(name)
+        for name in ("codex", "claude", "gemini", "copilot")
+    }
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    orchestrator.execute(
+        "petit test de Gemini",
+        Route(
+            Intent.ANALYZE,
+            Mode.FAST,
+            "gemini",
+            reason="analyze; fast; preferred=gemini; health-check",
+        ),
+        extra_context="SECRET CONVERSATION CONTEXT",
+    )
+
+    prompt, _, _, timeout = providers["gemini"].calls[0]
+    assert "SECRET CONVERSATION CONTEXT" not in prompt
+    assert "17 × 23" in prompt
+    assert timeout == 30

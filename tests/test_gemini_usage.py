@@ -55,3 +55,26 @@ def test_gemini_status_exposes_metrics_without_inventing_remaining_quota(
     assert status["windows"] == []
     assert status["metrics"]
     assert "/stats model" in status["message"]
+
+
+def test_gemini_usage_understands_stream_result_stats(tmp_path):
+    path = tmp_path / "gemini_usage.json"
+    raw = json.dumps(
+        {
+            "type": "result",
+            "stats": {
+                "models": {
+                    "gemini-flash": {
+                        "total_tokens": 321,
+                        "input_tokens": 300,
+                    }
+                }
+            },
+        }
+    )
+
+    record_gemini_usage(raw, path)
+
+    day = next(iter(json.loads(path.read_text())["days"].values()))
+    assert day["tokens"] == 321
+    assert day["requests"] == 1

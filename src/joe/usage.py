@@ -116,8 +116,10 @@ def _gemini_stats(raw_output: str) -> dict[str, Any] | None:
         tokens = values.get("tokens", {})
         api = values.get("api", {})
         models[str(model)] = {
-            "tokens": int(tokens.get("total", 0) or 0),
-            "requests": int(api.get("totalRequests", 0) or 0),
+            "tokens": int(
+                tokens.get("total", values.get("total_tokens", 0)) or 0
+            ),
+            "requests": int(api.get("totalRequests", 1) or 0),
         }
     if not models:
         return None
@@ -320,7 +322,7 @@ def _codex_status() -> dict[str, Any]:
         "id": 1,
         "method": "initialize",
         "params": {
-            "clientInfo": {"name": "joe", "version": "0.15.1"},
+            "clientInfo": {"name": "joe", "version": "0.15.2"},
             "capabilities": {"experimentalApi": True},
         },
     }

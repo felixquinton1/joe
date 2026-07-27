@@ -10,6 +10,7 @@ from joe.providers import (
     _final_output,
     _redact_values,
     _secret_values,
+    _terminal_gemini_quota,
     classify_error,
 )
 
@@ -102,6 +103,9 @@ def test_error_classification():
     assert classify_error("Rate limit exceeded", 1) == "quota"
     assert classify_error("Please login", 1) == "authentication"
     assert classify_error("", 2) == "process"
+    assert _terminal_gemini_quota(
+        "429 RESOURCE_EXHAUSTED: exceeded your current quota"
+    )
 
 
 def test_environment_secret_values_are_redacted_from_streams():

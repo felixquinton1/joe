@@ -121,6 +121,10 @@ class RunManager:
             elif route.mode is Mode.FAST and route.intent is Intent.ANSWER:
                 effort = effort or "low"
                 model = model or _latest_model(route.primary)
+            if "health-check" in route.reason:
+                effort = effort or "low"
+                if route.primary == "gemini":
+                    model = model or "gemini-3-flash-preview"
             run.emit(
                 {
                     "type": "route",
@@ -134,6 +138,7 @@ class RunManager:
                     "routing_ms": round(
                         (time.monotonic() - routing_started) * 1000
                     ),
+                    "health_check": "health-check" in route.reason,
                 }
             )
             if route.intent is Intent.MODIFY and not os.access(self.project, os.W_OK):

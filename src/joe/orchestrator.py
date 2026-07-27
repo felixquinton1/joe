@@ -57,8 +57,13 @@ class Orchestrator:
         on_event: Callable[[dict], None] | None = None,
     ) -> tuple[str, Path]:
         self.memory.ensure()
-        context = self.memory.context(request)
-        if extra_context:
+        health_check = "health-check" in route.reason
+        context = (
+            self._health_check_prompt(request, route.primary)
+            if health_check
+            else self.memory.context(request)
+        )
+        if extra_context and not health_check:
             context += "\n\n" + extra_context
         results: list[ProviderResult] = []
 
@@ -67,6 +72,8 @@ class Orchestrator:
                 route.primary, context, route.intent, results, model=model,
                 effort=effort, execution_mode=execution_mode, on_event=on_event,
                 cancel_event=cancel_event,
+                timeout_override=30 if health_check else None,
+                allow_fallback=not health_check,
             )
             final = result.stdout.strip()
             final_provider = result.provider
@@ -184,9 +191,13 @@ class Orchestrator:
         execution_mode: str | None = None,
         cancel_event: threading.Event | None = None,
         on_event: Callable[[dict], None] | None = None,
+        timeout_override: int | None = None,
+        allow_fallback: bool = True,
     ) -> ProviderResult:
         config = self.memory.config()
-        candidates = [provider_name, *config["fallbacks"].get(provider_name, [])]
+        candidates = [provider_name]
+        if allow_fallback:
+            candidates.extend(config["fallbacks"].get(provider_name, []))
         seen: set[str] = set()
         for name in candidates:
             if name in seen or name not in self.providers or name in (exclude or set()):
@@ -198,7 +209,7 @@ class Orchestrator:
                 prompt,
                 self.project,
                 intent,
-                int(config["timeout_seconds"]),
+                timeout_override or int(config["timeout_seconds"]),
                 model=model if name == provider_name else None,
                 effort=effort if name == provider_name else None,
                 execution_mode=(
@@ -242,6 +253,15 @@ class Orchestrator:
                 return result
         errors = ", ".join(f"{r.provider}:{r.error_kind}" for r in results)
         raise OrchestrationError(f"All providers failed ({errors})")
+
+    @staticmethod
+    def _health_check_prompt(request: str, provider: str) -> str:
+        return (
+            f"Minimal availability test for {provider}. Do not inspect files, "
+            "run tools, or load project context. Calculate 17 × 23 and answer "
+            "in one short French sentence with the result. Original request: "
+            + request
+        )
 
     def _consensus(
         self,

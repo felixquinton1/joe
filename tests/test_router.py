@@ -81,3 +81,4 @@ def test_explicit_provider_name_routes_directly_to_that_provider():
     assert route.mode is Mode.FAST
     assert route.primary == "gemini"
     assert "explicit-provider" in route.reason
+    assert "health-check" in route.reason

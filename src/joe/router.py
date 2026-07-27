@@ -40,6 +40,10 @@ CAPABILITY_QUESTION_PHRASES = {
     "est-ce que ça", "est ce que ça", "que se passe-t-il",
 }
 PROVIDER_NAMES = {"codex", "claude", "gemini", "copilot"}
+HEALTH_CHECK_PHRASES = {
+    "petit test", "teste ", "test de ", "test du ", "fonctionne",
+    "est disponible", "marche",
+}
 
 
 def _tokens(text: str) -> set[str]:
@@ -60,6 +64,9 @@ class Router:
         named_providers = words & PROVIDER_NAMES
         explicit_provider = (
             next(iter(named_providers)) if len(named_providers) == 1 else None
+        )
+        health_check = bool(explicit_provider) and any(
+            phrase in lower for phrase in HEALTH_CHECK_PHRASES
         )
         capability_question = any(
             phrase in lower for phrase in CAPABILITY_QUESTION_PHRASES
@@ -122,5 +129,6 @@ class Router:
         reason = (
             f"{intent.value}; {mode.value}; preferred={primary}"
             + ("; explicit-provider" if explicit_provider and not forced_agent else "")
+            + ("; health-check" if health_check else "")
         )
         return Route(intent, mode, primary, reviewer, reason)
