@@ -69,6 +69,15 @@ provider process tree, removes the unfinished turn, restores the original
 prompt in the composer, and lets it be edited and relaunched. Scrollable panels
 follow new content only while the user remains near the bottom.
 
+After every run, Joe independently records the branch, the local HEAD and
+`origin/dev` before and after execution. It displays the resulting file list
+with insertion/deletion counts, so a provider cannot merely claim that a fetch
+or merge happened. File changes are kept by default. They can be rejected when
+the repository was clean at task start, HEAD did not change, and no concurrent
+run makes an exact restoration unsafe. Commits and merges are reported but are
+never automatically rewritten. Codex's explicit full-access permission is
+available for Git metadata writes such as fetch, pull, and merge.
+
 Within one repository, conversations can be grouped into logical sub-projects.
 The repository-level `project.md` remains global, while each sub-project adds a
 shared context automatically injected into all its conversations. Conversation

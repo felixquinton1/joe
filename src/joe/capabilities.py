@@ -88,6 +88,10 @@ def _codex() -> dict[str, Any]:
             _mode("auto", "Automatique"),
             _mode("read-only", "Lecture seule"),
             _mode("workspace-write", "Commandes et modifications du projet"),
+            _mode(
+                "danger-full-access",
+                "Accès complet — Git et commandes hors sandbox",
+            ),
         ],
     }
 

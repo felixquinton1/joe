@@ -38,7 +38,7 @@ class Provider:
         modifying = intent is Intent.MODIFY
         if self.name == "codex":
             sandbox = execution_mode if execution_mode in {
-                "read-only", "workspace-write"
+                "read-only", "workspace-write", "danger-full-access"
             } else ("workspace-write" if modifying else "read-only")
             command = [
                 self.executable, "--ask-for-approval", "never",

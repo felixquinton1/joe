@@ -158,21 +158,23 @@ class ConversationStore:
         content: str,
         run_id: str | None = None,
         provider: str | None = None,
+        git_report: dict[str, Any] | None = None,
     ) -> None:
         with self.lock:
             payload = self._read()
             conversation = self._find(payload, conversation_id)
             if not conversation:
                 return
-            conversation["messages"].append(
-                {
-                    "role": role,
-                    "content": content,
-                    "run_id": run_id,
-                    "provider": provider,
-                    "at": time.time(),
-                }
-            )
+            message = {
+                "role": role,
+                "content": content,
+                "run_id": run_id,
+                "provider": provider,
+                "at": time.time(),
+            }
+            if git_report:
+                message["git_report"] = git_report
+            conversation["messages"].append(message)
             if role == "user" and conversation["title"] == "Nouvelle conversation":
                 conversation["title"] = content.strip().splitlines()[0][:64]
             conversation["updated_at"] = time.time()

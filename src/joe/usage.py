@@ -96,7 +96,7 @@ def _codex_status() -> dict[str, Any]:
         "id": 1,
         "method": "initialize",
         "params": {
-            "clientInfo": {"name": "joe", "version": "0.7.3"},
+            "clientInfo": {"name": "joe", "version": "0.8.0"},
             "capabilities": {"experimentalApi": True},
         },
     }

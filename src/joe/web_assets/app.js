@@ -1,4 +1,4 @@
-const APP_VERSION = "0.7.3";
+const APP_VERSION = "0.8.0";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -124,6 +124,96 @@ function showQuotaNotice(event) {
   }
   lines.push("Changer de modèle chez le même fournisseur ne contourne généralement pas une limite partagée.");
   bubble.textContent = lines.join("\n");
+}
+
+function shortCommit(value) {
+  return value ? value.slice(0, 8) : "indisponible";
+}
+
+function renderGitReport(report, runId) {
+  if (!report?.available) return;
+  const viewport = document.querySelector(".conversation");
+  const follow = shouldFollow(viewport);
+  const card = document.createElement("section");
+  card.className = "git-report";
+  const headChanged = report.head_before !== report.head_after;
+  const devChanged = report.origin_dev_before !== report.origin_dev_after;
+  const integration = report.origin_dev_integrated === null
+    ? "état de dev inconnu"
+    : report.origin_dev_integrated
+      ? "origin/dev est intégré"
+      : "origin/dev n’est pas intégré";
+  card.innerHTML = `
+    <header>
+      <div><span class="eyebrow">Git · vérification indépendante</span><strong>${escapeHtml(report.branch || "HEAD détachée")}</strong></div>
+      <span class="change-status">Conservées par défaut</span>
+    </header>
+    <div class="git-facts">
+      <span>HEAD <b>${shortCommit(report.head_before)} → ${shortCommit(report.head_after)}</b>${headChanged ? " · modifié" : " · inchangé"}</span>
+      <span>origin/dev <b>${shortCommit(report.origin_dev_before)} → ${shortCommit(report.origin_dev_after)}</b>${devChanged ? " · fetch détecté" : " · inchangé"}</span>
+      <span>${integration}</span>
+    </div>`;
+  const summary = document.createElement("div");
+  summary.className = "diff-summary";
+  summary.innerHTML = `<strong>${report.files.length} fichier${report.files.length > 1 ? "s" : ""}</strong><span class="insertions">+${report.insertions}</span><span class="deletions">−${report.deletions}</span>`;
+  card.appendChild(summary);
+  if (report.files.length) {
+    const list = document.createElement("div");
+    list.className = "diff-files";
+    for (const file of report.files) {
+      const row = document.createElement("div");
+      row.innerHTML = `<code>${escapeHtml(file.path)}</code><span class="insertions">+${file.insertions}</span><span class="deletions">−${file.deletions}</span>${file.preexisting ? '<small title="Déjà modifié avant la tâche">préexistant</small>' : ""}`;
+      list.appendChild(row);
+    }
+    card.appendChild(list);
+  }
+  if (report.patch_preview) {
+    const details = document.createElement("details");
+    details.className = "diff-preview";
+    const summaryNode = document.createElement("summary");
+    summaryNode.textContent = "Voir le diff";
+    const patch = document.createElement("pre");
+    patch.textContent = report.patch_preview;
+    details.append(summaryNode, patch);
+    card.appendChild(details);
+  }
+  const actions = document.createElement("div");
+  actions.className = "git-actions";
+  const keep = document.createElement("button");
+  keep.textContent = "Conserver";
+  keep.onclick = () => {
+    keep.disabled = true;
+    keep.textContent = "Conservé";
+    card.querySelector(".change-status").textContent = "Acceptées";
+  };
+  const rejectButton = document.createElement("button");
+  rejectButton.className = "reject-changes";
+  rejectButton.textContent = "Rejeter";
+  rejectButton.disabled = !report.rejectable || !runId;
+  rejectButton.title = report.rejectable
+    ? "Restaurer exactement l’état précédant cette tâche"
+    : report.reject_reason || "Restauration automatique indisponible";
+  rejectButton.onclick = async () => {
+    if (!window.confirm("Rejeter toutes les modifications de fichiers attribuées à cette tâche ?")) return;
+    const response = await fetch(`/api/runs/${runId}/reject`, { method: "POST" });
+    const payload = await response.json();
+    if (!response.ok) {
+      window.alert(payload.message);
+      return;
+    }
+    rejectButton.disabled = true;
+    keep.disabled = true;
+    card.querySelector(".change-status").textContent = "Rejetées et restaurées";
+  };
+  actions.append(keep, rejectButton);
+  if (!report.rejectable && report.files.length) {
+    const reason = document.createElement("small");
+    reason.textContent = report.reject_reason;
+    actions.appendChild(reason);
+  }
+  card.appendChild(actions);
+  $("messages").appendChild(card);
+  scrollIfFollowing(viewport, follow);
 }
 
 function updateCapabilityMenus() {
@@ -283,6 +373,7 @@ async function selectConversation(conversationId) {
     } else {
       const bubble = addMessage("Joe · synthèse", "", "assistant");
       renderMarkdown(bubble, message.content);
+      if (message.git_report) renderGitReport(message.git_report, message.run_id);
     }
   }
   if (!conversation.messages.length) {
@@ -512,6 +603,8 @@ function handleEvent(conversationId, event, finalBubble) {
     agent.status.textContent = event.ok ? "Terminé" : `Échec · ${event.error || "inconnu"}`;
   } else if (event.type === "quota_notice") {
     showQuotaNotice(event);
+  } else if (event.type === "git_report") {
+    renderGitReport(event, event.run_id);
   } else if (event.type === "complete") {
     renderMarkdown(finalBubble, event.response);
     finishRun(conversationId, true);

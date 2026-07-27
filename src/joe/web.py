@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import threading
 import time
 import uuid
@@ -16,6 +17,7 @@ from urllib.parse import unquote, urlparse
 from . import __version__
 from .capabilities import provider_capabilities
 from .conversations import ConversationStore
+from .git_review import GitSnapshot, build_report, reject, snapshot
 from .models import Intent, Mode
 from .orchestrator import Orchestrator
 from .usage import usage_status
@@ -30,6 +32,7 @@ class LiveRun:
     done: bool = False
     cancel_event: threading.Event = field(default_factory=threading.Event)
     condition: threading.Condition = field(default_factory=threading.Condition)
+    git_before: GitSnapshot | None = None
 
     def emit(self, event: dict[str, Any]) -> None:
         with self.condition:
@@ -47,6 +50,7 @@ class RunManager:
         )
         self.conversations.ensure()
         self.live: dict[str, LiveRun] = {}
+        self.git_rejections: dict[str, dict[str, Any]] = {}
         self.lock = threading.Lock()
 
     def start(
@@ -59,7 +63,12 @@ class RunManager:
         effort: str | None,
         execution_mode: str | None,
     ) -> LiveRun:
-        run = LiveRun(uuid.uuid4().hex, request, conversation_id)
+        run = LiveRun(
+            uuid.uuid4().hex,
+            request,
+            conversation_id,
+            git_before=snapshot(self.project),
+        )
         self.conversations.append_message(
             conversation_id, "user", request, run.run_id
         )
@@ -116,13 +125,16 @@ class RunManager:
                 cancel_event=run.cancel_event,
                 on_event=lambda event: self._emit_run_event(run, event),
             )
+            git_report = self._capture_git_report(run)
             self.conversations.append_message(
                 run.conversation_id,
                 "assistant",
                 response,
                 run.run_id,
                 provider=route.primary,
+                git_report=git_report,
             )
+            run.emit({"type": "git_report", "run_id": run.run_id, **git_report})
             run.emit(
                 {
                     "type": "complete",
@@ -131,13 +143,22 @@ class RunManager:
                 }
             )
         except Exception as exc:
+            git_report = self._capture_git_report(run)
             if run.cancel_event.is_set():
                 self.conversations.remove_run(run.conversation_id, run.run_id)
+                run.emit(
+                    {"type": "git_report", "run_id": run.run_id, **git_report}
+                )
                 run.emit({"type": "cancelled"})
                 return
             self.conversations.append_message(
-                run.conversation_id, "assistant", f"Erreur : {exc}", run.run_id
+                run.conversation_id,
+                "assistant",
+                f"Erreur : {exc}",
+                run.run_id,
+                git_report=git_report,
             )
+            run.emit({"type": "git_report", "run_id": run.run_id, **git_report})
             run.emit({"type": "error", "message": str(exc)})
         finally:
             with run.condition:
@@ -158,6 +179,24 @@ class RunManager:
             )
         )
 
+    def _capture_git_report(self, run: LiveRun) -> dict[str, Any]:
+        try:
+            concurrent_run = any(
+                other.run_id != run.run_id and not other.done
+                for other in self.live.values()
+            )
+            report, rejection = build_report(
+                self.project,
+                run.git_before or snapshot(self.project),
+                run.run_id,
+                concurrent_run=concurrent_run,
+            )
+            if rejection:
+                self.git_rejections[run.run_id] = rejection
+            return report
+        except (OSError, subprocess.SubprocessError):
+            return {"available": False}
+
     def cancel(self, run_id: str) -> bool:
         with self.lock:
             run = self.live.get(run_id)
@@ -165,6 +204,55 @@ class RunManager:
             return False
         run.cancel_event.set()
         return True
+
+    def reject_changes(self, run_id: str) -> tuple[bool, str]:
+        rejection = self.git_rejections.get(run_id)
+        review_path = self.orchestrator.memory.runs / f"{run_id}.reject.json"
+        if not rejection and run_id.replace("-", "").isalnum():
+            try:
+                rejection = json.loads(review_path.read_text())
+            except (OSError, json.JSONDecodeError):
+                rejection = None
+        if not rejection:
+            return False, "Ces modifications ne peuvent pas être restaurées automatiquement."
+        if any(not run.done for run in self.live.values()):
+            return False, "Attends la fin des autres tâches avant de restaurer."
+        restored, message = reject(self.project, rejection)
+        if restored:
+            self.git_rejections.pop(run_id, None)
+            try:
+                Path(rejection["patch"]).unlink(missing_ok=True)
+                review_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        return restored, message
+
+    def history(self) -> list[dict[str, Any]]:
+        self.orchestrator.memory.ensure()
+        items = []
+        for path in sorted(self.orchestrator.memory.runs.glob("*.json"), reverse=True):
+            try:
+                payload = json.loads(path.read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+            items.append(
+                {
+                    "id": path.stem,
+                    "request": payload.get("request", ""),
+                    "route": payload.get("route", {}),
+                    "final": payload.get("final", ""),
+                }
+            )
+        return items[:100]
+
+    def history_item(self, run_id: str) -> dict[str, Any] | None:
+        if not run_id.replace(".", "").isalnum():
+            return None
+        path = self.orchestrator.memory.runs / f"{run_id}.json"
+        try:
+            return json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return None
 
 
 def build_quota_notice(
@@ -200,34 +288,6 @@ def build_quota_notice(
         "alternatives": alternatives,
         "automatic_fallback": bool(alternatives),
     }
-
-    def history(self) -> list[dict[str, Any]]:
-        self.orchestrator.memory.ensure()
-        items = []
-        for path in sorted(self.orchestrator.memory.runs.glob("*.json"), reverse=True):
-            try:
-                payload = json.loads(path.read_text())
-            except (OSError, json.JSONDecodeError):
-                continue
-            items.append(
-                {
-                    "id": path.stem,
-                    "request": payload.get("request", ""),
-                    "route": payload.get("route", {}),
-                    "final": payload.get("final", ""),
-                }
-            )
-        return items[:100]
-
-    def history_item(self, run_id: str) -> dict[str, Any] | None:
-        if not run_id.replace(".", "").isalnum():
-            return None
-        path = self.orchestrator.memory.runs / f"{run_id}.json"
-        try:
-            return json.loads(path.read_text())
-        except (OSError, json.JSONDecodeError):
-            return None
-
 
 class JoeServer(ThreadingHTTPServer):
     manager: RunManager
@@ -282,6 +342,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
+        if path.startswith("/api/runs/") and path.endswith("/reject"):
+            run_id = unquote(path.split("/")[-2])
+            restored, message = self.server.manager.reject_changes(run_id)
+            return self._json(
+                {"restored": restored, "message": message},
+                HTTPStatus.OK if restored else HTTPStatus.CONFLICT,
+            )
         if path.startswith("/api/runs/") and path.endswith("/cancel"):
             run_id = unquote(path.split("/")[-2])
             cancelled = self.server.manager.cancel(run_id)
