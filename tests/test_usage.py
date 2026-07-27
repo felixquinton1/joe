@@ -73,7 +73,7 @@ def test_claude_status_reads_fresh_local_cache(tmp_path, monkeypatch):
     assert status["windows"][2]["remaining_percent"] == 10
 
 
-def test_claude_status_rejects_stale_cache(tmp_path, monkeypatch):
+def test_claude_status_keeps_recent_stale_cache_for_routing(tmp_path, monkeypatch):
     monkeypatch.setattr("joe.usage.time.time", lambda: 3_000)
     path = tmp_path / ".claude.json"
     path.write_text(
@@ -81,7 +81,38 @@ def test_claude_status_rejects_stale_cache(tmp_path, monkeypatch):
             {
                 "cachedUsageUtilization": {
                     "fetchedAtMs": 1_000_000,
-                    "utilization": {},
+                    "utilization": {
+                        "five_hour": {
+                            "utilization": 40,
+                            "resets_at": "2030-01-01T12:00:00Z",
+                        }
+                    },
+                }
+            }
+        )
+    )
+
+    status = _claude_status(path)
+
+    assert status["available"] is True
+    assert status["stale"] is True
+    assert status["windows"][0]["remaining_percent"] == 60
+
+
+def test_claude_status_rejects_cache_older_than_six_hours(tmp_path, monkeypatch):
+    monkeypatch.setattr("joe.usage.time.time", lambda: 30_000)
+    path = tmp_path / ".claude.json"
+    path.write_text(
+        json.dumps(
+            {
+                "cachedUsageUtilization": {
+                    "fetchedAtMs": 1_000_000,
+                    "utilization": {
+                        "five_hour": {
+                            "utilization": 40,
+                            "resets_at": "2030-01-01T12:00:00Z",
+                        }
+                    },
                 }
             }
         )
@@ -90,4 +121,4 @@ def test_claude_status_rejects_stale_cache(tmp_path, monkeypatch):
     status = _claude_status(path)
 
     assert status["available"] is False
-    assert "périmées" in status["message"]
+    assert "trop anciennes" in status["message"]

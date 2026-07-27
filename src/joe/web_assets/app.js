@@ -1,4 +1,4 @@
-const APP_VERSION = "0.10.3";
+const APP_VERSION = "0.11.0";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -40,7 +40,7 @@ function renderUsage() {
   target.replaceChildren();
   for (const provider of state.usage) {
     const card = document.createElement("article");
-    card.className = `usage-card ${provider.available ? "" : "unavailable"}`;
+    card.className = `usage-card ${provider.available ? "" : "unavailable"} ${provider.stale ? "stale" : ""}`;
     const plan = provider.plan ? `<span>${escapeHtml(provider.plan)}</span>` : "";
     card.innerHTML = `<header><strong>${escapeHtml(provider.provider)}</strong>${plan}</header>`;
     if (!provider.available) {
@@ -49,6 +49,11 @@ function renderUsage() {
       card.appendChild(message);
     } else {
       for (const window of provider.windows) card.appendChild(usageWindow(window));
+      if (provider.stale && provider.message) {
+        const message = document.createElement("p");
+        message.textContent = provider.message;
+        card.appendChild(message);
+      }
     }
     target.appendChild(card);
   }

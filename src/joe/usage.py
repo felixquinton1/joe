@@ -13,9 +13,11 @@ from typing import Any
 from .models import Mode, Route
 
 _CACHE_SECONDS = 60
+_STALE_USAGE_SECONDS = 6 * 60 * 60
 _LOW_REMAINING_PERCENT = 20
 _FAR_RESET_SECONDS = 24 * 60 * 60
 _cache: tuple[float, list[dict[str, Any]]] | None = None
+_last_available: dict[str, tuple[float, dict[str, Any]]] = {}
 _lock = threading.Lock()
 
 
@@ -25,7 +27,7 @@ def usage_status(force: bool = False) -> list[dict[str, Any]]:
     with _lock:
         if not force and _cache and time.monotonic() - _cache[0] < _CACHE_SECONDS:
             return _cache[1]
-        providers = [
+        fresh = [
             _codex_status(),
             _claude_status(),
             _unavailable("gemini", "Non exposé par la CLI Gemini"),
@@ -34,8 +36,26 @@ def usage_status(force: bool = False) -> list[dict[str, Any]]:
                 "Disponible uniquement dans la session interactive Copilot",
             ),
         ]
+        providers = [_with_last_available(item) for item in fresh]
         _cache = (time.monotonic(), providers)
         return providers
+
+
+def _with_last_available(status: dict[str, Any]) -> dict[str, Any]:
+    provider = str(status["provider"])
+    now = time.monotonic()
+    if status.get("available"):
+        _last_available[provider] = (now, status)
+        return status
+    previous = _last_available.get(provider)
+    if not previous or now - previous[0] > _STALE_USAGE_SECONDS:
+        return status
+    fallback = dict(previous[1])
+    fallback["stale"] = True
+    fallback["message"] = (
+        f"Dernière mesure connue · {status.get('message', 'actualisation indisponible')}"
+    )
+    return fallback
 
 
 def balance_route(
@@ -106,13 +126,6 @@ def _claude_status(path: Path | None = None) -> dict[str, Any]:
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
         return _unavailable("claude", "Quota non encore mis en cache par Claude")
 
-    age_seconds = time.time() - fetched_at
-    if age_seconds > 15 * 60:
-        return _unavailable(
-            "claude",
-            "Données périmées · ouvre /usage dans Claude pour les actualiser",
-        )
-
     windows = []
     for name, key, duration in (
         ("5 heures", "five_hour", 300),
@@ -133,12 +146,24 @@ def _claude_status(path: Path | None = None) -> dict[str, Any]:
                 "duration_minutes": duration,
             }
         )
+    age_seconds = time.time() - fetched_at
+    if age_seconds > _STALE_USAGE_SECONDS:
+        return _unavailable(
+            "claude",
+            "Données trop anciennes · ouvre /usage dans Claude pour les actualiser",
+        )
+    stale = age_seconds > 15 * 60
     return {
         "provider": "claude",
         "available": bool(windows),
+        "stale": stale,
         "plan": None,
         "windows": windows,
-        "message": None if windows else "Aucune limite communiquée par Claude",
+        "message": (
+            "Dernière mesure connue · ouvre /usage dans Claude pour l’actualiser"
+            if windows and stale
+            else None if windows else "Aucune limite communiquée par Claude"
+        ),
     }
 
 
@@ -158,7 +183,7 @@ def _codex_status() -> dict[str, Any]:
         "id": 1,
         "method": "initialize",
         "params": {
-            "clientInfo": {"name": "joe", "version": "0.10.3"},
+            "clientInfo": {"name": "joe", "version": "0.11.0"},
             "capabilities": {"experimentalApi": True},
         },
     }
