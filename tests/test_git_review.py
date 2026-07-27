@@ -63,3 +63,19 @@ def test_report_does_not_offer_rejection_over_preexisting_work(tmp_path):
     assert report["preexisting_dirty"] is True
     assert report["rejectable"] is False
     assert rejection is None
+
+
+def test_unchanged_preexisting_files_are_not_attributed_to_run(tmp_path):
+    tracked = repository(tmp_path)
+    tracked.write_text("existing change\n")
+    untracked = tmp_path / "existing-output.txt"
+    untracked.write_text("existing output\n")
+    before = snapshot(tmp_path)
+
+    report, _ = build_report(
+        tmp_path, before, "run-3", concurrent_run=False
+    )
+
+    assert report["files"] == []
+    assert report["insertions"] == 0
+    assert report["deletions"] == 0

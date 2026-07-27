@@ -15,6 +15,7 @@ class GitSnapshot:
     head: str | None
     origin_dev: str | None
     dirty_files: frozenset[str]
+    file_signatures: dict[str, tuple[int, int] | None]
 
     @property
     def clean(self) -> bool:
@@ -23,18 +24,26 @@ class GitSnapshot:
 
 def snapshot(project: Path) -> GitSnapshot:
     if not (project / ".git").exists():
-        return GitSnapshot(False, None, None, None, frozenset())
-    status = _git(project, "status", "--porcelain=v1", "-z")
+        return GitSnapshot(False, None, None, None, frozenset(), {})
+    status = _git(
+        project,
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+    )
+    dirty_files = frozenset(
+        path
+        for path in _status_paths(status.stdout)
+        if not path.startswith(".agentflow/")
+    )
     return GitSnapshot(
         True,
         _value(project, "branch", "--show-current"),
         _value(project, "rev-parse", "HEAD"),
         _value(project, "rev-parse", "--verify", "refs/remotes/origin/dev"),
-        frozenset(
-            path
-            for path in _status_paths(status.stdout)
-            if not path.startswith(".agentflow/")
-        ),
+        dirty_files,
+        {path: _file_signature(project / path) for path in dirty_files},
     )
 
 
@@ -51,11 +60,17 @@ def build_report(
 
     base = before.head or "HEAD"
     diff = _git(project, "diff", "--numstat", base, "--")
-    files = _numstat(diff.stdout, before.dirty_files)
+    files = [
+        item
+        for item in _numstat(diff.stdout, before.dirty_files)
+        if _changed_since_snapshot(project, item["path"], before)
+    ]
     untracked = _untracked(project)
     known = {item["path"] for item in files}
     for path in untracked:
         if path in known:
+            continue
+        if not _changed_since_snapshot(project, path, before):
             continue
         files.append(
             {
@@ -255,6 +270,24 @@ def _line_count(path: Path) -> int:
 
 def _file_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _file_signature(path: Path) -> tuple[int, int] | None:
+    try:
+        stat = path.stat()
+        return stat.st_size, stat.st_mtime_ns
+    except OSError:
+        return None
+
+
+def _changed_since_snapshot(
+    project: Path,
+    relative: str,
+    before: GitSnapshot,
+) -> bool:
+    if relative not in before.dirty_files:
+        return True
+    return _file_signature(project / relative) != before.file_signatures.get(relative)
 
 
 def _reject_reason(
