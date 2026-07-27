@@ -9,15 +9,20 @@
 <body>
   <header class="topbar">
     <div class="brand"><span class="brand-mark">J</span><div><strong>Joe</strong><small>AI control room</small></div></div>
-    <div class="project"><span class="status-dot"></span><span id="project">Chargement…</span></div>
-  </header>
-  <section class="usage-strip" aria-label="Quotas personnels">
-    <div class="usage-heading">
-      <div><span class="eyebrow">Consommation personnelle</span><strong>Quotas IA</strong></div>
-      <button id="refresh-usage" class="icon-button" title="Actualiser les quotas">↻</button>
+    <div class="topbar-tools">
+      <div class="project"><span class="status-dot"></span><span id="project">Chargement…</span></div>
+      <details class="usage-popover">
+        <summary title="Consommation personnelle"><span class="quota-dot"></span>Quotas</summary>
+        <div class="usage-panel">
+          <div class="usage-heading">
+            <div><span class="eyebrow">Consommation personnelle</span><strong>Quotas IA</strong></div>
+            <button id="refresh-usage" class="icon-button" title="Actualiser les quotas">↻</button>
+          </div>
+          <div id="usage" class="usage-grid"><span class="usage-loading">Chargement…</span></div>
+        </div>
+      </details>
     </div>
-    <div id="usage" class="usage-grid"><span class="usage-loading">Chargement des quotas…</span></div>
-  </section>
+  </header>
   <main class="layout">
     <aside class="history-panel">
       <div class="panel-title"><div><span class="eyebrow">Mémoire</span><h2>Historique</h2></div><button id="refresh-history" class="icon-button" title="Actualiser">↻</button></div>

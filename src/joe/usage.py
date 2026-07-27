@@ -6,6 +6,8 @@ import selectors
 import subprocess
 import threading
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 _CACHE_SECONDS = 60
@@ -21,7 +23,7 @@ def usage_status(force: bool = False) -> list[dict[str, Any]]:
             return _cache[1]
         providers = [
             _codex_status(),
-            _unavailable("claude", "Non exposé par la CLI Claude"),
+            _claude_status(),
             _unavailable("gemini", "Non exposé par la CLI Gemini"),
             _unavailable(
                 "copilot",
@@ -32,12 +34,67 @@ def usage_status(force: bool = False) -> list[dict[str, Any]]:
         return providers
 
 
+def _claude_status(path: Path | None = None) -> dict[str, Any]:
+    cache_path = path or Path.home() / ".claude.json"
+    try:
+        payload = json.loads(cache_path.read_text())
+        cached = payload["cachedUsageUtilization"]
+        fetched_at = float(cached["fetchedAtMs"]) / 1000
+        utilization = cached["utilization"]
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return _unavailable("claude", "Quota non encore mis en cache par Claude")
+
+    age_seconds = time.time() - fetched_at
+    if age_seconds > 15 * 60:
+        return _unavailable(
+            "claude",
+            "Données périmées · ouvre /usage dans Claude pour les actualiser",
+        )
+
+    windows = []
+    for name, key, duration in (
+        ("5 heures", "five_hour", 300),
+        ("7 jours", "seven_day", 10080),
+    ):
+        item = utilization.get(key)
+        if not isinstance(item, dict) or item.get("utilization") is None:
+            continue
+        used = max(0.0, min(100.0, float(item["utilization"])))
+        windows.append(
+            {
+                "name": name,
+                "used_percent": round(used, 1),
+                "remaining_percent": round(100 - used, 1),
+                "resets_at": _iso_timestamp(item.get("resets_at")),
+                "duration_minutes": duration,
+            }
+        )
+    return {
+        "provider": "claude",
+        "available": bool(windows),
+        "plan": None,
+        "windows": windows,
+        "message": None if windows else "Aucune limite communiquée par Claude",
+    }
+
+
+def _iso_timestamp(value: Any) -> float | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(
+            timezone.utc
+        ).timestamp()
+    except ValueError:
+        return None
+
+
 def _codex_status() -> dict[str, Any]:
     initialize = {
         "id": 1,
         "method": "initialize",
         "params": {
-            "clientInfo": {"name": "joe", "version": "0.4.0"},
+            "clientInfo": {"name": "joe", "version": "0.4.1"},
             "capabilities": {"experimentalApi": True},
         },
     }

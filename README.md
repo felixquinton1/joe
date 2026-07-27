@@ -44,8 +44,9 @@ joe
 ```
 
 Joe opens `http://127.0.0.1:8765`. The interface streams provider stdout and
-stderr, shows provider status and personal quota resets when the provider CLI
-exposes them, provides stable agent/workflow/model/effort/permission controls,
+stderr, shows provider status and personal quota resets in a compact top-right
+popover when the provider CLI exposes them, provides stable
+agent/workflow/model/effort/permission controls,
 and loads the latest 100 run logs from the project's `.agentflow/runs/` folder.
 Joe never estimates missing quotas: unsupported providers are marked clearly.
 Use `joe chat` for the original terminal conversation and `joe web` when you
