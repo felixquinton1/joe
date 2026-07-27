@@ -10,7 +10,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .models import Mode, Route
+
 _CACHE_SECONDS = 60
+_LOW_REMAINING_PERCENT = 20
+_FAR_RESET_SECONDS = 2 * 60 * 60
 _cache: tuple[float, list[dict[str, Any]]] | None = None
 _lock = threading.Lock()
 
@@ -32,6 +36,63 @@ def usage_status(force: bool = False) -> list[dict[str, Any]]:
         ]
         _cache = (time.monotonic(), providers)
         return providers
+
+
+def balance_route(
+    route: Route,
+    statuses: list[dict[str, Any]],
+    *,
+    now: float | None = None,
+) -> Route:
+    """Move a FAST automatic route away from a constrained main provider."""
+    if route.mode is not Mode.FAST or route.primary not in {"codex", "claude"}:
+        return route
+    alternative = "claude" if route.primary == "codex" else "codex"
+    by_provider = {item.get("provider"): item for item in statuses}
+    current = by_provider.get(route.primary)
+    other = by_provider.get(alternative)
+    timestamp = time.time() if now is None else now
+    pressure = _quota_pressure(current, timestamp)
+    alternative_pressure = _quota_pressure(other, timestamp)
+    if not pressure or alternative_pressure is None or alternative_pressure:
+        return route
+    return Route(
+        route.intent,
+        route.mode,
+        alternative,
+        route.reviewer,
+        (
+            f"{route.reason}; quota-switch={route.primary}->{alternative}; "
+            f"{pressure}"
+        ),
+    )
+
+
+def _quota_pressure(
+    status: dict[str, Any] | None,
+    now: float,
+) -> str | None | bool:
+    if not status or not status.get("available") or not status.get("windows"):
+        return None
+    limiting = min(
+        status["windows"],
+        key=lambda window: float(window.get("remaining_percent", 100)),
+    )
+    remaining = float(limiting.get("remaining_percent", 100))
+    reset = limiting.get("resets_at")
+    seconds = float(reset) - now if isinstance(reset, (int, float)) else None
+    constrained = remaining <= 5 or (
+        remaining <= _LOW_REMAINING_PERCENT
+        and (seconds is None or seconds >= _FAR_RESET_SECONDS)
+    )
+    if not constrained:
+        return False
+    reset_text = (
+        "reset inconnu"
+        if seconds is None
+        else f"reset dans {max(0, int(seconds // 60))} min"
+    )
+    return f"{remaining:g} % restant sur {limiting.get('name', 'quota')}, {reset_text}"
 
 
 def _claude_status(path: Path | None = None) -> dict[str, Any]:
@@ -96,7 +157,7 @@ def _codex_status() -> dict[str, Any]:
         "id": 1,
         "method": "initialize",
         "params": {
-            "clientInfo": {"name": "joe", "version": "0.8.2"},
+            "clientInfo": {"name": "joe", "version": "0.9.1"},
             "capabilities": {"experimentalApi": True},
         },
     }

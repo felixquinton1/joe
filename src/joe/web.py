@@ -20,7 +20,7 @@ from .conversations import ConversationStore
 from .git_review import GitSnapshot, build_report, reject, snapshot
 from .models import Intent, Mode
 from .orchestrator import Orchestrator
-from .usage import usage_status
+from .usage import balance_route, usage_status
 
 
 @dataclass
@@ -101,6 +101,8 @@ class RunManager:
                     run.conversation_id
                 ),
             )
+            if not agent:
+                route = balance_route(route, usage_status())
             run.emit(
                 {
                     "type": "route",
@@ -108,6 +110,7 @@ class RunManager:
                     "intent": route.intent.value,
                     "primary": route.primary,
                     "reviewer": route.reviewer,
+                    "reason": route.reason,
                 }
             )
             if route.intent is Intent.MODIFY and not os.access(self.project, os.W_OK):

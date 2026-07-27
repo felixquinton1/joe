@@ -1,4 +1,4 @@
-const APP_VERSION = "0.8.2";
+const APP_VERSION = "0.9.1";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -7,6 +7,7 @@ const state = {
   activeProjectId: "main",
   conversations: [],
   activeConversationId: null,
+  panels: new Map(),
   runs: new Map()
 };
 const $ = id => document.getElementById(id);
@@ -361,6 +362,7 @@ function smallButton(label, title, action) {
 }
 
 async function selectConversation(conversationId) {
+  preserveActivePanel();
   const conversation = await fetch(`/api/conversations/${conversationId}`).then(response => response.json());
   state.activeConversationId = conversationId;
   state.activeProjectId = conversation.project_id || "main";
@@ -382,9 +384,7 @@ async function selectConversation(conversationId) {
   const conversationViewport = document.querySelector(".conversation");
   conversationViewport.scrollTop = conversationViewport.scrollHeight;
   applySettings(conversation.settings || {});
-  state.agents.clear();
-  $("agents").replaceChildren();
-  $("raw-log").textContent = "";
+  restoreConversationPanel(conversationId);
   const running = state.runs.has(conversationId);
   $("send").disabled = running;
   $("stop").classList.toggle("hidden", !running);
@@ -394,6 +394,32 @@ async function selectConversation(conversationId) {
     const bubble = addMessage("Joe", "Cette tâche continue en arrière-plan…", "assistant");
     state.runs.get(conversationId).bubble = bubble;
   }
+}
+
+function preserveActivePanel() {
+  if (!state.activeConversationId) return;
+  state.panels.set(state.activeConversationId, {
+    agentNodes: [...$("agents").children],
+    agents: state.agents,
+    rawLog: $("raw-log").textContent,
+    runState: $("run-state").textContent,
+    runStateClass: $("run-state").className
+  });
+}
+
+function restoreConversationPanel(conversationId) {
+  const panel = state.panels.get(conversationId);
+  if (!panel) {
+    state.agents = new Map();
+    $("agents").replaceChildren();
+    $("raw-log").textContent = "";
+    return;
+  }
+  state.agents = panel.agents;
+  $("agents").replaceChildren(...panel.agentNodes);
+  $("raw-log").textContent = panel.rawLog;
+  $("run-state").textContent = panel.runState;
+  $("run-state").className = panel.runStateClass;
 }
 
 async function createConversation(select = true, projectId = state.activeProjectId) {
@@ -554,6 +580,19 @@ function ensureAgent(name) {
 
 function handleEvent(conversationId, event, finalBubble) {
   if (conversationId !== state.activeConversationId) {
+    const panel = state.panels.get(conversationId);
+    if (panel) {
+      panel.rawLog += `${JSON.stringify(event)}\n`;
+      if (event.type === "complete" || event.type === "error" || event.type === "cancelled") {
+        for (const node of panel.agentNodes) {
+          node.classList.remove("active");
+          const status = node.querySelector(".agent-status");
+          if (status) status.textContent = event.type === "complete" ? "Terminé" : "Interrompu";
+        }
+        panel.runState = event.type === "complete" ? "Terminé" : "Échec";
+        panel.runStateClass = `run-state ${event.type === "complete" ? "done" : "idle"}`;
+      }
+    }
     if (event.type === "complete" || event.type === "error" || event.type === "cancelled") {
       state.runs.delete(conversationId);
       loadConversations(false);
@@ -571,7 +610,9 @@ function handleEvent(conversationId, event, finalBubble) {
     showRoute(event.mode, event.primary, event.reviewer);
     ensureAgent(event.primary);
     if (event.reviewer) ensureAgent(event.reviewer);
-    finalBubble.textContent = `${event.mode.toUpperCase()} · ${capitalize(event.primary)} sélectionné${event.reviewer ? ` · revue par ${capitalize(event.reviewer)}` : ""}\nDémarrage de l’agent…`;
+    const quotaSwitch = event.reason?.includes("quota-switch=");
+    const quotaDetail = quotaSwitch ? event.reason.split("; ").at(-1) : "";
+    finalBubble.textContent = `${event.mode.toUpperCase()} · ${capitalize(event.primary)} sélectionné${event.reviewer ? ` · revue par ${capitalize(event.reviewer)}` : ""}${quotaSwitch ? `\nBascule automatique : ${quotaDetail}.` : ""}\nDémarrage de l’agent…`;
   } else if (event.type === "provider_start") {
     const agent = ensureAgent(event.provider);
     agent.card.classList.add("active");
