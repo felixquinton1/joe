@@ -73,3 +73,11 @@ def test_long_capability_question_stays_fast_and_read_only():
     assert route.intent is Intent.ANSWER
     assert route.mode is Mode.FAST
     assert route.reviewer is None
+
+
+def test_explicit_provider_name_routes_directly_to_that_provider():
+    route = Router().route("Fais-moi un petit test de Gemini")
+
+    assert route.mode is Mode.FAST
+    assert route.primary == "gemini"
+    assert "explicit-provider" in route.reason

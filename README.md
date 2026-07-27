@@ -76,6 +76,12 @@ the preferred provider has 20% or less remaining and its reset is at least 24
 hours away. Short five-hour windows therefore remain useful instead of being
 prematurely preserved. At 5% or less it switches regardless of reset distance. A manually
 selected provider always wins, and REVIEW/CONSENSUS semantics are unchanged.
+Routing itself is deterministic and does not call a model. It never waits for
+fresh quota or model-catalog probes: the latest background cache is used, and
+the interface reports the local routing duration separately from provider
+processing. Naming exactly one provider in a request (for example, "teste
+Gemini") routes directly to that provider unless the menu explicitly overrides
+it.
 Claude routing uses the official local cache refreshed by `/usage`; Joe does
 not send `/usage` as a paid non-interactive model prompt.
 For requests that are moderately complex, Joe dynamically selects the first

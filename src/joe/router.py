@@ -39,6 +39,7 @@ CAPABILITY_QUESTION_PHRASES = {
     "est il possible", "puis-je", "puis je", "dois-je", "dois je",
     "est-ce que ça", "est ce que ça", "que se passe-t-il",
 }
+PROVIDER_NAMES = {"codex", "claude", "gemini", "copilot"}
 
 
 def _tokens(text: str) -> set[str]:
@@ -56,6 +57,10 @@ class Router:
     ) -> Route:
         lower = request.lower()
         words = _tokens(request)
+        named_providers = words & PROVIDER_NAMES
+        explicit_provider = (
+            next(iter(named_providers)) if len(named_providers) == 1 else None
+        )
         capability_question = any(
             phrase in lower for phrase in CAPABILITY_QUESTION_PHRASES
         )
@@ -98,6 +103,8 @@ class Router:
 
         if forced_agent:
             primary = forced_agent
+        elif explicit_provider:
+            primary = explicit_provider
         elif follow_up_review:
             primary = "claude" if previous_provider == "codex" else "codex"
         elif any(phrase in lower for phrase in LARGE_CONTEXT_WORDS):
@@ -112,5 +119,8 @@ class Router:
         reviewer = None
         if mode is Mode.REVIEW:
             reviewer = "claude" if primary == "codex" else "codex"
-        reason = f"{intent.value}; {mode.value}; preferred={primary}"
+        reason = (
+            f"{intent.value}; {mode.value}; preferred={primary}"
+            + ("; explicit-provider" if explicit_provider and not forced_agent else "")
+        )
         return Route(intent, mode, primary, reviewer, reason)

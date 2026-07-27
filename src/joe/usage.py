@@ -27,18 +27,25 @@ def usage_status(force: bool = False) -> list[dict[str, Any]]:
     with _lock:
         if not force and _cache and time.monotonic() - _cache[0] < _CACHE_SECONDS:
             return _cache[1]
-        fresh = [
-            _codex_status(),
-            _claude_status(),
-            _gemini_status(),
-            _unavailable(
-                "copilot",
-                "Disponible uniquement dans la session interactive Copilot",
-            ),
-        ]
+    fresh = [
+        _codex_status(),
+        _claude_status(),
+        _gemini_status(),
+        _unavailable(
+            "copilot",
+            "Disponible uniquement dans la session interactive Copilot",
+        ),
+    ]
+    with _lock:
         providers = [_with_last_available(item) for item in fresh]
         _cache = (time.monotonic(), providers)
         return providers
+
+
+def cached_usage_status() -> list[dict[str, Any]]:
+    """Return quota data immediately without probing provider CLIs."""
+    with _lock:
+        return list(_cache[1]) if _cache else []
 
 
 def record_gemini_usage(
@@ -313,7 +320,7 @@ def _codex_status() -> dict[str, Any]:
         "id": 1,
         "method": "initialize",
         "params": {
-            "clientInfo": {"name": "joe", "version": "0.15.0"},
+            "clientInfo": {"name": "joe", "version": "0.15.1"},
             "capabilities": {"experimentalApi": True},
         },
     }

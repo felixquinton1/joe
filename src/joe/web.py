@@ -16,12 +16,12 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 from . import __version__
-from .capabilities import provider_capabilities
+from .capabilities import cached_provider_capabilities, provider_capabilities
 from .conversations import ConversationStore
 from .git_review import GitSnapshot, build_report, reject, snapshot
 from .models import Intent, Mode
 from .orchestrator import Orchestrator
-from .usage import balance_route, usage_status
+from .usage import balance_route, cached_usage_status, usage_status
 
 
 def _conversation_backup_path(project: Path) -> Path:
@@ -103,6 +103,7 @@ class RunManager:
         execution_mode: str | None,
     ) -> None:
         try:
+            routing_started = time.monotonic()
             forced_mode = Mode(mode) if mode else None
             route = self.orchestrator.router.route(
                 run.request,
@@ -113,7 +114,7 @@ class RunManager:
                 ),
             )
             if not agent:
-                route = balance_route(route, usage_status())
+                route = balance_route(route, cached_usage_status())
             if _complex_request(run.request, route):
                 effort = effort or "high"
                 model = model or _latest_model(route.primary)
@@ -130,6 +131,9 @@ class RunManager:
                     "reason": route.reason,
                     "model": model,
                     "effort": effort,
+                    "routing_ms": round(
+                        (time.monotonic() - routing_started) * 1000
+                    ),
                 }
             )
             if route.intent is Intent.MODIFY and not os.access(self.project, os.W_OK):
@@ -346,7 +350,7 @@ def _complex_request(request: str, route: Route) -> bool:
 def _latest_model(provider: str) -> str | None:
     if provider not in {"codex", "claude"}:
         return None
-    models = provider_capabilities().get(provider, {}).get("models", [])
+    models = cached_provider_capabilities().get(provider, {}).get("models", [])
     return str(models[0]["id"]) if models else None
 
 class JoeServer(ThreadingHTTPServer):

@@ -1,6 +1,10 @@
 import json
 
-from joe.usage import _claude_status, normalize_codex_usage
+from joe.usage import (
+    _claude_status,
+    cached_usage_status,
+    normalize_codex_usage,
+)
 
 
 def test_normalize_codex_usage_windows():
@@ -26,6 +30,16 @@ def test_normalize_codex_usage_windows():
     assert status["plan"] == "plus"
     assert status["windows"][0]["remaining_percent"] == 74.5
     assert status["windows"][1]["remaining_percent"] == 20
+
+
+def test_cached_usage_never_probes_providers(monkeypatch):
+    monkeypatch.setattr("joe.usage._cache", None)
+    monkeypatch.setattr(
+        "joe.usage._codex_status",
+        lambda: (_ for _ in ()).throw(AssertionError("must not probe")),
+    )
+
+    assert cached_usage_status() == []
 
 
 def test_normalize_codex_usage_clamps_percentages():

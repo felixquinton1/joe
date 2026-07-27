@@ -299,7 +299,11 @@ def _activity(
             )
             return {"kind": item_type, "label": _activity_label(item_type), "detail": str(detail)}
         if event.get("type") == "turn.started":
-            return {"kind": "status", "label": "Analyse de la demande", "detail": ""}
+            return {
+                "kind": "status",
+                "label": "Préparation de la réponse",
+                "detail": "",
+            }
     if provider == "claude":
         message = event.get("message") or {}
         for block in message.get("content", []):

@@ -1,4 +1,4 @@
-const APP_VERSION = "0.15.0";
+const APP_VERSION = "0.15.1";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -727,7 +727,7 @@ function handleEvent(conversationId, event, finalBubble) {
     const quotaSwitch = event.reason?.includes("quota-switch=");
     const quotaDetail = quotaSwitch ? event.reason.split("; ").at(-1) : "";
     const execution = [event.model, event.effort ? `effort ${event.effort}` : ""].filter(Boolean).join(" · ");
-    finalBubble.textContent = `${event.mode.toUpperCase()} · ${capitalize(event.primary)} sélectionné${event.reviewer ? ` · revue par ${capitalize(event.reviewer)}` : ""}${execution ? ` · ${execution}` : ""}${quotaSwitch ? `\nBascule automatique : ${quotaDetail}.` : ""}\nDémarrage de l’agent…`;
+    finalBubble.textContent = `Routage local terminé${Number.isFinite(event.routing_ms) ? ` en ${event.routing_ms} ms` : ""}.\n${event.mode.toUpperCase()} · ${capitalize(event.primary)} répond${event.reviewer ? ` · revue par ${capitalize(event.reviewer)}` : ""}${execution ? ` · ${execution}` : ""}${quotaSwitch ? `\nBascule automatique : ${quotaDetail}.` : ""}`;
   } else if (event.type === "provider_start") {
     const agent = ensureAgent(event.provider);
     agent.card.classList.add("active");

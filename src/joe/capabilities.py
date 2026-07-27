@@ -51,6 +51,11 @@ def provider_capabilities(refresh: bool = False) -> dict[str, Any]:
     return result
 
 
+def cached_provider_capabilities() -> dict[str, Any]:
+    """Return discovered capabilities without running provider commands."""
+    return _cache[1] if _cache else {}
+
+
 def _codex() -> dict[str, Any]:
     models = []
     if shutil.which("codex"):
