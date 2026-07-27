@@ -1,4 +1,4 @@
-const APP_VERSION = "0.7.0";
+const APP_VERSION = "0.7.1";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -285,20 +285,20 @@ async function renameConversation(conversation) {
   if (conversation.id === state.activeConversationId) $("conversation-title").textContent = title.trim();
 }
 
-async function createProject() {
-  const name = window.prompt("Nom du sous-projet :", "Nouveau sous-projet");
-  if (!name?.trim()) return;
-  const project = await fetch("/api/projects", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: name.trim() })
-  }).then(response => response.json());
-  state.activeProjectId = project.id;
-  await createConversation(true, project.id);
+function createProject() {
+  state.editingProjectId = null;
+  $("project-dialog-title").textContent = "Nouveau sous-projet";
+  $("save-project").textContent = "Créer";
+  $("project-name").value = "";
+  $("project-context").value = "";
+  $("project-dialog").showModal();
+  requestAnimationFrame(() => $("project-name").focus());
 }
 
 function openProject(project) {
   state.editingProjectId = project.id;
+  $("project-dialog-title").textContent = "Modifier le sous-projet";
+  $("save-project").textContent = "Enregistrer";
   $("project-name").value = project.name;
   $("project-context").value = project.context || "";
   $("project-dialog").showModal();
@@ -306,16 +306,33 @@ function openProject(project) {
 
 async function saveProject(event) {
   event.preventDefault();
-  await fetch(`/api/projects/${state.editingProjectId}`, {
-    method: "PATCH",
+  if (!$("project-name").reportValidity()) return;
+  const creating = !state.editingProjectId;
+  const response = await fetch(
+    creating ? "/api/projects" : `/api/projects/${state.editingProjectId}`,
+    {
+    method: creating ? "POST" : "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name: $("project-name").value,
       context: $("project-context").value
     })
   });
+  const project = await response.json();
+  if (creating && $("project-context").value) {
+    await fetch(`/api/projects/${project.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ context: $("project-context").value })
+    });
+  }
   $("project-dialog").close();
-  await loadConversations(false);
+  state.activeProjectId = project.id;
+  if (creating) {
+    await createConversation(true, project.id);
+  } else {
+    await loadConversations(false);
+  }
 }
 
 async function togglePin(conversation) {
