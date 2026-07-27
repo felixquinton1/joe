@@ -51,3 +51,13 @@ def test_git_actions_are_modifications():
         "fusionne cette branche",
     ):
         assert Router().route(request).intent is Intent.MODIFY
+
+
+def test_large_implementation_automatically_gets_review():
+    route = Router().route(
+        "Fais une implémentation complète de la gestion des permissions."
+    )
+
+    assert route.intent is Intent.MODIFY
+    assert route.mode is Mode.REVIEW
+    assert route.reviewer == "claude"

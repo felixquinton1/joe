@@ -30,6 +30,10 @@ LARGE_CONTEXT_WORDS = {
     "gros dépôt", "grand dépôt", "gros contexte", "long contexte",
     "explore tout", "synthétise le dépôt", "synthèse du dépôt",
 }
+LARGE_IMPLEMENTATION_PHRASES = {
+    "gros travail", "implémentation complète", "implementation complete",
+    "de bout en bout", "plusieurs fichiers", "refonte", "refactor complet",
+}
 
 
 def _tokens(text: str) -> set[str]:
@@ -56,6 +60,10 @@ class Router:
         ambiguous_architecture = bool(words & ARCHITECTURE_WORDS) and any(
             marker in lower for marker in ("choisir", "quelle approche", "propose")
         )
+        large_implementation = intent is Intent.MODIFY and (
+            len(request) >= 240
+            or any(phrase in lower for phrase in LARGE_IMPLEMENTATION_PHRASES)
+        )
 
         if forced_mode:
             mode = forced_mode
@@ -63,6 +71,8 @@ class Router:
             mode = Mode.FAST
         elif important or ambiguous_architecture:
             mode = Mode.CONSENSUS
+        elif large_implementation:
+            mode = Mode.REVIEW
         elif words & REVIEW_WORDS:
             mode = Mode.REVIEW
         else:

@@ -1,4 +1,4 @@
-const APP_VERSION = "0.13.1";
+const APP_VERSION = "0.14.0";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -428,7 +428,11 @@ async function selectConversation(conversationId) {
   $("run-state").className = `run-state ${running ? "running" : "idle"}`;
   if (running) {
     const bubble = addMessage("Joe", "Cette tâche continue en arrière-plan…", "assistant");
-    state.runs.get(conversationId).bubble = bubble;
+    const activeRun = state.runs.get(conversationId);
+    activeRun.bubble = bubble;
+    for (const event of activeRun.workflow.values()) {
+      renderWorkflowUpdate(event, bubble, activeRun.runId);
+    }
   }
 }
 
@@ -614,7 +618,39 @@ function ensureAgent(name) {
   return agent;
 }
 
+function renderWorkflowUpdate(event, finalBubble, runId) {
+  if (!finalBubble) return;
+  const message = finalBubble.closest(".message");
+  let progress = document.querySelector(`.workflow-progress[data-run="${runId}"]`);
+  if (!progress) {
+    progress = document.createElement("section");
+    progress.className = "workflow-progress";
+    progress.dataset.run = runId;
+    progress.innerHTML = `<header><span class="eyebrow">${event.mode === "consensus" ? "Consensus en cours" : "Implémentation contrôlée"}</span><strong>${event.mode === "consensus" ? "Avis et examens croisés" : "Réalisation, revue et correction"}</strong></header><div class="workflow-stages"></div>`;
+    message.before(progress);
+  }
+  const stages = progress.querySelector(".workflow-stages");
+  let stage = stages.querySelector(`[data-stage="${event.stage}"]`);
+  if (!stage) {
+    stage = document.createElement("details");
+    stage.className = "workflow-stage";
+    stage.dataset.stage = event.stage;
+    stages.appendChild(stage);
+  }
+  const complete = event.status === "complete";
+  stage.classList.toggle("complete", complete);
+  stage.classList.toggle("running", !complete);
+  stage.innerHTML = `<summary><span>${escapeHtml(event.label)}</span><b>${escapeHtml(capitalize(event.provider))} · ${complete ? "terminé" : "en cours"}</b></summary><div class="workflow-opinion"></div>`;
+  if (complete && event.content) {
+    renderMarkdown(stage.querySelector(".workflow-opinion"), event.content);
+  }
+}
+
 function handleEvent(conversationId, event, finalBubble) {
+  const activeRun = state.runs.get(conversationId);
+  if (event.type === "workflow_update" && activeRun) {
+    activeRun.workflow.set(event.stage, event);
+  }
   if (conversationId !== state.activeConversationId) {
     const panel = state.panels.get(conversationId);
     if (panel) {
@@ -675,6 +711,11 @@ function handleEvent(conversationId, event, finalBubble) {
     const followOutput = shouldFollow(agent.output);
     agent.output.textContent += event.text;
     scrollIfFollowing(agent.output, followOutput);
+  } else if (event.type === "workflow_update") {
+    renderWorkflowUpdate(event, finalBubble, activeRun?.runId || "");
+    finalBubble.textContent = event.status === "complete"
+      ? `${capitalize(event.provider)} a terminé : ${event.label.toLowerCase()}.`
+      : `${capitalize(event.provider)} · ${event.label}…`;
   } else if (event.type === "provider_end") {
     const agent = ensureAgent(event.provider);
     agent.card.classList.remove("active");
@@ -686,7 +727,7 @@ function handleEvent(conversationId, event, finalBubble) {
   } else if (event.type === "complete") {
     renderMarkdown(finalBubble, event.response);
     finishRun(conversationId, true);
-    loadConversations(false).then(() => selectConversation(conversationId));
+    loadConversations(false);
   } else if (event.type === "error") {
     finalBubble.textContent = `Erreur : ${event.message}`;
     finishRun(conversationId, false);
@@ -748,7 +789,13 @@ async function startRun(request) {
   }
   const { run_id } = await response.json();
   const stream = new EventSource(`/api/events/${run_id}`);
-  state.runs.set(conversationId, { runId: run_id, stream, bubble: finalBubble, request });
+  state.runs.set(conversationId, {
+    runId: run_id,
+    stream,
+    bubble: finalBubble,
+    request,
+    workflow: new Map()
+  });
   loadConversations(false);
   stream.onmessage = ({ data }) => {
     const event = JSON.parse(data);

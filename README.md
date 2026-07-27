@@ -26,7 +26,8 @@ executable are named Joe.
 - Analysis and review calls are read-only.
 - Implementation calls may edit only the selected working directory.
 - FAST makes one provider call unless that provider fails.
-- REVIEW makes one primary call and one read-only review call.
+- REVIEW makes one primary call and one read-only review call, followed by at
+  most one justified correction pass.
 - CONSENSUS makes two independent read-only proposals, two cross-reviews, and
   one synthesis. It never edits the repository.
 - Full stdout/stderr live under `.agentflow/runs/`; active memory is rewritten
@@ -75,6 +76,12 @@ not send `/usage` as a paid non-interactive model prompt.
 For requests that are moderately complex, Joe dynamically selects the first
 current Codex/Claude model exposed by the installed CLI and uses `high`
 reasoning effort. Explicit model and effort choices always take precedence.
+Large implementation requests are routed to REVIEW automatically: the primary
+agent implements, the other agent audits without editing, and the primary gets
+at most one correction pass when the reviewer explicitly reports justified
+issues. During CONSENSUS, Joe shows each completed proposal and cross-review in
+a structured progress panel; only the final synthesis is posted as Joe's global
+answer.
 If a provider reaches a limit during a run, Joe adds a visible notice with the
 known reset windows (including model-specific Claude windows when exposed) and
 the installed fallback providers/models it will try automatically. A model

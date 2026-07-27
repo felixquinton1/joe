@@ -71,19 +71,59 @@ class Orchestrator:
             final = result.stdout.strip()
             final_provider = result.provider
         elif route.mode is Mode.REVIEW:
+            self._workflow_event(
+                on_event, "review", "implementation", route.primary,
+                "Implémentation principale", "running",
+            )
             primary = self._run_with_fallback(
                 route.primary, context, route.intent, results, model=model,
                 effort=effort, execution_mode=execution_mode, on_event=on_event,
                 cancel_event=cancel_event,
             )
+            self._workflow_event(
+                on_event, "review", "implementation", primary.provider,
+                "Implémentation principale", "complete", primary.stdout,
+            )
             reviewer = route.reviewer or ("claude" if primary.provider == "codex" else "codex")
             review_prompt = self._review_prompt(context, primary.stdout)
+            self._workflow_event(
+                on_event, "review", "review", reviewer,
+                "Revue indépendante", "running",
+            )
             review = self._run_with_fallback(
                 reviewer, review_prompt, Intent.ANALYZE, results,
                 on_event=on_event,
                 cancel_event=cancel_event,
             )
-            final = primary.stdout.strip() + "\n\n---\nReview by " + review.provider + ":\n" + review.stdout.strip()
+            self._workflow_event(
+                on_event, "review", "review", review.provider,
+                "Revue indépendante", "complete", review.stdout,
+            )
+            correction = None
+            if (
+                route.intent is Intent.MODIFY
+                and self._review_requires_correction(review.stdout)
+            ):
+                self._workflow_event(
+                    on_event, "review", "correction", primary.provider,
+                    "Corrections justifiées", "running",
+                )
+                correction = self._run_with_fallback(
+                    primary.provider,
+                    self._correction_prompt(context, primary.stdout, review.stdout),
+                    Intent.MODIFY,
+                    results,
+                    model=model,
+                    effort=effort,
+                    execution_mode=execution_mode,
+                    on_event=on_event,
+                    cancel_event=cancel_event,
+                )
+                self._workflow_event(
+                    on_event, "review", "correction", correction.provider,
+                    "Corrections justifiées", "complete", correction.stdout,
+                )
+            final = self._review_final(primary, review, correction)
             final_provider = primary.provider
         else:
             final, final_provider = self._consensus(
@@ -220,6 +260,10 @@ class Orchestrator:
             + "\n\nPropose independently a solution. Do not modify files. "
             "State assumptions, trade-offs, and validation."
         )
+        self._workflow_event(
+            on_event, "consensus", "proposal_codex", "codex",
+            "Proposition indépendante", "running",
+        )
         codex = self._run_with_fallback(
             "codex", proposal_prompt, Intent.ANALYZE, results,
             model=model if selected_provider == "codex" else None,
@@ -228,6 +272,14 @@ class Orchestrator:
             on_event=on_event,
             cancel_event=cancel_event,
         )
+        self._workflow_event(
+            on_event, "consensus", "proposal_codex", codex.provider,
+            "Proposition indépendante", "complete", codex.stdout,
+        )
+        self._workflow_event(
+            on_event, "consensus", "proposal_claude", "claude",
+            "Proposition indépendante", "running",
+        )
         claude = self._run_with_fallback(
             "claude", proposal_prompt, Intent.ANALYZE, results, {codex.provider},
             model=model if selected_provider == "claude" else None,
@@ -235,6 +287,14 @@ class Orchestrator:
             execution_mode=execution_mode if selected_provider == "claude" else None,
             on_event=on_event,
             cancel_event=cancel_event,
+        )
+        self._workflow_event(
+            on_event, "consensus", "proposal_claude", claude.provider,
+            "Proposition indépendante", "complete", claude.stdout,
+        )
+        self._workflow_event(
+            on_event, "consensus", "review_codex", "codex",
+            "Examen de la proposition de Claude", "running",
         )
         codex_review = self._run_with_fallback(
             "codex",
@@ -245,6 +305,15 @@ class Orchestrator:
             on_event=on_event,
             cancel_event=cancel_event,
         )
+        self._workflow_event(
+            on_event, "consensus", "review_codex", codex_review.provider,
+            "Examen de la proposition de Claude", "complete",
+            codex_review.stdout,
+        )
+        self._workflow_event(
+            on_event, "consensus", "review_claude", "claude",
+            "Examen de la proposition de Codex", "running",
+        )
         claude_review = self._run_with_fallback(
             "claude",
             self._review_prompt(context, codex.stdout),
@@ -254,11 +323,17 @@ class Orchestrator:
             on_event=on_event,
             cancel_event=cancel_event,
         )
+        self._workflow_event(
+            on_event, "consensus", "review_claude", claude_review.provider,
+            "Examen de la proposition de Codex", "complete",
+            claude_review.stdout,
+        )
         synthesis_prompt = (
             context
             + "\n\nSynthesize the following independent proposals and cross-reviews. "
             "Resolve disagreements explicitly and produce one actionable recommendation. "
-            "Do not modify files.\n\n"
+            "Return clean Markdown with complete lines and valid tables. Do not describe "
+            "the orchestration mechanism, invent extra agents, or modify files.\n\n"
             + json.dumps(
                 {
                     "codex_proposal": codex.stdout,
@@ -269,10 +344,18 @@ class Orchestrator:
                 ensure_ascii=False,
             )
         )
+        self._workflow_event(
+            on_event, "consensus", "synthesis", "gemini",
+            "Synthèse du consensus", "running",
+        )
         synthesis = self._run_with_fallback(
             "gemini", synthesis_prompt, Intent.ANALYZE, results,
             on_event=on_event,
             cancel_event=cancel_event,
+        )
+        self._workflow_event(
+            on_event, "consensus", "synthesis", synthesis.provider,
+            "Synthèse du consensus", "complete",
         )
         return synthesis.stdout.strip(), synthesis.provider
 
@@ -280,12 +363,82 @@ class Orchestrator:
     def _review_prompt(context: str, candidate: str) -> str:
         return (
             context
-            + "\n\nReview the candidate below. Do not modify files. Identify only "
+            + "\n\nReview the candidate below and inspect the repository state. "
+            "Do not modify files. Start with exactly `VERDICT: APPROVED` or "
+            "`VERDICT: CORRECTIONS_REQUIRED`. Identify only "
             "material correctness, safety, maintainability, or validation issues. "
             "Say explicitly if no justified issue exists.\n\n<CANDIDATE>\n"
             + candidate
             + "\n</CANDIDATE>"
         )
+
+    @staticmethod
+    def _review_requires_correction(review: str) -> bool:
+        return "VERDICT: CORRECTIONS_REQUIRED" in review.upper()
+
+    @staticmethod
+    def _correction_prompt(
+        context: str,
+        implementation: str,
+        review: str,
+    ) -> str:
+        return (
+            context
+            + "\n\nA reviewer audited the implementation below. Re-check every "
+            "finding, apply only justified corrections, run focused validation, "
+            "and report the final result. This is the only correction pass.\n\n"
+            "<IMPLEMENTATION>\n"
+            + implementation
+            + "\n</IMPLEMENTATION>\n\n<REVIEW>\n"
+            + review
+            + "\n</REVIEW>"
+        )
+
+    @staticmethod
+    def _review_final(
+        primary: ProviderResult,
+        review: ProviderResult,
+        correction: ProviderResult | None,
+    ) -> str:
+        result = correction.stdout.strip() if correction else primary.stdout.strip()
+        status = (
+            "Les corrections justifiées ont été appliquées et vérifiées."
+            if correction
+            else "La revue n’a demandé aucune correction justifiée."
+        )
+        return (
+            result
+            + "\n\n## Contrôle croisé\n\n"
+            + status
+            + "\n\n### Avis de "
+            + review.provider.capitalize()
+            + "\n\n"
+            + review.stdout.strip()
+        )
+
+    @staticmethod
+    def _workflow_event(
+        callback: Callable[[dict], None] | None,
+        mode: str,
+        stage: str,
+        provider: str,
+        label: str,
+        status: str,
+        content: str | None = None,
+    ) -> None:
+        if not callback:
+            return
+        event = {
+            "type": "workflow_update",
+            "mode": mode,
+            "stage": stage,
+            "provider": provider,
+            "label": label,
+            "status": status,
+        }
+        if content is not None:
+            event["content"] = content
+        callback(event)
 
 
 def _extract_files(text: str) -> list[str]:

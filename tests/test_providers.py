@@ -144,3 +144,12 @@ def test_claude_json_stream_exposes_file_tool_and_result():
     assert activity["label"] == "Read"
     assert activity["detail"] == "src/app.py"
     assert _final_output("claude", f"{tool}\n{result}\n") == "Analyse terminée."
+
+
+def test_gemini_stream_fragments_are_reassembled_without_broken_words():
+    first = '{"type":"message","role":"assistant","content":"Voici la syn"}'
+    second = '{"type":"message","role":"assistant","content":"thèse.\\n\\n## Résultat"}'
+
+    assert _final_output("gemini", f"{first}\n{second}\n") == (
+        "Voici la synthèse.\n\n## Résultat"
+    )

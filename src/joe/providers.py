@@ -364,7 +364,8 @@ def _final_output(provider: str, stdout: str) -> str:
                     text_parts.append(str(content))
             elif event.get("type") == "result" and event.get("response"):
                 result_text = str(event["response"])
-    return result_text or "\n".join(text_parts)
+    separator = "" if provider == "gemini" else "\n"
+    return result_text or separator.join(text_parts)
 
 
 def _secret_values(env: dict[str, str]) -> tuple[str, ...]:

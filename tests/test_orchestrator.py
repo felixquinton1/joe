@@ -5,9 +5,10 @@ from joe.orchestrator import Orchestrator
 
 
 class FakeProvider:
-    def __init__(self, name: str, *, fail: bool = False):
+    def __init__(self, name: str, *, fail: bool = False, responses=None):
         self.name = name
         self.fail = fail
+        self.responses = list(responses or [])
         self.calls = []
 
     def run(
@@ -17,10 +18,11 @@ class FakeProvider:
         self.calls.append((prompt, cwd, intent, timeout))
         if on_stream and not self.fail:
             on_stream("stdout", f"{self.name} response\n")
+        response = self.responses.pop(0) if self.responses else f"{self.name} response"
         return ProviderResult(
             self.name,
             [self.name],
-            "" if self.fail else f"{self.name} response",
+            "" if self.fail else response,
             "quota" if self.fail else "",
             1 if self.fail else 0,
             0.01,
@@ -61,7 +63,8 @@ def test_review_uses_primary_intent_then_read_only_review(tmp_path):
     response, _ = orchestrator.execute(
         "change", Route(Intent.MODIFY, Mode.REVIEW, "codex", "claude")
     )
-    assert "Review by claude" in response
+    assert "## Contrôle croisé" in response
+    assert "### Avis de Claude" in response
     assert providers["codex"].calls[0][2] is Intent.MODIFY
     assert providers["claude"].calls[0][2] is Intent.ANALYZE
 
@@ -79,4 +82,67 @@ def test_consensus_is_read_only_and_uses_distinct_proposals(tmp_path):
         call[2] is Intent.ANALYZE
         for provider in providers.values()
         for call in provider.calls
+    )
+
+
+def test_review_applies_one_correction_pass_when_requested(tmp_path):
+    providers = {
+        "codex": FakeProvider(
+            "codex", responses=["implementation", "corrected implementation"]
+        ),
+        "claude": FakeProvider(
+            "claude", responses=["VERDICT: CORRECTIONS_REQUIRED\nFix the test."]
+        ),
+        "gemini": FakeProvider("gemini"),
+        "copilot": FakeProvider("copilot"),
+    }
+    events = []
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    response, _ = orchestrator.execute(
+        "large change",
+        Route(Intent.MODIFY, Mode.REVIEW, "codex", "claude"),
+        on_event=events.append,
+    )
+
+    assert response.startswith("corrected implementation")
+    assert len(providers["codex"].calls) == 2
+    assert len(providers["claude"].calls) == 1
+    assert any(
+        event.get("stage") == "correction"
+        and event.get("status") == "complete"
+        for event in events
+    )
+
+
+def test_consensus_emits_structured_completed_opinions(tmp_path):
+    providers = {
+        name: FakeProvider(name)
+        for name in ("codex", "claude", "gemini", "copilot")
+    }
+    events = []
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    orchestrator.execute(
+        "important",
+        Route(Intent.ANALYZE, Mode.CONSENSUS, "codex"),
+        on_event=events.append,
+    )
+
+    completed = [
+        event for event in events
+        if event.get("type") == "workflow_update"
+        and event.get("status") == "complete"
+    ]
+    assert {event["stage"] for event in completed} == {
+        "proposal_codex",
+        "proposal_claude",
+        "review_codex",
+        "review_claude",
+        "synthesis",
+    }
+    assert all(
+        event.get("content")
+        for event in completed
+        if event["stage"] != "synthesis"
     )
