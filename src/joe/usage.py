@@ -14,7 +14,7 @@ from .models import Mode, Route
 
 _CACHE_SECONDS = 60
 _LOW_REMAINING_PERCENT = 20
-_FAR_RESET_SECONDS = 2 * 60 * 60
+_FAR_RESET_SECONDS = 24 * 60 * 60
 _cache: tuple[float, list[dict[str, Any]]] | None = None
 _lock = threading.Lock()
 
@@ -74,19 +74,20 @@ def _quota_pressure(
 ) -> str | None | bool:
     if not status or not status.get("available") or not status.get("windows"):
         return None
-    limiting = min(
-        status["windows"],
-        key=lambda window: float(window.get("remaining_percent", 100)),
-    )
-    remaining = float(limiting.get("remaining_percent", 100))
-    reset = limiting.get("resets_at")
-    seconds = float(reset) - now if isinstance(reset, (int, float)) else None
-    constrained = remaining <= 5 or (
-        remaining <= _LOW_REMAINING_PERCENT
-        and (seconds is None or seconds >= _FAR_RESET_SECONDS)
-    )
-    if not constrained:
+    pressures = []
+    for window in status["windows"]:
+        remaining = float(window.get("remaining_percent", 100))
+        reset = window.get("resets_at")
+        seconds = float(reset) - now if isinstance(reset, (int, float)) else None
+        constrained = remaining <= 5 or (
+            remaining <= _LOW_REMAINING_PERCENT
+            and (seconds is None or seconds >= _FAR_RESET_SECONDS)
+        )
+        if constrained:
+            pressures.append((remaining, seconds, window))
+    if not pressures:
         return False
+    remaining, seconds, limiting = min(pressures, key=lambda item: item[0])
     reset_text = (
         "reset inconnu"
         if seconds is None
@@ -157,7 +158,7 @@ def _codex_status() -> dict[str, Any]:
         "id": 1,
         "method": "initialize",
         "params": {
-            "clientInfo": {"name": "joe", "version": "0.9.2"},
+            "clientInfo": {"name": "joe", "version": "0.10.0"},
             "capabilities": {"experimentalApi": True},
         },
     }

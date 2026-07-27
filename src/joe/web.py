@@ -103,6 +103,9 @@ class RunManager:
             )
             if not agent:
                 route = balance_route(route, usage_status())
+            if _complex_request(run.request, route):
+                effort = effort or "high"
+                model = model or _latest_model(route.primary)
             run.emit(
                 {
                     "type": "route",
@@ -111,6 +114,8 @@ class RunManager:
                     "primary": route.primary,
                     "reviewer": route.reviewer,
                     "reason": route.reason,
+                    "model": model,
+                    "effort": effort,
                 }
             )
             if route.intent is Intent.MODIFY and not os.access(self.project, os.W_OK):
@@ -291,6 +296,30 @@ def build_quota_notice(
         "alternatives": alternatives,
         "automatic_fallback": bool(alternatives),
     }
+
+
+def _complex_request(request: str, route: Route) -> bool:
+    markers = {
+        "architecture",
+        "analyse",
+        "audit",
+        "debug",
+        "implémente",
+        "implémenter",
+        "migration",
+        "refactor",
+        "scientifique",
+        "expérimental",
+    }
+    words = set(request.lower().replace(",", " ").replace(".", " ").split())
+    return route.mode is not Mode.FAST or len(request) >= 240 or bool(words & markers)
+
+
+def _latest_model(provider: str) -> str | None:
+    if provider not in {"codex", "claude"}:
+        return None
+    models = provider_capabilities().get(provider, {}).get("models", [])
+    return str(models[0]["id"]) if models else None
 
 class JoeServer(ThreadingHTTPServer):
     manager: RunManager

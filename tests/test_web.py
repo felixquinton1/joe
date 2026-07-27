@@ -2,7 +2,15 @@ import http.client
 import json
 import threading
 
-from joe.web import Handler, JoeServer, LiveRun, RunManager, build_quota_notice
+from joe.models import Intent, Mode, Route
+from joe.web import (
+    Handler,
+    JoeServer,
+    LiveRun,
+    RunManager,
+    _complex_request,
+    build_quota_notice,
+)
 
 
 def start_server(tmp_path):
@@ -174,3 +182,10 @@ def test_quota_notice_exposes_reset_and_available_fallback_models():
         {"provider": "gemini", "models": ["auto"]}
     ]
     assert notice["automatic_fallback"] is True
+
+
+def test_complex_requests_get_high_effort_defaults():
+    route = Route(Intent.MODIFY, Mode.FAST, "codex")
+
+    assert _complex_request("Implémente cette architecture", route) is True
+    assert _complex_request("Quel est ce fichier ?", route) is False

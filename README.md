@@ -50,11 +50,15 @@ agent/workflow/model/effort/permission controls,
 and loads the latest 100 run logs from the project's `.agentflow/runs/` folder.
 Joe never estimates missing quotas: unsupported providers are marked clearly.
 Automatic FAST routing remains task-first, then balances Codex and Claude when
-the preferred provider has 20% or less remaining and its reset is at least two
-hours away. At 5% or less it switches regardless of reset distance. A manually
+the preferred provider has 20% or less remaining and its reset is at least 24
+hours away. Short five-hour windows therefore remain useful instead of being
+prematurely preserved. At 5% or less it switches regardless of reset distance. A manually
 selected provider always wins, and REVIEW/CONSENSUS semantics are unchanged.
 Claude routing uses the official local cache refreshed by `/usage`; Joe does
 not send `/usage` as a paid non-interactive model prompt.
+For requests that are moderately complex, Joe dynamically selects the first
+current Codex/Claude model exposed by the installed CLI and uses `high`
+reasoning effort. Explicit model and effort choices always take precedence.
 If a provider reaches a limit during a run, Joe adds a visible notice with the
 known reset windows (including model-specific Claude windows when exposed) and
 the installed fallback providers/models it will try automatically. A model
