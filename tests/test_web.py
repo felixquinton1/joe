@@ -35,6 +35,10 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert response.status == 200
         assert payload["project"] == str(tmp_path.resolve())
         assert payload["version"]
+        assert payload["conversation_store"].endswith(
+            ".agentflow/conversations.json"
+        )
+        assert "joe/backups" in payload["conversation_backup"]
         assert "codex" in payload["providers"]
 
         connection.request("GET", "/api/capabilities")

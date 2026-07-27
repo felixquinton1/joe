@@ -50,6 +50,16 @@ class ProjectMemory:
         self.root.chmod(0o700)
         self.runs.chmod(0o700)
         initial = {
+            ".gitignore": (
+                "conversations.json\n"
+                "conversations.json.bak\n"
+                "runs/\n"
+                "session.md\n"
+                "handoff.md\n"
+                "*.reject.json\n"
+                "*.reject.patch\n"
+                "*.tmp\n"
+            ),
             "project.md": "# Project\n\nStable conventions and project context.\n",
             "session.md": "# Session\n\nNo active work recorded yet.\n",
             "handoff.md": "# Handoff\n\nNo previous handoff.\n",

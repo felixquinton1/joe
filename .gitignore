@@ -1,3 +1,4 @@
+# Joe's own local runtime state never belongs in the product repository.
 .agentflow/
 .pytest_cache/
 .tmp_app_schema/

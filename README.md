@@ -34,6 +34,22 @@ executable are named Joe.
 
 `config.yaml` is JSON-compatible YAML so Joe can stay dependency-free.
 
+## Storage boundaries
+
+Joe keeps product code and user data separate:
+
+- the Joe repository contains only source code, tests, and documentation;
+- `<project>/.agentflow/project.md` and `config.yaml` are stable, shareable
+  project context that may be committed deliberately;
+- conversations, run logs, `session.md`, `handoff.md`, rejection patches, and
+  local backups are ignored by the target project's Git repository;
+- every conversation write is also mirrored outside all repositories under
+  `$XDG_DATA_HOME/joe/backups/<project-id>/conversations.json` (default:
+  `~/.local/share/joe/backups/...`).
+
+Each generated `.agentflow/` contains its own `.gitignore`, so this separation
+also applies to projects that do not yet have a root `.gitignore`.
+
 ## Local web interface
 
 Start the control room from the project you want the agents to work on:

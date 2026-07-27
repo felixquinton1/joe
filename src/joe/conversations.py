@@ -19,9 +19,15 @@ DEFAULT_PROJECT_ID = "main"
 
 
 class ConversationStore:
-    def __init__(self, root: Path, runs: Path):
+    def __init__(
+        self,
+        root: Path,
+        runs: Path,
+        backup_path: Path | None = None,
+    ):
         self.path = root / "conversations.json"
-        self.backup_path = root / "conversations.json.bak"
+        self.legacy_backup_path = root / "conversations.json.bak"
+        self.backup_path = backup_path or self.legacy_backup_path
         self.runs = runs
         self.lock = threading.Lock()
 
@@ -29,12 +35,13 @@ class ConversationStore:
         if self.path.exists():
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        if self.backup_path.exists():
-            try:
-                self._write(json.loads(self.backup_path.read_text()))
-                return
-            except (OSError, json.JSONDecodeError):
-                pass
+        for backup in self._backup_candidates():
+            if backup.exists():
+                try:
+                    self._write(json.loads(backup.read_text()))
+                    return
+                except (OSError, json.JSONDecodeError):
+                    continue
         conversations = self._legacy_conversation()
         self._write(
             {
@@ -230,7 +237,7 @@ class ConversationStore:
 
     def _read(self) -> dict[str, Any]:
         self.ensure()
-        for path in (self.path, self.backup_path):
+        for path in (self.path, *self._backup_candidates()):
             try:
                 payload = json.loads(path.read_text())
                 return self._normalize(payload)
@@ -300,7 +307,14 @@ class ConversationStore:
     def _write(self, payload: dict[str, Any]) -> None:
         content = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
         for path in (self.path, self.backup_path):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.parent.chmod(0o700)
             tmp = path.with_suffix(path.suffix + ".tmp")
             tmp.write_text(content)
             tmp.chmod(0o600)
             os.replace(tmp, path)
+
+    def _backup_candidates(self) -> tuple[Path, ...]:
+        if self.backup_path == self.legacy_backup_path:
+            return (self.backup_path,)
+        return self.backup_path, self.legacy_backup_path

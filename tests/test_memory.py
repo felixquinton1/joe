@@ -54,3 +54,15 @@ def test_active_memory_redacts_request(tmp_path):
         response="done",
     )
     assert "private-value" not in (memory.root / "session.md").read_text()
+
+
+def test_project_memory_gitignore_separates_shared_and_local_state(tmp_path):
+    memory = ProjectMemory(tmp_path)
+    memory.ensure()
+
+    rules = (memory.root / ".gitignore").read_text()
+    assert "conversations.json" in rules
+    assert "runs/" in rules
+    assert "session.md" in rules
+    assert "project.md" not in rules
+    assert "config.yaml" not in rules

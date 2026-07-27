@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import subprocess
 import threading
@@ -21,6 +22,14 @@ from .git_review import GitSnapshot, build_report, reject, snapshot
 from .models import Intent, Mode
 from .orchestrator import Orchestrator
 from .usage import balance_route, usage_status
+
+
+def _conversation_backup_path(project: Path) -> Path:
+    data_home = Path(
+        os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")
+    )
+    key = hashlib.sha256(str(project.resolve()).encode()).hexdigest()[:16]
+    return data_home / "joe" / "backups" / key / "conversations.json"
 
 
 @dataclass
@@ -46,7 +55,9 @@ class RunManager:
         self.orchestrator = Orchestrator(self.project)
         self.orchestrator.memory.ensure()
         self.conversations = ConversationStore(
-            self.orchestrator.memory.root, self.orchestrator.memory.runs
+            self.orchestrator.memory.root,
+            self.orchestrator.memory.runs,
+            backup_path=_conversation_backup_path(self.project),
         )
         self.conversations.ensure()
         self.live: dict[str, LiveRun] = {}
@@ -341,6 +352,12 @@ class Handler(BaseHTTPRequestHandler):
                 {
                     "version": __version__,
                     "project": str(self.server.manager.project),
+                    "conversation_store": str(
+                        self.server.manager.conversations.path
+                    ),
+                    "conversation_backup": str(
+                        self.server.manager.conversations.backup_path
+                    ),
                     "providers": ["codex", "claude", "gemini", "copilot"],
                     "modes": ["fast", "review", "consensus"],
                 }
