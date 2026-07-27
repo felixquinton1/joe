@@ -61,3 +61,22 @@ ssh -L 8765:127.0.0.1:8765 user@server
 
 Open `http://127.0.0.1:8765` on your computer. The server binds only to
 localhost by default.
+
+## Provider updates
+
+Joe can detect installed CLI version changes without consuming AI quota:
+
+```bash
+joe sync
+```
+
+To let Codex inspect and implement relevant provider features, followed by a
+read-only Claude review:
+
+```bash
+joe sync --apply
+```
+
+Use `joe sync --apply --force` for a full audit when versions have not changed.
+The implementation mode does not commit automatically, so its diff remains
+available for inspection and testing.

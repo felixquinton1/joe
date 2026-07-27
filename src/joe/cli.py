@@ -33,6 +33,8 @@ def main(argv: list[str] | None = None) -> int:
         return _web([])
     if arguments and arguments[0] == "web":
         return _web(arguments[1:])
+    if arguments and arguments[0] == "sync":
+        return _sync(arguments[1:])
     if arguments and arguments[0] == "chat":
         arguments = arguments[1:]
     args = parser().parse_args(arguments)
@@ -116,6 +118,55 @@ def _web(argv: list[str]) -> int:
     except OSError as exc:
         print(f"joe: impossible de démarrer le serveur: {exc}", file=sys.stderr)
         return 1
+    return 0
+
+
+def _sync(argv: list[str]) -> int:
+    sync_parser = argparse.ArgumentParser(
+        prog="joe sync",
+        description="Detect provider CLI updates and optionally adapt Joe.",
+    )
+    sync_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="let Codex implement relevant updates, then ask Claude to review",
+    )
+    sync_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="run the implementation audit even when versions are unchanged",
+    )
+    args = sync_parser.parse_args(argv)
+
+    from .maintenance import format_audit, joe_project, provider_audit, update_request
+
+    results = provider_audit()
+    print(format_audit(results))
+    changed = any(item["changed"] for item in results)
+    if not args.apply:
+        print("\nUtilise `joe sync --apply` pour intégrer les nouveautés détectées.")
+        return 1 if changed else 0
+    if not changed and not args.force:
+        print("\nAucune nouvelle version. Utilise --force pour un audit complet.")
+        return 0
+
+    orchestrator = Orchestrator(joe_project())
+    request = update_request(results, args.force)
+    route = orchestrator.plan(
+        request,
+        forced_agent="codex",
+        forced_mode=Mode.REVIEW,
+    )
+    try:
+        response, log = orchestrator.execute(
+            request,
+            route,
+            execution_mode="workspace-write",
+        )
+    except OrchestrationError as exc:
+        print(f"joe sync: {exc}", file=sys.stderr)
+        return 1
+    print(f"\n{response}\n\n[joe] log: {log}")
     return 0
 
 

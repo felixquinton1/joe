@@ -31,16 +31,17 @@
     <section class="workspace">
       <div class="controls">
         <div class="control-group routing-controls">
-          <span class="control-title">Routage</span>
           <label>Agent<select id="agent"><option value="">Automatique</option><option>codex</option><option>claude</option><option>gemini</option><option>copilot</option></select></label>
           <label>Workflow<select id="mode"><option value="">Automatique</option><option value="fast">FAST</option><option value="review">REVIEW</option><option value="consensus">CONSENSUS</option></select></label>
         </div>
-        <div class="control-group provider-controls">
-          <span class="control-title">Réglages du fournisseur</span>
-          <label>Modèle<select id="model"><option value="">Défaut du fournisseur</option></select></label>
-          <label>Effort<select id="effort"><option value="">Défaut du modèle</option></select></label>
-          <label>Permissions<select id="execution-mode"><option value="">Automatique</option></select></label>
-        </div>
+        <details class="advanced-config">
+          <summary>Configuration <span>modèle · effort · permissions</span></summary>
+          <div class="control-group provider-controls">
+            <label>Modèle<select id="model"><option value="">Défaut du fournisseur</option></select></label>
+            <label>Effort<select id="effort"><option value="">Défaut du modèle</option></select></label>
+            <label>Permissions<select id="execution-mode"><option value="">Automatique</option></select></label>
+          </div>
+        </details>
       </div>
       <div class="conversation">
         <div class="conversation-head"><div><span class="eyebrow">Session active</span><h1>Que veux-tu accomplir ?</h1></div><div id="route-badge" class="route-badge hidden"></div></div>
@@ -49,7 +50,7 @@
         </div>
       </div>
       <form id="composer" class="composer">
-        <textarea id="request" rows="3" placeholder="Ex. Ajoute une option pour désactiver la loss Gamma…" required></textarea>
+        <textarea id="request" rows="2" placeholder="Ex. Ajoute une option pour désactiver la loss Gamma…" required></textarea>
         <div class="composer-foot"><span>Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne</span><button id="send" type="submit"><span>Lancer</span><b>→</b></button></div>
       </form>
     </section>
