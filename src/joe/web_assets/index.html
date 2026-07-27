@@ -8,7 +8,7 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand"><span class="brand-mark">J</span><div><strong>Joe</strong><small>AI control room</small></div></div>
+    <div class="brand"><span class="brand-mark">J</span><div><strong>Joe</strong><small>AI control room · <span id="version">…</span></small></div></div>
     <div class="topbar-tools">
       <div class="project"><span class="status-dot"></span><span id="project">Chargement…</span></div>
       <details class="usage-popover">
@@ -23,6 +23,7 @@
       </details>
     </div>
   </header>
+  <div id="restart-warning" class="restart-warning hidden"></div>
   <main class="layout">
     <aside class="history-panel">
       <div class="panel-title"><div><span class="eyebrow">Mémoire</span><h2>Historique</h2></div><button id="refresh-history" class="icon-button" title="Actualiser">↻</button></div>

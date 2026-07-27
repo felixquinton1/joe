@@ -26,6 +26,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         payload = json.loads(response.read())
         assert response.status == 200
         assert payload["project"] == str(tmp_path.resolve())
+        assert payload["version"]
         assert "codex" in payload["providers"]
 
         connection.request("GET", "/api/capabilities")

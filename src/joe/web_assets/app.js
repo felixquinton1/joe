@@ -1,9 +1,16 @@
+const APP_VERSION = "0.5.4";
 const state = { running: false, agents: new Map(), capabilities: {}, usage: [] };
 const $ = id => document.getElementById(id);
 
 async function loadStatus() {
   const status = await fetch("/api/status").then(response => response.json());
   $("project").textContent = status.project;
+  $("version").textContent = status.version || "ancienne version";
+  if (status.version !== APP_VERSION) {
+    const warning = $("restart-warning");
+    warning.textContent = `Le serveur Joe ${status.version || "actuel"} utilise encore un ancien backend. Arrête-le avec Ctrl+C, relance joe, puis recharge cette page.`;
+    warning.classList.remove("hidden");
+  }
 }
 
 async function loadCapabilities() {

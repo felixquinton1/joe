@@ -34,3 +34,20 @@ def test_force_options_win():
     assert route.primary == "gemini"
     assert route.mode is Mode.REVIEW
     assert route.reviewer == "codex"
+
+
+def test_french_merge_then_implementation_is_writable():
+    route = Router().route("Merge origin/dev puis fais l'implémentation")
+
+    assert route.intent is Intent.MODIFY
+    assert route.primary == "codex"
+
+
+def test_git_actions_are_modifications():
+    for request in (
+        "pull la branche dev",
+        "rebase sur origin/main",
+        "commit et push les changements",
+        "fusionne cette branche",
+    ):
+        assert Router().route(request).intent is Intent.MODIFY

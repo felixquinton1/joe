@@ -7,6 +7,8 @@ from .models import Intent, Mode, Route
 MODIFY_WORDS = {
     "ajoute", "ajouter", "change", "changer", "corrige", "corriger", "crée",
     "créer", "implémente", "implémenter", "modifie", "modifier", "refactor",
+    "implémentation", "implementation", "merge", "merger", "fusionne",
+    "fusionner", "pull", "rebase", "commit", "push", "cherry-pick",
     "remove", "fix", "implement", "update", "write",
 }
 REVIEW_WORDS = {

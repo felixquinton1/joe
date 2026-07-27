@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 import uuid
@@ -12,8 +13,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
+from . import __version__
 from .capabilities import provider_capabilities
-from .models import Mode
+from .models import Intent, Mode
 from .orchestrator import Orchestrator
 from .usage import usage_status
 
@@ -82,6 +84,11 @@ class RunManager:
                     "reviewer": route.reviewer,
                 }
             )
+            if route.intent is Intent.MODIFY and not os.access(self.project, os.W_OK):
+                raise PermissionError(
+                    "Le projet n'est pas accessible en écriture. "
+                    "Relance Joe depuis un montage inscriptible."
+                )
             response, log = self.orchestrator.execute(
                 run.request,
                 route,
@@ -150,6 +157,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/status":
             return self._json(
                 {
+                    "version": __version__,
                     "project": str(self.server.manager.project),
                     "providers": ["codex", "claude", "gemini", "copilot"],
                     "modes": ["fast", "review", "consensus"],
