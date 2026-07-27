@@ -14,11 +14,15 @@ def test_conversation_messages_settings_and_pin_persist(tmp_path):
     store.append_message(conversation["id"], "assistant", "Terminé")
     store.update(
         conversation["id"],
-        {"pinned": True, "settings": {"agent": "claude", "model": "sonnet"}},
+        {
+            "pinned": True,
+            "title": "Conversation renommée",
+            "settings": {"agent": "claude", "model": "sonnet"},
+        },
     )
 
     loaded = store.get(conversation["id"])
-    assert loaded["title"] == "Analyse ce dépôt"
+    assert loaded["title"] == "Conversation renommée"
     assert loaded["pinned"] is True
     assert loaded["settings"]["agent"] == "claude"
     assert [message["role"] for message in loaded["messages"]] == [
@@ -26,6 +30,22 @@ def test_conversation_messages_settings_and_pin_persist(tmp_path):
         "assistant",
     ]
     assert "Analyse ce dépôt" in store.context(conversation["id"])
+
+
+def test_subproject_context_is_shared_by_its_conversations(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+    project = store.create_project("Phase D")
+    store.update_project(project["id"], {"context": "Utiliser uniquement H100."})
+    first = store.create(project["id"])
+    second = store.create(project["id"])
+
+    assert first["project_id"] == project["id"]
+    assert second["project_id"] == project["id"]
+    assert "Utiliser uniquement H100." in store.context(first["id"])
+    assert "Utiliser uniquement H100." in store.context(second["id"])
 
 
 def test_old_runs_are_imported_once(tmp_path):

@@ -210,6 +210,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(usage_status())
         if path == "/api/conversations":
             return self._json(self.server.manager.conversations.list())
+        if path == "/api/projects":
+            return self._json(self.server.manager.conversations.list_projects())
+        if path.startswith("/api/projects/"):
+            item = self.server.manager.conversations.get_project(
+                unquote(path.rsplit("/", 1)[1])
+            )
+            return self._json(item, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
         if path.startswith("/api/conversations/"):
             item = self.server.manager.conversations.get(
                 unquote(path.rsplit("/", 1)[1])
@@ -234,8 +241,20 @@ class Handler(BaseHTTPRequestHandler):
                 HTTPStatus.ACCEPTED if cancelled else HTTPStatus.NOT_FOUND,
             )
         if path == "/api/conversations":
+            size = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(size)) if size else {}
             return self._json(
-                self.server.manager.conversations.create(), HTTPStatus.CREATED
+                self.server.manager.conversations.create(payload.get("project_id")),
+                HTTPStatus.CREATED,
+            )
+        if path == "/api/projects":
+            size = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(size)) if size else {}
+            return self._json(
+                self.server.manager.conversations.create_project(
+                    str(payload.get("name", "Nouveau sous-projet"))
+                ),
+                HTTPStatus.CREATED,
             )
         if path != "/api/runs":
             return self.send_error(HTTPStatus.NOT_FOUND)
@@ -266,15 +285,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_PATCH(self) -> None:
         path = urlparse(self.path).path
-        if not path.startswith("/api/conversations/"):
+        is_conversation = path.startswith("/api/conversations/")
+        is_project = path.startswith("/api/projects/")
+        if not is_conversation and not is_project:
             return self.send_error(HTTPStatus.NOT_FOUND)
         try:
             size = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(size))
         except (ValueError, json.JSONDecodeError):
             return self._json({"error": "invalid JSON"}, HTTPStatus.BAD_REQUEST)
-        item = self.server.manager.conversations.update(
-            unquote(path.rsplit("/", 1)[1]), payload
+        identifier = unquote(path.rsplit("/", 1)[1])
+        item = (
+            self.server.manager.conversations.update(identifier, payload)
+            if is_conversation
+            else self.server.manager.conversations.update_project(identifier, payload)
         )
         self._json(item, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
 

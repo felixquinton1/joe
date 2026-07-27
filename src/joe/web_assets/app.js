@@ -1,8 +1,10 @@
-const APP_VERSION = "0.6.1";
+const APP_VERSION = "0.7.0";
 const state = {
   agents: new Map(),
   capabilities: {},
   usage: [],
+  projects: [],
+  activeProjectId: "main",
   conversations: [],
   activeConversationId: null,
   runs: new Map()
@@ -160,7 +162,10 @@ function addOptions(select, items) {
 }
 
 async function loadConversations(selectFirst = true) {
-  state.conversations = await fetch("/api/conversations").then(response => response.json());
+  [state.conversations, state.projects] = await Promise.all([
+    fetch("/api/conversations").then(response => response.json()),
+    fetch("/api/projects").then(response => response.json())
+  ]);
   if (!state.conversations.length) {
     const created = await createConversation(false);
     state.conversations = [created];
@@ -174,7 +179,20 @@ async function loadConversations(selectFirst = true) {
 function renderConversations() {
   const target = $("conversations");
   target.replaceChildren();
-  for (const conversation of state.conversations) {
+  for (const project of state.projects) {
+    const group = document.createElement("section");
+    group.className = "project-group";
+    const header = document.createElement("div");
+    header.className = "project-group-head";
+    header.innerHTML = `<strong>${escapeHtml(project.name)}</strong>`;
+    const projectActions = document.createElement("div");
+    const editProject = smallButton("⚙", "Modifier le contexte du sous-projet", () => openProject(project));
+    const addConversation = smallButton("＋", "Nouvelle conversation dans ce sous-projet", () => createConversation(true, project.id));
+    projectActions.append(editProject, addConversation);
+    header.appendChild(projectActions);
+    group.appendChild(header);
+    const conversations = state.conversations.filter(item => item.project_id === project.id);
+    for (const conversation of conversations) {
     const row = document.createElement("div");
     row.className = `conversation-item ${conversation.id === state.activeConversationId ? "active" : ""}`;
     const button = document.createElement("button");
@@ -186,14 +204,31 @@ function renderConversations() {
     pin.title = conversation.pinned ? "Désépingler" : "Épingler";
     pin.textContent = conversation.pinned ? "★" : "☆";
     pin.onclick = () => togglePin(conversation);
-    row.append(button, pin);
-    target.appendChild(row);
+    const rename = document.createElement("button");
+    rename.className = "pin-button";
+    rename.title = "Renommer";
+    rename.textContent = "✎";
+    rename.onclick = () => renameConversation(conversation);
+    row.append(button, rename, pin);
+    group.appendChild(row);
+    }
+    target.appendChild(group);
   }
+}
+
+function smallButton(label, title, action) {
+  const button = document.createElement("button");
+  button.className = "project-action";
+  button.textContent = label;
+  button.title = title;
+  button.onclick = action;
+  return button;
 }
 
 async function selectConversation(conversationId) {
   const conversation = await fetch(`/api/conversations/${conversationId}`).then(response => response.json());
   state.activeConversationId = conversationId;
+  state.activeProjectId = conversation.project_id || "main";
   renderConversations();
   clearConversation();
   $("conversation-title").textContent = conversation.title;
@@ -225,13 +260,62 @@ async function selectConversation(conversationId) {
   }
 }
 
-async function createConversation(select = true) {
-  const conversation = await fetch("/api/conversations", { method: "POST" }).then(response => response.json());
+async function createConversation(select = true, projectId = state.activeProjectId) {
+  const conversation = await fetch("/api/conversations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ project_id: projectId })
+  }).then(response => response.json());
   if (select) {
     await loadConversations(false);
     await selectConversation(conversation.id);
   }
   return conversation;
+}
+
+async function renameConversation(conversation) {
+  const title = window.prompt("Nouveau nom de la conversation :", conversation.title);
+  if (!title?.trim()) return;
+  await fetch(`/api/conversations/${conversation.id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: title.trim() })
+  });
+  await loadConversations(false);
+  if (conversation.id === state.activeConversationId) $("conversation-title").textContent = title.trim();
+}
+
+async function createProject() {
+  const name = window.prompt("Nom du sous-projet :", "Nouveau sous-projet");
+  if (!name?.trim()) return;
+  const project = await fetch("/api/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: name.trim() })
+  }).then(response => response.json());
+  state.activeProjectId = project.id;
+  await createConversation(true, project.id);
+}
+
+function openProject(project) {
+  state.editingProjectId = project.id;
+  $("project-name").value = project.name;
+  $("project-context").value = project.context || "";
+  $("project-dialog").showModal();
+}
+
+async function saveProject(event) {
+  event.preventDefault();
+  await fetch(`/api/projects/${state.editingProjectId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: $("project-name").value,
+      context: $("project-context").value
+    })
+  });
+  $("project-dialog").close();
+  await loadConversations(false);
 }
 
 async function togglePin(conversation) {
@@ -452,7 +536,8 @@ $("model").addEventListener("change", () => {
 $("mode").addEventListener("change", saveSettings);
 $("effort").addEventListener("change", saveSettings);
 $("execution-mode").addEventListener("change", saveSettings);
-$("new-conversation").onclick = () => createConversation(true);
+$("new-project").onclick = createProject;
+$("save-project").onclick = saveProject;
 $("stop").onclick = cancelActiveRun;
 $("refresh-usage").onclick = loadUsage;
 

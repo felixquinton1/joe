@@ -56,6 +56,27 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         response = connection.getresponse()
         assert json.loads(response.read())["pinned"] is True
 
+        body = json.dumps({"name": "Phase D"})
+        connection.request(
+            "POST",
+            "/api/projects",
+            body=body,
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        project = json.loads(response.read())
+        assert response.status == 201
+
+        body = json.dumps({"context": "Contexte commun"})
+        connection.request(
+            "PATCH",
+            f"/api/projects/{project['id']}",
+            body=body,
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        assert json.loads(response.read())["context"] == "Contexte commun"
+
         live = LiveRun("cancel-test", "long request", conversation["id"])
         server.manager.live[live.run_id] = live
         connection.request("POST", "/api/runs/cancel-test/cancel", body="{}")
