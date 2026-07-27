@@ -156,12 +156,20 @@ class Orchestrator:
                 ),
                 on_stream=(
                     lambda stream, text, provider=name: on_event(
-                        {
-                            "type": "stream",
-                            "provider": provider,
-                            "stream": stream,
-                            "text": text,
-                        }
+                        (
+                            {
+                                "type": "activity",
+                                "provider": provider,
+                                **json.loads(text),
+                            }
+                            if stream == "activity"
+                            else {
+                                "type": "stream",
+                                "provider": provider,
+                                "stream": stream,
+                                "text": text,
+                            }
+                        )
                     )
                     if on_event
                     else None

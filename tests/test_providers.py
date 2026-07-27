@@ -2,7 +2,14 @@ import sys
 from pathlib import Path
 
 from joe.models import Intent
-from joe.providers import Provider, _redact_values, _secret_values, classify_error
+from joe.providers import (
+    Provider,
+    _activity,
+    _final_output,
+    _redact_values,
+    _secret_values,
+    classify_error,
+)
 
 
 class ScriptProvider(Provider):
@@ -46,8 +53,9 @@ def test_provider_timeout_is_reported(tmp_path):
 def test_commands_match_inspected_noninteractive_interfaces():
     cwd = Path("/tmp/project")
     codex = Provider("codex", "codex").command("p", cwd, Intent.ANALYZE)
-    assert codex[:4] == ["codex", "--ask-for-approval", "never", "exec"]
+    assert codex[:5] == ["codex", "--ask-for-approval", "never", "exec", "--json"]
     assert "--print" in Provider("claude", "claude").command("p", cwd, Intent.ANALYZE)
+    assert "stream-json" in Provider("claude", "claude").command("p", cwd, Intent.ANALYZE)
     assert "--prompt" in Provider("gemini", "gemini").command("p", cwd, Intent.ANALYZE)
     assert "--prompt" in Provider("copilot", "copilot").command("p", cwd, Intent.ANALYZE)
 
@@ -86,3 +94,37 @@ def test_environment_secret_values_are_redacted_from_streams():
     )
     assert _redact_values("token=private-value", values) == "token=[REDACTED]"
     assert _redact_values("visible-value", values) == "visible-value"
+
+
+def test_codex_json_stream_exposes_command_and_final_message():
+    command = (
+        '{"type":"item.started","item":{"type":"command_execution",'
+        '"command":"sed -n 1,40p app.py"}}'
+    )
+    message = (
+        '{"type":"item.completed","item":{"type":"agent_message",'
+        '"text":"Terminé."}}'
+    )
+
+    activity = _activity("codex", "stdout", command)
+
+    assert activity == {
+        "kind": "command_execution",
+        "label": "Commande",
+        "detail": "sed -n 1,40p app.py",
+    }
+    assert _final_output("codex", f"{command}\n{message}\n") == "Terminé."
+
+
+def test_claude_json_stream_exposes_file_tool_and_result():
+    tool = (
+        '{"type":"assistant","message":{"content":[{"type":"tool_use",'
+        '"name":"Read","input":{"file_path":"src/app.py"}}]}}'
+    )
+    result = '{"type":"result","result":"Analyse terminée."}'
+
+    activity = _activity("claude", "stdout", tool)
+
+    assert activity["label"] == "Read"
+    assert activity["detail"] == "src/app.py"
+    assert _final_output("claude", f"{tool}\n{result}\n") == "Analyse terminée."

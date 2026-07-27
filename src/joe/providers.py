@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import queue
 import shutil
 import subprocess
@@ -40,7 +41,7 @@ class Provider:
             if effort:
                 command.extend(["--config", f'model_reasoning_effort="{effort}"'])
             command.extend([
-                "exec",
+                "exec", "--json",
                 "--ephemeral", "--skip-git-repo-check", "--color", "never",
                 "--sandbox", sandbox,
             ])
@@ -54,7 +55,8 @@ class Provider:
                 else ("acceptEdits" if modifying else "plan")
             )
             command = [
-                self.executable, "--print", "--output-format", "text",
+                self.executable, "--print", "--output-format", "stream-json",
+                "--verbose",
                 "--permission-mode", permission, "--no-session-persistence",
             ]
             if effort:
@@ -69,7 +71,7 @@ class Provider:
                 else ("auto_edit" if modifying else "plan")
             )
             command = [
-                self.executable, "--output-format", "text",
+                self.executable, "--output-format", "stream-json",
                 "--approval-mode", approval, "--skip-trust",
             ]
             if model:
@@ -128,8 +130,9 @@ class Provider:
                 bufsize=1,
             )
             stdout, stderr = _collect_streams(
-                process, timeout, on_stream, secret_values
+                process, timeout, on_stream, secret_values, self.name
             )
+            stdout = _final_output(self.name, stdout)
             duration = time.monotonic() - start
             kind = classify_error(stderr, process.returncode)
             return ProviderResult(
@@ -178,6 +181,7 @@ def _collect_streams(
     timeout: int,
     callback: StreamCallback | None,
     secret_values: tuple[str, ...] = (),
+    provider: str | None = None,
 ) -> tuple[str, str]:
     events: queue.Queue[tuple[str, str | None]] = queue.Queue()
     output = {"stdout": [], "stderr": []}
@@ -217,9 +221,110 @@ def _collect_streams(
         line = _redact_values(line, secret_values)
         output[stream_name].append(line)
         if callback:
-            callback(stream_name, line)
+            activity = _activity(provider, stream_name, line)
+            if activity:
+                callback("activity", json.dumps(activity, ensure_ascii=False))
+            elif stream_name == "stderr" or provider not in {
+                "codex",
+                "claude",
+                "gemini",
+            }:
+                callback(stream_name, line)
     process.wait()
     return "".join(output["stdout"]), "".join(output["stderr"])
+
+
+def _activity(
+    provider: str | None, stream_name: str, line: str
+) -> dict[str, str] | None:
+    if stream_name != "stdout" or provider not in {"codex", "claude", "gemini"}:
+        return None
+    try:
+        event = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+    if provider == "codex":
+        item = event.get("item") or {}
+        item_type = item.get("type")
+        if item_type in {"command_execution", "mcp_tool_call", "file_change"}:
+            detail = (
+                item.get("command")
+                or item.get("name")
+                or item.get("path")
+                or item.get("changes")
+                or ""
+            )
+            return {"kind": item_type, "label": _activity_label(item_type), "detail": str(detail)}
+        if event.get("type") == "turn.started":
+            return {"kind": "status", "label": "Analyse de la demande", "detail": ""}
+    if provider == "claude":
+        message = event.get("message") or {}
+        for block in message.get("content", []):
+            if block.get("type") == "tool_use":
+                detail = _tool_detail(block.get("input"))
+                return {
+                    "kind": "tool",
+                    "label": str(block.get("name") or "Outil"),
+                    "detail": detail,
+                }
+        if event.get("type") == "system":
+            return {"kind": "status", "label": "Session Claude prête", "detail": ""}
+    if provider == "gemini":
+        event_type = event.get("type")
+        if event_type in {"tool_use", "tool_call"}:
+            return {
+                "kind": "tool",
+                "label": str(event.get("tool_name") or event.get("name") or "Outil"),
+                "detail": _tool_detail(event.get("parameters") or event.get("args")),
+            }
+        if event_type == "init":
+            return {"kind": "status", "label": "Session Gemini prête", "detail": ""}
+    return None
+
+
+def _activity_label(kind: str) -> str:
+    return {
+        "command_execution": "Commande",
+        "mcp_tool_call": "Outil MCP",
+        "file_change": "Modification de fichier",
+    }.get(kind, kind)
+
+
+def _tool_detail(value: object) -> str:
+    if not value:
+        return ""
+    if isinstance(value, dict):
+        for key in ("file_path", "path", "command", "query", "pattern"):
+            if value.get(key):
+                return str(value[key])
+    return json.dumps(value, ensure_ascii=False)[:500]
+
+
+def _final_output(provider: str, stdout: str) -> str:
+    if provider not in {"codex", "claude", "gemini"}:
+        return stdout
+    text_parts: list[str] = []
+    result_text = ""
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if provider == "codex":
+            item = event.get("item") or {}
+            if item.get("type") == "agent_message" and item.get("text"):
+                text_parts.append(str(item["text"]))
+        elif provider == "claude":
+            if event.get("type") == "result" and event.get("result"):
+                result_text = str(event["result"])
+        elif provider == "gemini":
+            if event.get("type") == "message" and event.get("role") == "assistant":
+                content = event.get("content")
+                if content:
+                    text_parts.append(str(content))
+            elif event.get("type") == "result" and event.get("response"):
+                result_text = str(event["response"])
+    return result_text or "\n".join(text_parts)
 
 
 def _secret_values(env: dict[str, str]) -> tuple[str, ...]:

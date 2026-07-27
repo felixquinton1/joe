@@ -49,6 +49,8 @@ popover when the provider CLI exposes them, provides stable
 agent/workflow/model/effort/permission controls,
 and loads the latest 100 run logs from the project's `.agentflow/runs/` folder.
 Joe never estimates missing quotas: unsupported providers are marked clearly.
+Native JSON streams expose observable progress such as commands, tools, and
+files read or changed; Joe does not expose private chain-of-thought.
 Use `joe chat` for the original terminal conversation and `joe web` when you
 need explicit web-server options.
 

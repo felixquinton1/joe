@@ -166,9 +166,14 @@ function ensureAgent(name) {
   if (state.agents.has(name)) return state.agents.get(name);
   const card = document.createElement("div");
   card.className = "agent-card";
-  card.innerHTML = `<div class="agent-head"><span class="agent-name">${escapeHtml(name)}</span><span class="agent-status">En attente</span></div><pre class="agent-output"></pre>`;
+  card.innerHTML = `<div class="agent-head"><span class="agent-name">${escapeHtml(name)}</span><span class="agent-status">En attente</span></div><div class="agent-activity"></div><pre class="agent-output"></pre>`;
   $("agents").appendChild(card);
-  const agent = { card, status: card.querySelector(".agent-status"), output: card.querySelector(".agent-output") };
+  const agent = {
+    card,
+    status: card.querySelector(".agent-status"),
+    activity: card.querySelector(".agent-activity"),
+    output: card.querySelector(".agent-output")
+  };
   state.agents.set(name, agent);
   return agent;
 }
@@ -179,10 +184,26 @@ function handleEvent(event, finalBubble) {
     showRoute(event.mode, event.primary, event.reviewer);
     ensureAgent(event.primary);
     if (event.reviewer) ensureAgent(event.reviewer);
+    finalBubble.textContent = `${event.mode.toUpperCase()} · ${capitalize(event.primary)} sélectionné${event.reviewer ? ` · revue par ${capitalize(event.reviewer)}` : ""}\nDémarrage de l’agent…`;
   } else if (event.type === "provider_start") {
     const agent = ensureAgent(event.provider);
     agent.card.classList.add("active");
-    agent.status.textContent = "Travaille";
+    agent.status.textContent = "Démarrage";
+    finalBubble.textContent = `${capitalize(event.provider)} démarre…`;
+  } else if (event.type === "activity") {
+    const agent = ensureAgent(event.provider);
+    agent.status.textContent = event.label;
+    const signature = `${event.label}\n${event.detail || ""}`;
+    const previous = agent.activity.lastElementChild;
+    if (previous?.dataset.signature === signature) return;
+    const row = document.createElement("div");
+    row.className = "activity-row";
+    row.dataset.signature = signature;
+    row.innerHTML = `<i></i><div><strong>${escapeHtml(event.label)}</strong>${event.detail ? `<span>${escapeHtml(event.detail)}</span>` : ""}</div>`;
+    agent.activity.appendChild(row);
+    while (agent.activity.children.length > 12) agent.activity.firstElementChild.remove();
+    agent.activity.scrollTop = agent.activity.scrollHeight;
+    finalBubble.textContent = `${capitalize(event.provider)} · ${event.label}${event.detail ? `\n${event.detail}` : ""}`;
   } else if (event.type === "stream") {
     const agent = ensureAgent(event.provider);
     agent.output.textContent += event.text;
@@ -218,7 +239,7 @@ async function startRun(request) {
   $("run-state").className = "run-state running";
   clearConversation();
   addMessage("Toi", request, "user");
-  const finalBubble = addMessage("Joe · synthèse", "Joe prépare le routage…", "assistant");
+  const finalBubble = addMessage("Joe · synthèse", "Routage local en cours…", "assistant");
   let model = $("model").value;
   if (model === "__custom__") {
     model = window.prompt("Identifiant exact du modèle :") || "";
@@ -280,6 +301,10 @@ function escapeHtml(value) {
   const node = document.createElement("span");
   node.textContent = value;
   return node.innerHTML;
+}
+
+function capitalize(value) {
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : "";
 }
 
 setInterval(updateCountdowns, 1000);
