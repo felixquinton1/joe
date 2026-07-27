@@ -2,7 +2,7 @@ import http.client
 import json
 import threading
 
-from joe.web import Handler, JoeServer, RunManager
+from joe.web import Handler, JoeServer, LiveRun, RunManager
 
 
 def start_server(tmp_path):
@@ -55,6 +55,13 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         )
         response = connection.getresponse()
         assert json.loads(response.read())["pinned"] is True
+
+        live = LiveRun("cancel-test", "long request", conversation["id"])
+        server.manager.live[live.run_id] = live
+        connection.request("POST", "/api/runs/cancel-test/cancel", body="{}")
+        response = connection.getresponse()
+        assert response.status == 202
+        assert live.cancel_event.is_set()
 
         connection.request("GET", "/api/usage")
         response = connection.getresponse()

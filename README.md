@@ -58,6 +58,11 @@ Conversations are persistent per project. Each conversation keeps its full
 message history and independent agent, workflow, model, effort, and permission
 settings. Conversations can be pinned and several can run concurrently; avoid
 launching concurrent write tasks against the same files.
+
+An active run can be interrupted from its conversation. Joe terminates the
+provider process tree, removes the unfinished turn, restores the original
+prompt in the composer, and lets it be edited and relaunched. Scrollable panels
+follow new content only while the user remains near the bottom.
 Use `joe chat` for the original terminal conversation and `joe web` when you
 need explicit web-server options.
 

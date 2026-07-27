@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -52,6 +53,7 @@ class Orchestrator:
         effort: str | None = None,
         execution_mode: str | None = None,
         extra_context: str | None = None,
+        cancel_event: threading.Event | None = None,
         on_event: Callable[[dict], None] | None = None,
     ) -> tuple[str, Path]:
         self.memory.ensure()
@@ -64,6 +66,7 @@ class Orchestrator:
             result = self._run_with_fallback(
                 route.primary, context, route.intent, results, model=model,
                 effort=effort, execution_mode=execution_mode, on_event=on_event,
+                cancel_event=cancel_event,
             )
             final = result.stdout.strip()
             final_provider = result.provider
@@ -71,12 +74,14 @@ class Orchestrator:
             primary = self._run_with_fallback(
                 route.primary, context, route.intent, results, model=model,
                 effort=effort, execution_mode=execution_mode, on_event=on_event,
+                cancel_event=cancel_event,
             )
             reviewer = route.reviewer or ("claude" if primary.provider == "codex" else "codex")
             review_prompt = self._review_prompt(context, primary.stdout)
             review = self._run_with_fallback(
                 reviewer, review_prompt, Intent.ANALYZE, results,
                 on_event=on_event,
+                cancel_event=cancel_event,
             )
             final = primary.stdout.strip() + "\n\n---\nReview by " + review.provider + ":\n" + review.stdout.strip()
             final_provider = primary.provider
@@ -89,6 +94,7 @@ class Orchestrator:
                 model=model,
                 effort=effort,
                 execution_mode=execution_mode,
+                cancel_event=cancel_event,
             )
 
         if not final:
@@ -136,6 +142,7 @@ class Orchestrator:
         model: str | None = None,
         effort: str | None = None,
         execution_mode: str | None = None,
+        cancel_event: threading.Event | None = None,
         on_event: Callable[[dict], None] | None = None,
     ) -> ProviderResult:
         config = self.memory.config()
@@ -157,6 +164,7 @@ class Orchestrator:
                 execution_mode=(
                     execution_mode if name == provider_name else None
                 ),
+                cancel_event=cancel_event,
                 on_stream=(
                     lambda stream, text, provider=name: on_event(
                         (
@@ -179,6 +187,8 @@ class Orchestrator:
                 ),
             )
             results.append(result)
+            if result.error_kind == "cancelled":
+                raise OrchestrationError("Exécution interrompue")
             if on_event:
                 on_event(
                     {
@@ -203,6 +213,7 @@ class Orchestrator:
         model: str | None = None,
         effort: str | None = None,
         execution_mode: str | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> tuple[str, str]:
         proposal_prompt = (
             context
@@ -215,6 +226,7 @@ class Orchestrator:
             effort=effort if selected_provider == "codex" else None,
             execution_mode=execution_mode if selected_provider == "codex" else None,
             on_event=on_event,
+            cancel_event=cancel_event,
         )
         claude = self._run_with_fallback(
             "claude", proposal_prompt, Intent.ANALYZE, results, {codex.provider},
@@ -222,6 +234,7 @@ class Orchestrator:
             effort=effort if selected_provider == "claude" else None,
             execution_mode=execution_mode if selected_provider == "claude" else None,
             on_event=on_event,
+            cancel_event=cancel_event,
         )
         codex_review = self._run_with_fallback(
             "codex",
@@ -230,6 +243,7 @@ class Orchestrator:
             results,
             {claude.provider},
             on_event=on_event,
+            cancel_event=cancel_event,
         )
         claude_review = self._run_with_fallback(
             "claude",
@@ -238,6 +252,7 @@ class Orchestrator:
             results,
             {codex.provider},
             on_event=on_event,
+            cancel_event=cancel_event,
         )
         synthesis_prompt = (
             context
@@ -257,6 +272,7 @@ class Orchestrator:
         synthesis = self._run_with_fallback(
             "gemini", synthesis_prompt, Intent.ANALYZE, results,
             on_event=on_event,
+            cancel_event=cancel_event,
         )
         return synthesis.stdout.strip(), synthesis.provider
 

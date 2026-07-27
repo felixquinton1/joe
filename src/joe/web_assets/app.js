@@ -1,4 +1,4 @@
-const APP_VERSION = "0.6.0";
+const APP_VERSION = "0.6.1";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -208,12 +208,15 @@ async function selectConversation(conversationId) {
   if (!conversation.messages.length) {
     $("messages").innerHTML = '<div class="empty-state"><span class="empty-mark">J</span><h3>Nouvelle conversation</h3><p>Les réglages et l’historique de cette conversation resteront indépendants.</p></div>';
   }
+  const conversationViewport = document.querySelector(".conversation");
+  conversationViewport.scrollTop = conversationViewport.scrollHeight;
   applySettings(conversation.settings || {});
   state.agents.clear();
   $("agents").replaceChildren();
   $("raw-log").textContent = "";
   const running = state.runs.has(conversationId);
   $("send").disabled = running;
+  $("stop").classList.toggle("hidden", !running);
   $("run-state").textContent = running ? "En cours" : "Prêt";
   $("run-state").className = `run-state ${running ? "running" : "idle"}`;
   if (running) {
@@ -243,6 +246,8 @@ async function togglePin(conversation) {
 function clearConversation() { $("messages").replaceChildren(); }
 
 function addMessage(label, text, kind) {
+  const viewport = document.querySelector(".conversation");
+  const follow = shouldFollow(viewport);
   const wrapper = document.createElement("div");
   wrapper.className = `message ${kind}`;
   const title = document.createElement("div");
@@ -253,7 +258,7 @@ function addMessage(label, text, kind) {
   bubble.textContent = text;
   wrapper.append(title, bubble);
   $("messages").appendChild(wrapper);
-  wrapper.scrollIntoView({ behavior: "smooth", block: "end" });
+  scrollIfFollowing(viewport, follow);
   return bubble;
 }
 
@@ -281,14 +286,19 @@ function ensureAgent(name) {
 
 function handleEvent(conversationId, event, finalBubble) {
   if (conversationId !== state.activeConversationId) {
-    if (event.type === "complete" || event.type === "error") {
+    if (event.type === "complete" || event.type === "error" || event.type === "cancelled") {
       state.runs.delete(conversationId);
       loadConversations(false);
     }
     return;
   }
   finalBubble = state.runs.get(conversationId)?.bubble || finalBubble;
+  const conversationViewport = document.querySelector(".conversation");
+  const followConversation = shouldFollow(conversationViewport);
+  const diagnostics = $("raw-log");
+  const followDiagnostics = shouldFollow(diagnostics);
   $("raw-log").textContent += `${JSON.stringify(event)}\n`;
+  scrollIfFollowing(diagnostics, followDiagnostics);
   if (event.type === "route") {
     showRoute(event.mode, event.primary, event.reviewer);
     ensureAgent(event.primary);
@@ -309,14 +319,16 @@ function handleEvent(conversationId, event, finalBubble) {
     row.className = "activity-row";
     row.dataset.signature = signature;
     row.innerHTML = `<i></i><div><strong>${escapeHtml(event.label)}</strong>${event.detail ? `<span>${escapeHtml(event.detail)}</span>` : ""}</div>`;
+    const followActivity = shouldFollow(agent.activity);
     agent.activity.appendChild(row);
     while (agent.activity.children.length > 12) agent.activity.firstElementChild.remove();
-    agent.activity.scrollTop = agent.activity.scrollHeight;
-    finalBubble.textContent = `${capitalize(event.provider)} · ${event.label}${event.detail ? `\n${event.detail}` : ""}`;
+    scrollIfFollowing(agent.activity, followActivity);
+    finalBubble.textContent = `${capitalize(event.provider)} · ${event.label}`;
   } else if (event.type === "stream") {
     const agent = ensureAgent(event.provider);
+    const followOutput = shouldFollow(agent.output);
     agent.output.textContent += event.text;
-    agent.output.scrollTop = agent.output.scrollHeight;
+    scrollIfFollowing(agent.output, followOutput);
   } else if (event.type === "provider_end") {
     const agent = ensureAgent(event.provider);
     agent.card.classList.remove("active");
@@ -329,12 +341,22 @@ function handleEvent(conversationId, event, finalBubble) {
     finalBubble.textContent = `Erreur : ${event.message}`;
     finishRun(conversationId, false);
     loadConversations(false).then(() => selectConversation(conversationId));
+  } else if (event.type === "cancelled") {
+    const prompt = state.runs.get(conversationId)?.request || "";
+    finishRun(conversationId, false);
+    $("request").value = prompt;
+    $("run-state").textContent = "Interrompu";
+    loadConversations(false).then(() => selectConversation(conversationId));
   }
+  scrollIfFollowing(conversationViewport, followConversation);
 }
 
 function finishRun(conversationId, ok) {
   state.runs.delete(conversationId);
   $("send").disabled = false;
+  $("stop").classList.add("hidden");
+  $("stop").disabled = false;
+  $("stop").querySelector("span").textContent = "Interrompre";
   $("run-state").textContent = ok ? "Terminé" : "Échec";
   $("run-state").className = `run-state ${ok ? "done" : "idle"}`;
 }
@@ -346,6 +368,7 @@ async function startRun(request) {
   $("agents").replaceChildren();
   $("raw-log").textContent = "";
   $("send").disabled = true;
+  $("stop").classList.remove("hidden");
   $("run-state").textContent = "En cours";
   $("run-state").className = "run-state running";
   addMessage("Toi", request, "user");
@@ -375,12 +398,12 @@ async function startRun(request) {
   }
   const { run_id } = await response.json();
   const stream = new EventSource(`/api/events/${run_id}`);
-  state.runs.set(conversationId, { runId: run_id, stream, bubble: finalBubble });
+  state.runs.set(conversationId, { runId: run_id, stream, bubble: finalBubble, request });
   loadConversations(false);
   stream.onmessage = ({ data }) => {
     const event = JSON.parse(data);
     handleEvent(conversationId, event, finalBubble);
-    if (event.type === "complete" || event.type === "error") stream.close();
+    if (event.type === "complete" || event.type === "error" || event.type === "cancelled") stream.close();
   };
   stream.onerror = () => {
     stream.close();
@@ -389,6 +412,19 @@ async function startRun(request) {
       finishRun(conversationId, false);
     }
   };
+}
+
+async function cancelActiveRun() {
+  const conversationId = state.activeConversationId;
+  const run = state.runs.get(conversationId);
+  if (!run) return;
+  $("stop").disabled = true;
+  $("stop").querySelector("span").textContent = "Arrêt…";
+  const response = await fetch(`/api/runs/${run.runId}/cancel`, { method: "POST" });
+  if (!response.ok) {
+    $("stop").disabled = false;
+    $("stop").querySelector("span").textContent = "Interrompre";
+  }
 }
 
 $("composer").addEventListener("submit", async event => {
@@ -417,6 +453,7 @@ $("mode").addEventListener("change", saveSettings);
 $("effort").addEventListener("change", saveSettings);
 $("execution-mode").addEventListener("change", saveSettings);
 $("new-conversation").onclick = () => createConversation(true);
+$("stop").onclick = cancelActiveRun;
 $("refresh-usage").onclick = loadUsage;
 
 function escapeHtml(value) {
@@ -427,6 +464,16 @@ function escapeHtml(value) {
 
 function capitalize(value) {
   return value ? value.charAt(0).toUpperCase() + value.slice(1) : "";
+}
+
+function shouldFollow(element) {
+  if (!element) return false;
+  return element.scrollHeight - element.scrollTop - element.clientHeight < 48;
+}
+
+function scrollIfFollowing(element, follow) {
+  if (!element || !follow) return;
+  requestAnimationFrame(() => element.scrollTo({ top: element.scrollHeight, behavior: "smooth" }));
 }
 
 function renderMarkdown(target, source) {

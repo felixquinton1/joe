@@ -12,7 +12,7 @@ class FakeProvider:
 
     def run(
         self, prompt, cwd, intent, timeout, *, model=None, effort=None,
-        execution_mode=None, on_stream=None
+        execution_mode=None, cancel_event=None, on_stream=None
     ):
         self.calls.append((prompt, cwd, intent, timeout))
         if on_stream and not self.fail:

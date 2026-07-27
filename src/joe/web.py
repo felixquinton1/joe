@@ -28,6 +28,7 @@ class LiveRun:
     conversation_id: str
     events: list[dict[str, Any]] = field(default_factory=list)
     done: bool = False
+    cancel_event: threading.Event = field(default_factory=threading.Event)
     condition: threading.Condition = field(default_factory=threading.Condition)
 
     def emit(self, event: dict[str, Any]) -> None:
@@ -112,6 +113,7 @@ class RunManager:
                 effort=effort,
                 execution_mode=execution_mode,
                 extra_context=self.conversations.context(run.conversation_id),
+                cancel_event=run.cancel_event,
                 on_event=run.emit,
             )
             self.conversations.append_message(
@@ -129,6 +131,10 @@ class RunManager:
                 }
             )
         except Exception as exc:
+            if run.cancel_event.is_set():
+                self.conversations.remove_run(run.conversation_id, run.run_id)
+                run.emit({"type": "cancelled"})
+                return
             self.conversations.append_message(
                 run.conversation_id, "assistant", f"Erreur : {exc}", run.run_id
             )
@@ -137,6 +143,14 @@ class RunManager:
             with run.condition:
                 run.done = True
                 run.condition.notify_all()
+
+    def cancel(self, run_id: str) -> bool:
+        with self.lock:
+            run = self.live.get(run_id)
+        if not run or run.done:
+            return False
+        run.cancel_event.set()
+        return True
 
     def history(self) -> list[dict[str, Any]]:
         self.orchestrator.memory.ensure()
@@ -212,6 +226,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
+        if path.startswith("/api/runs/") and path.endswith("/cancel"):
+            run_id = unquote(path.split("/")[-2])
+            cancelled = self.server.manager.cancel(run_id)
+            return self._json(
+                {"cancelled": cancelled},
+                HTTPStatus.ACCEPTED if cancelled else HTTPStatus.NOT_FOUND,
+            )
         if path == "/api/conversations":
             return self._json(
                 self.server.manager.conversations.create(), HTTPStatus.CREATED

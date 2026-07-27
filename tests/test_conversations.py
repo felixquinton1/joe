@@ -42,3 +42,16 @@ def test_old_runs_are_imported_once(tmp_path):
     assert len(conversations) == 1
     assert conversations[0]["title"] == "Historique importé"
     assert len(conversations[0]["messages"]) == 2
+
+
+def test_cancelled_run_messages_are_removed(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+    conversation = store.create()
+    store.append_message(conversation["id"], "user", "Prompt à modifier", "run-1")
+
+    store.remove_run(conversation["id"], "run-1")
+
+    assert store.get(conversation["id"])["messages"] == []

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import json
 import queue
+import signal
 import shutil
 import subprocess
 import threading
@@ -14,6 +15,10 @@ from typing import Callable
 from .models import Intent, ProviderResult
 
 StreamCallback = Callable[[str, str], None]
+
+
+class ProviderCancelled(RuntimeError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -106,6 +111,7 @@ class Provider:
         model: str | None = None,
         effort: str | None = None,
         execution_mode: str | None = None,
+        cancel_event: threading.Event | None = None,
         on_stream: StreamCallback | None = None,
     ) -> ProviderResult:
         if not shutil.which(self.executable):
@@ -128,9 +134,15 @@ class Provider:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 bufsize=1,
+                start_new_session=True,
             )
             stdout, stderr = _collect_streams(
-                process, timeout, on_stream, secret_values, self.name
+                process,
+                timeout,
+                on_stream,
+                secret_values,
+                self.name,
+                cancel_event,
             )
             stdout = _final_output(self.name, stdout)
             duration = time.monotonic() - start
@@ -149,6 +161,16 @@ class Provider:
                 time.monotonic() - start,
                 timed_out=True,
                 error_kind="timeout",
+            )
+        except ProviderCancelled as exc:
+            return ProviderResult(
+                self.name,
+                command,
+                getattr(exc, "stdout", ""),
+                getattr(exc, "stderr", ""),
+                130,
+                time.monotonic() - start,
+                error_kind="cancelled",
             )
 
 
@@ -182,6 +204,7 @@ def _collect_streams(
     callback: StreamCallback | None,
     secret_values: tuple[str, ...] = (),
     provider: str | None = None,
+    cancel_event: threading.Event | None = None,
 ) -> tuple[str, str]:
     events: queue.Queue[tuple[str, str | None]] = queue.Queue()
     output = {"stdout": [], "stderr": []}
@@ -203,10 +226,15 @@ def _collect_streams(
     deadline = time.monotonic() + timeout
     closed = 0
     while closed < 2:
+        if cancel_event and cancel_event.is_set():
+            _stop_process(process)
+            error = ProviderCancelled("provider cancelled")
+            error.stdout = "".join(output["stdout"])  # type: ignore[attr-defined]
+            error.stderr = "".join(output["stderr"])  # type: ignore[attr-defined]
+            raise error
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            process.kill()
-            process.wait()
+            _stop_process(process, force=True)
             error = TimeoutError("provider timed out")
             error.stdout = "".join(output["stdout"])  # type: ignore[attr-defined]
             error.stderr = "".join(output["stderr"])  # type: ignore[attr-defined]
@@ -232,6 +260,18 @@ def _collect_streams(
                 callback(stream_name, line)
     process.wait()
     return "".join(output["stdout"]), "".join(output["stderr"])
+
+
+def _stop_process(process: subprocess.Popen[str], force: bool = False) -> None:
+    if process.poll() is not None:
+        return
+    try:
+        os.killpg(process.pid, signal.SIGKILL if force else signal.SIGTERM)
+        process.wait(timeout=1)
+    except (ProcessLookupError, subprocess.TimeoutExpired):
+        if process.poll() is None:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
 
 
 def _activity(

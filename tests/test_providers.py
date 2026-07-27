@@ -1,4 +1,6 @@
 import sys
+import threading
+import time
 from pathlib import Path
 
 from joe.models import Intent
@@ -48,6 +50,20 @@ def test_provider_timeout_is_reported(tmp_path):
     result = provider.run("hello", tmp_path, Intent.ANALYZE, timeout=0.01)
     assert result.timed_out
     assert result.error_kind == "timeout"
+
+
+def test_provider_can_be_cancelled_without_waiting_for_timeout(tmp_path):
+    provider = ScriptProvider("import time; time.sleep(30)")
+    cancel = threading.Event()
+    threading.Timer(0.1, cancel.set).start()
+    started = time.monotonic()
+
+    result = provider.run(
+        "hello", tmp_path, Intent.ANALYZE, timeout=60, cancel_event=cancel
+    )
+
+    assert result.error_kind == "cancelled"
+    assert time.monotonic() - started < 3
 
 
 def test_commands_match_inspected_noninteractive_interfaces():

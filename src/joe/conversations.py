@@ -127,6 +127,20 @@ class ConversationStore:
                 return str(message["provider"])
         return None
 
+    def remove_run(self, conversation_id: str, run_id: str) -> None:
+        with self.lock:
+            payload = self._read()
+            conversation = self._find(payload, conversation_id)
+            if not conversation:
+                return
+            conversation["messages"] = [
+                message
+                for message in conversation["messages"]
+                if message.get("run_id") != run_id
+            ]
+            conversation["updated_at"] = time.time()
+            self._write(payload)
+
     def _read(self) -> dict[str, Any]:
         self.ensure()
         try:
