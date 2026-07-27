@@ -53,6 +53,11 @@ Native JSON streams expose observable progress such as commands, tools, and
 files read or changed; Joe does not expose private chain-of-thought.
 Final answers are rendered locally as safe Markdown, including headings,
 tables, lists, links, inline code, and fenced code blocks.
+
+Conversations are persistent per project. Each conversation keeps its full
+message history and independent agent, workflow, model, effort, and permission
+settings. Conversations can be pinned and several can run concurrently; avoid
+launching concurrent write tasks against the same files.
 Use `joe chat` for the original terminal conversation and `joe web` when you
 need explicit web-server options.
 

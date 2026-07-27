@@ -36,6 +36,26 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert "models" in capabilities["codex"]
         assert "execution_modes" in capabilities["claude"]
 
+        connection.request("POST", "/api/conversations", body="{}")
+        response = connection.getresponse()
+        conversation = json.loads(response.read())
+        assert response.status == 201
+
+        connection.request("GET", f"/api/conversations/{conversation['id']}")
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read())["settings"]["agent"] == ""
+
+        body = json.dumps({"pinned": True, "settings": {"agent": "claude"}})
+        connection.request(
+            "PATCH",
+            f"/api/conversations/{conversation['id']}",
+            body=body,
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        assert json.loads(response.read())["pinned"] is True
+
         connection.request("GET", "/api/usage")
         response = connection.getresponse()
         usage = json.loads(response.read())

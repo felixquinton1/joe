@@ -26,8 +26,8 @@
   <div id="restart-warning" class="restart-warning hidden"></div>
   <main class="layout">
     <aside class="history-panel">
-      <div class="panel-title"><div><span class="eyebrow">Mémoire</span><h2>Historique</h2></div><button id="refresh-history" class="icon-button" title="Actualiser">↻</button></div>
-      <div id="history" class="history-list"></div>
+      <div class="panel-title"><div><span class="eyebrow">Projet</span><h2>Conversations</h2></div><button id="new-conversation" class="icon-button" title="Nouvelle conversation">＋</button></div>
+      <div id="conversations" class="history-list"></div>
     </aside>
     <section class="workspace">
       <div class="controls">
@@ -45,7 +45,7 @@
         </details>
       </div>
       <div class="conversation">
-        <div class="conversation-head"><div><span class="eyebrow">Session active</span><h1>Que veux-tu accomplir ?</h1></div><div id="route-badge" class="route-badge hidden"></div></div>
+        <div class="conversation-head"><div><span class="eyebrow">Conversation active</span><h1 id="conversation-title">Que veux-tu accomplir ?</h1></div><div id="route-badge" class="route-badge hidden"></div></div>
         <div id="messages" class="messages">
           <div class="empty-state"><span class="empty-mark">J</span><h3>Un seul point d’entrée, plusieurs intelligences.</h3><p>Décris simplement ton besoin. Joe choisira le workflow et transmettra le contexte du projet.</p></div>
         </div>

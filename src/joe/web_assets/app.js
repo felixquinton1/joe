@@ -1,5 +1,12 @@
-const APP_VERSION = "0.5.4";
-const state = { running: false, agents: new Map(), capabilities: {}, usage: [] };
+const APP_VERSION = "0.6.0";
+const state = {
+  agents: new Map(),
+  capabilities: {},
+  usage: [],
+  conversations: [],
+  activeConversationId: null,
+  runs: new Map()
+};
 const $ = id => document.getElementById(id);
 
 async function loadStatus() {
@@ -107,6 +114,37 @@ function updateEfforts() {
   $("effort").disabled = !efforts.length;
 }
 
+function currentSettings() {
+  return {
+    agent: $("agent").value,
+    mode: $("mode").value,
+    model: $("model").value,
+    effort: $("effort").value,
+    execution_mode: $("execution-mode").value
+  };
+}
+
+function applySettings(settings) {
+  $("agent").value = settings.agent || "";
+  updateCapabilityMenus();
+  if (settings.model && [...$("model").options].some(option => option.value === settings.model)) {
+    $("model").value = settings.model;
+  }
+  updateEfforts();
+  $("mode").value = settings.mode || "";
+  $("effort").value = settings.effort || "";
+  $("execution-mode").value = settings.execution_mode || "";
+}
+
+async function saveSettings() {
+  if (!state.activeConversationId) return;
+  await fetch(`/api/conversations/${state.activeConversationId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ settings: currentSettings() })
+  });
+}
+
 function setOptions(select, items) {
   select.replaceChildren();
   addOptions(select, items);
@@ -121,30 +159,85 @@ function addOptions(select, items) {
   }
 }
 
-async function loadHistory() {
-  const history = await fetch("/api/history").then(response => response.json());
-  const target = $("history");
-  target.replaceChildren();
-  if (!history.length) {
-    target.innerHTML = '<p class="agent-status">Aucune exécution enregistrée</p>';
-    return;
+async function loadConversations(selectFirst = true) {
+  state.conversations = await fetch("/api/conversations").then(response => response.json());
+  if (!state.conversations.length) {
+    const created = await createConversation(false);
+    state.conversations = [created];
   }
-  for (const item of history) {
-    const button = document.createElement("button");
-    button.className = "history-item";
-    button.innerHTML = `<strong>${escapeHtml(item.request || "Sans titre")}</strong><span>${escapeHtml(item.route?.mode || "")} · ${escapeHtml(item.route?.primary || "")}</span>`;
-    button.onclick = () => showHistory(item);
-    target.appendChild(button);
+  renderConversations();
+  if (selectFirst && !state.activeConversationId) {
+    await selectConversation(state.conversations[0].id);
   }
 }
 
-function showHistory(item) {
+function renderConversations() {
+  const target = $("conversations");
+  target.replaceChildren();
+  for (const conversation of state.conversations) {
+    const row = document.createElement("div");
+    row.className = `conversation-item ${conversation.id === state.activeConversationId ? "active" : ""}`;
+    const button = document.createElement("button");
+    button.className = "history-item";
+    button.innerHTML = `<strong>${escapeHtml(conversation.title)}</strong><span>${state.runs.has(conversation.id) ? "● En cours" : `${conversation.messages.length} messages`}</span>`;
+    button.onclick = () => selectConversation(conversation.id);
+    const pin = document.createElement("button");
+    pin.className = `pin-button ${conversation.pinned ? "pinned" : ""}`;
+    pin.title = conversation.pinned ? "Désépingler" : "Épingler";
+    pin.textContent = conversation.pinned ? "★" : "☆";
+    pin.onclick = () => togglePin(conversation);
+    row.append(button, pin);
+    target.appendChild(row);
+  }
+}
+
+async function selectConversation(conversationId) {
+  const conversation = await fetch(`/api/conversations/${conversationId}`).then(response => response.json());
+  state.activeConversationId = conversationId;
+  renderConversations();
   clearConversation();
-  addMessage("Toi", item.request, "user");
-  const bubble = addMessage("Joe · historique", "", "assistant");
-  renderMarkdown(bubble, item.final || "Aucune réponse enregistrée.");
-  const route = item.route || {};
-  showRoute(route.mode, route.primary, route.reviewer);
+  $("conversation-title").textContent = conversation.title;
+  for (const message of conversation.messages) {
+    if (message.role === "user") {
+      addMessage("Toi", message.content, "user");
+    } else {
+      const bubble = addMessage("Joe · synthèse", "", "assistant");
+      renderMarkdown(bubble, message.content);
+    }
+  }
+  if (!conversation.messages.length) {
+    $("messages").innerHTML = '<div class="empty-state"><span class="empty-mark">J</span><h3>Nouvelle conversation</h3><p>Les réglages et l’historique de cette conversation resteront indépendants.</p></div>';
+  }
+  applySettings(conversation.settings || {});
+  state.agents.clear();
+  $("agents").replaceChildren();
+  $("raw-log").textContent = "";
+  const running = state.runs.has(conversationId);
+  $("send").disabled = running;
+  $("run-state").textContent = running ? "En cours" : "Prêt";
+  $("run-state").className = `run-state ${running ? "running" : "idle"}`;
+  if (running) {
+    const bubble = addMessage("Joe", "Cette tâche continue en arrière-plan…", "assistant");
+    state.runs.get(conversationId).bubble = bubble;
+  }
+}
+
+async function createConversation(select = true) {
+  const conversation = await fetch("/api/conversations", { method: "POST" }).then(response => response.json());
+  if (select) {
+    await loadConversations(false);
+    await selectConversation(conversation.id);
+  }
+  return conversation;
+}
+
+async function togglePin(conversation) {
+  await fetch(`/api/conversations/${conversation.id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pinned: !conversation.pinned })
+  });
+  await loadConversations(false);
 }
 
 function clearConversation() { $("messages").replaceChildren(); }
@@ -186,7 +279,15 @@ function ensureAgent(name) {
   return agent;
 }
 
-function handleEvent(event, finalBubble) {
+function handleEvent(conversationId, event, finalBubble) {
+  if (conversationId !== state.activeConversationId) {
+    if (event.type === "complete" || event.type === "error") {
+      state.runs.delete(conversationId);
+      loadConversations(false);
+    }
+    return;
+  }
+  finalBubble = state.runs.get(conversationId)?.bubble || finalBubble;
   $("raw-log").textContent += `${JSON.stringify(event)}\n`;
   if (event.type === "route") {
     showRoute(event.mode, event.primary, event.reviewer);
@@ -222,30 +323,31 @@ function handleEvent(event, finalBubble) {
     agent.status.textContent = event.ok ? "Terminé" : `Échec · ${event.error || "inconnu"}`;
   } else if (event.type === "complete") {
     renderMarkdown(finalBubble, event.response);
-    finishRun(true);
-    loadHistory();
+    finishRun(conversationId, true);
+    loadConversations(false).then(() => selectConversation(conversationId));
   } else if (event.type === "error") {
     finalBubble.textContent = `Erreur : ${event.message}`;
-    finishRun(false);
+    finishRun(conversationId, false);
+    loadConversations(false).then(() => selectConversation(conversationId));
   }
 }
 
-function finishRun(ok) {
-  state.running = false;
+function finishRun(conversationId, ok) {
+  state.runs.delete(conversationId);
   $("send").disabled = false;
   $("run-state").textContent = ok ? "Terminé" : "Échec";
   $("run-state").className = `run-state ${ok ? "done" : "idle"}`;
 }
 
 async function startRun(request) {
-  state.running = true;
+  const conversationId = state.activeConversationId;
+  if (!conversationId || state.runs.has(conversationId)) return;
   state.agents.clear();
   $("agents").replaceChildren();
   $("raw-log").textContent = "";
   $("send").disabled = true;
   $("run-state").textContent = "En cours";
   $("run-state").className = "run-state running";
-  clearConversation();
   addMessage("Toi", request, "user");
   const finalBubble = addMessage("Joe · synthèse", "Routage local en cours…", "assistant");
   let model = $("model").value;
@@ -257,6 +359,7 @@ async function startRun(request) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       request,
+      conversation_id: conversationId,
       agent: $("agent").value,
       mode: $("mode").value,
       model,
@@ -267,28 +370,30 @@ async function startRun(request) {
   if (!response.ok) {
     const error = await response.json();
     finalBubble.textContent = `Erreur : ${error.error || response.statusText}`;
-    finishRun(false);
+    finishRun(conversationId, false);
     return;
   }
   const { run_id } = await response.json();
   const stream = new EventSource(`/api/events/${run_id}`);
+  state.runs.set(conversationId, { runId: run_id, stream, bubble: finalBubble });
+  loadConversations(false);
   stream.onmessage = ({ data }) => {
     const event = JSON.parse(data);
-    handleEvent(event, finalBubble);
+    handleEvent(conversationId, event, finalBubble);
     if (event.type === "complete" || event.type === "error") stream.close();
   };
   stream.onerror = () => {
     stream.close();
-    if (state.running) {
+    if (state.runs.has(conversationId)) {
       finalBubble.textContent = "Connexion au flux interrompue. Consulte le journal technique.";
-      finishRun(false);
+      finishRun(conversationId, false);
     }
   };
 }
 
 $("composer").addEventListener("submit", async event => {
   event.preventDefault();
-  if (state.running) return;
+  if (!state.activeConversationId || state.runs.has(state.activeConversationId)) return;
   const request = $("request").value.trim();
   if (!request) return;
   $("request").value = "";
@@ -300,9 +405,18 @@ $("request").addEventListener("keydown", event => {
     $("composer").requestSubmit();
   }
 });
-$("agent").addEventListener("change", updateCapabilityMenus);
-$("model").addEventListener("change", updateEfforts);
-$("refresh-history").onclick = loadHistory;
+$("agent").addEventListener("change", () => {
+  updateCapabilityMenus();
+  saveSettings();
+});
+$("model").addEventListener("change", () => {
+  updateEfforts();
+  saveSettings();
+});
+$("mode").addEventListener("change", saveSettings);
+$("effort").addEventListener("change", saveSettings);
+$("execution-mode").addEventListener("change", saveSettings);
+$("new-conversation").onclick = () => createConversation(true);
 $("refresh-usage").onclick = loadUsage;
 
 function escapeHtml(value) {
@@ -435,6 +549,6 @@ function inlineMarkdown(value) {
 setInterval(updateCountdowns, 1000);
 setInterval(() => loadUsage().catch(() => {}), 60000);
 
-Promise.all([loadStatus(), loadCapabilities(), loadHistory(), loadUsage()]).catch(error => {
+Promise.all([loadStatus(), loadCapabilities(), loadUsage()]).then(() => loadConversations()).catch(error => {
   $("project").textContent = `Erreur : ${error.message}`;
 });

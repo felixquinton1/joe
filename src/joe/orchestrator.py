@@ -51,10 +51,13 @@ class Orchestrator:
         model: str | None = None,
         effort: str | None = None,
         execution_mode: str | None = None,
+        extra_context: str | None = None,
         on_event: Callable[[dict], None] | None = None,
     ) -> tuple[str, Path]:
         self.memory.ensure()
         context = self.memory.context(request)
+        if extra_context:
+            context += "\n\n" + extra_context
         results: list[ProviderResult] = []
 
         if route.mode is Mode.FAST:

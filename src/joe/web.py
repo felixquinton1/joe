@@ -15,6 +15,7 @@ from urllib.parse import unquote, urlparse
 
 from . import __version__
 from .capabilities import provider_capabilities
+from .conversations import ConversationStore
 from .models import Intent, Mode
 from .orchestrator import Orchestrator
 from .usage import usage_status
@@ -24,6 +25,7 @@ from .usage import usage_status
 class LiveRun:
     run_id: str
     request: str
+    conversation_id: str
     events: list[dict[str, Any]] = field(default_factory=list)
     done: bool = False
     condition: threading.Condition = field(default_factory=threading.Condition)
@@ -38,19 +40,28 @@ class RunManager:
     def __init__(self, project: Path):
         self.project = project.resolve()
         self.orchestrator = Orchestrator(self.project)
+        self.orchestrator.memory.ensure()
+        self.conversations = ConversationStore(
+            self.orchestrator.memory.root, self.orchestrator.memory.runs
+        )
+        self.conversations.ensure()
         self.live: dict[str, LiveRun] = {}
         self.lock = threading.Lock()
 
     def start(
         self,
         request: str,
+        conversation_id: str,
         agent: str | None,
         mode: str | None,
         model: str | None,
         effort: str | None,
         execution_mode: str | None,
     ) -> LiveRun:
-        run = LiveRun(uuid.uuid4().hex, request)
+        run = LiveRun(uuid.uuid4().hex, request, conversation_id)
+        self.conversations.append_message(
+            conversation_id, "user", request, run.run_id
+        )
         with self.lock:
             self.live[run.run_id] = run
         thread = threading.Thread(
@@ -72,8 +83,13 @@ class RunManager:
     ) -> None:
         try:
             forced_mode = Mode(mode) if mode else None
-            route = self.orchestrator.plan(
-                run.request, forced_agent=agent, forced_mode=forced_mode
+            route = self.orchestrator.router.route(
+                run.request,
+                forced_agent=agent,
+                forced_mode=forced_mode,
+                previous_provider=self.conversations.previous_provider(
+                    run.conversation_id
+                ),
             )
             run.emit(
                 {
@@ -95,7 +111,15 @@ class RunManager:
                 model=model,
                 effort=effort,
                 execution_mode=execution_mode,
+                extra_context=self.conversations.context(run.conversation_id),
                 on_event=run.emit,
+            )
+            self.conversations.append_message(
+                run.conversation_id,
+                "assistant",
+                response,
+                run.run_id,
+                provider=route.primary,
             )
             run.emit(
                 {
@@ -105,6 +129,9 @@ class RunManager:
                 }
             )
         except Exception as exc:
+            self.conversations.append_message(
+                run.conversation_id, "assistant", f"Erreur : {exc}", run.run_id
+            )
             run.emit({"type": "error", "message": str(exc)})
         finally:
             with run.condition:
@@ -167,6 +194,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(provider_capabilities())
         if path == "/api/usage":
             return self._json(usage_status())
+        if path == "/api/conversations":
+            return self._json(self.server.manager.conversations.list())
+        if path.startswith("/api/conversations/"):
+            item = self.server.manager.conversations.get(
+                unquote(path.rsplit("/", 1)[1])
+            )
+            return self._json(item, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
         if path == "/api/history":
             return self._json(self.server.manager.history())
         if path.startswith("/api/history/"):
@@ -177,14 +211,22 @@ class Handler(BaseHTTPRequestHandler):
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_POST(self) -> None:
-        if urlparse(self.path).path != "/api/runs":
+        path = urlparse(self.path).path
+        if path == "/api/conversations":
+            return self._json(
+                self.server.manager.conversations.create(), HTTPStatus.CREATED
+            )
+        if path != "/api/runs":
             return self.send_error(HTTPStatus.NOT_FOUND)
         try:
             size = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(size))
             request = str(payload.get("request", "")).strip()
+            conversation_id = str(payload.get("conversation_id", "")).strip()
             if not request:
                 raise ValueError("request is required")
+            if not self.server.manager.conversations.get(conversation_id):
+                raise ValueError("valid conversation_id is required")
             agent = payload.get("agent") or None
             mode = payload.get("mode") or None
             model = str(payload.get("model", "")).strip() or None
@@ -197,9 +239,23 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, json.JSONDecodeError) as exc:
             return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
         run = self.server.manager.start(
-            request, agent, mode, model, effort, execution_mode
+            request, conversation_id, agent, mode, model, effort, execution_mode
         )
         self._json({"run_id": run.run_id}, HTTPStatus.ACCEPTED)
+
+    def do_PATCH(self) -> None:
+        path = urlparse(self.path).path
+        if not path.startswith("/api/conversations/"):
+            return self.send_error(HTTPStatus.NOT_FOUND)
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(size))
+        except (ValueError, json.JSONDecodeError):
+            return self._json({"error": "invalid JSON"}, HTTPStatus.BAD_REQUEST)
+        item = self.server.manager.conversations.update(
+            unquote(path.rsplit("/", 1)[1]), payload
+        )
+        self._json(item, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
 
     def _events(self, run_id: str) -> None:
         run = self.server.manager.live.get(run_id)

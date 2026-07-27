@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -132,7 +133,7 @@ class ProjectMemory:
 
     @staticmethod
     def _atomic_write(path: Path, content: str) -> None:
-        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp = path.with_suffix(path.suffix + f".{uuid.uuid4().hex}.tmp")
         tmp.write_text(content)
         tmp.chmod(0o600)
         os.replace(tmp, path)
