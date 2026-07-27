@@ -66,6 +66,11 @@ popover when the provider CLI exposes them, provides stable
 agent/workflow/model/effort/permission controls,
 and loads the latest 100 run logs from the project's `.agentflow/runs/` folder.
 Joe never estimates missing quotas: unsupported providers are marked clearly.
+Gemini headless runs expose per-model token and request statistics but not the
+global remaining percentage. Joe records those local statistics under
+`$XDG_DATA_HOME/joe/gemini_usage.json` and displays today's Joe consumption,
+last call, and models used. The exact global snapshot remains available through
+`/stats model` in an interactive Gemini CLI session.
 Automatic FAST routing remains task-first, then balances Codex and Claude when
 the preferred provider has 20% or less remaining and its reset is at least 24
 hours away. Short five-hour windows therefore remain useful instead of being
@@ -76,6 +81,9 @@ not send `/usage` as a paid non-interactive model prompt.
 For requests that are moderately complex, Joe dynamically selects the first
 current Codex/Claude model exposed by the installed CLI and uses `high`
 reasoning effort. Explicit model and effort choices always take precedence.
+Capability questions and other simple FAST answers use `low` effort, even when
+the question is long. Question wording such as "est-ce que tu peux..." is not
+treated as an implementation order merely because it mentions modifying code.
 Large implementation requests are routed to REVIEW automatically: the primary
 agent implements, the other agent audits without editing, and the primary gets
 at most one correction pass when the reviewer explicitly reports justified
@@ -96,6 +104,10 @@ Conversations are persistent per project. Each conversation keeps its full
 message history and independent agent, workflow, model, effort, and permission
 settings. Conversations can be pinned and several can run concurrently; avoid
 launching concurrent write tasks against the same files.
+While a conversation is running, additional prompts can be queued with their
+current agent/model settings. They start in order after the active response and
+can be copied or removed before execution. Copy controls are also available on
+user prompts, final answers, proposals, reviews, and implementation plans.
 
 An active run can be interrupted from its conversation. Joe terminates the
 provider process tree, removes the unfinished turn, restores the original

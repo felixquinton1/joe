@@ -61,3 +61,15 @@ def test_large_implementation_automatically_gets_review():
     assert route.intent is Intent.MODIFY
     assert route.mode is Mode.REVIEW
     assert route.reviewer == "claude"
+
+
+def test_long_capability_question_stays_fast_and_read_only():
+    route = Router().route(
+        "Est-ce que tu peux modifier le code de Joe depuis ici ou dois-je "
+        "passer par la CLI ? Est-ce que cela ferait planter le serveur si "
+        "je ferme puis relance l’application après avoir modifié le code ?"
+    )
+
+    assert route.intent is Intent.ANSWER
+    assert route.mode is Mode.FAST
+    assert route.reviewer is None

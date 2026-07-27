@@ -34,6 +34,11 @@ LARGE_IMPLEMENTATION_PHRASES = {
     "gros travail", "implémentation complète", "implementation complete",
     "de bout en bout", "plusieurs fichiers", "refonte", "refactor complet",
 }
+CAPABILITY_QUESTION_PHRASES = {
+    "est-ce que tu peux", "est ce que tu peux", "est-il possible",
+    "est il possible", "puis-je", "puis je", "dois-je", "dois je",
+    "est-ce que ça", "est ce que ça", "que se passe-t-il",
+}
 
 
 def _tokens(text: str) -> set[str]:
@@ -51,8 +56,17 @@ class Router:
     ) -> Route:
         lower = request.lower()
         words = _tokens(request)
-        intent = Intent.MODIFY if words & MODIFY_WORDS else Intent.ANALYZE
-        if request.rstrip().endswith("?") and intent is not Intent.MODIFY:
+        capability_question = any(
+            phrase in lower for phrase in CAPABILITY_QUESTION_PHRASES
+        )
+        intent = (
+            Intent.MODIFY
+            if words & MODIFY_WORDS and not capability_question
+            else Intent.ANALYZE
+        )
+        if capability_question or (
+            request.rstrip().endswith("?") and intent is not Intent.MODIFY
+        ):
             intent = Intent.ANSWER
 
         follow_up_review = bool(words & REVIEW_WORDS) and previous_provider
@@ -61,8 +75,12 @@ class Router:
             marker in lower for marker in ("choisir", "quelle approche", "propose")
         )
         large_implementation = intent is Intent.MODIFY and (
-            len(request) >= 240
-            or any(phrase in lower for phrase in LARGE_IMPLEMENTATION_PHRASES)
+            any(phrase in lower for phrase in LARGE_IMPLEMENTATION_PHRASES)
+            or (
+                len(request) >= 240
+                and len(words & MODIFY_WORDS) >= 2
+                and not request.rstrip().endswith("?")
+            )
         )
 
         if forced_mode:

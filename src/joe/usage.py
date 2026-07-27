@@ -30,7 +30,7 @@ def usage_status(force: bool = False) -> list[dict[str, Any]]:
         fresh = [
             _codex_status(),
             _claude_status(),
-            _unavailable("gemini", "Non exposé par la CLI Gemini"),
+            _gemini_status(),
             _unavailable(
                 "copilot",
                 "Disponible uniquement dans la session interactive Copilot",
@@ -39,6 +39,136 @@ def usage_status(force: bool = False) -> list[dict[str, Any]]:
         providers = [_with_last_available(item) for item in fresh]
         _cache = (time.monotonic(), providers)
         return providers
+
+
+def record_gemini_usage(
+    raw_output: str,
+    path: Path | None = None,
+    *,
+    now: float | None = None,
+) -> None:
+    stats = _gemini_stats(raw_output)
+    if not stats:
+        return
+    timestamp = time.time() if now is None else now
+    target = path or _gemini_usage_path()
+    try:
+        payload = json.loads(target.read_text()) if target.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        payload = {}
+    day = datetime.fromtimestamp(timestamp).date().isoformat()
+    days = payload.setdefault("days", {})
+    current = days.setdefault(day, {"tokens": 0, "requests": 0, "models": {}})
+    current["tokens"] += stats["tokens"]
+    current["requests"] += stats["requests"]
+    for model, model_stats in stats["models"].items():
+        item = current["models"].setdefault(
+            model, {"tokens": 0, "requests": 0}
+        )
+        item["tokens"] += model_stats["tokens"]
+        item["requests"] += model_stats["requests"]
+    payload["last"] = {"at": timestamp, **stats}
+    payload["days"] = dict(sorted(days.items())[-30:])
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+        target.chmod(0o600)
+    except OSError:
+        return
+
+
+def _gemini_stats(raw_output: str) -> dict[str, Any] | None:
+    payloads = []
+    for line in raw_output.splitlines():
+        try:
+            payloads.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    if not payloads:
+        start = raw_output.find("{")
+        if start >= 0:
+            try:
+                payloads.append(json.loads(raw_output[start:]))
+            except json.JSONDecodeError:
+                pass
+    stats = next(
+        (
+            payload.get("stats")
+            for payload in reversed(payloads)
+            if isinstance(payload, dict)
+            and isinstance(payload.get("stats"), dict)
+        ),
+        None,
+    )
+    if not stats:
+        return None
+    models = {}
+    for model, values in stats.get("models", {}).items():
+        if not isinstance(values, dict):
+            continue
+        tokens = values.get("tokens", {})
+        api = values.get("api", {})
+        models[str(model)] = {
+            "tokens": int(tokens.get("total", 0) or 0),
+            "requests": int(api.get("totalRequests", 0) or 0),
+        }
+    if not models:
+        return None
+    return {
+        "tokens": sum(item["tokens"] for item in models.values()),
+        "requests": sum(item["requests"] for item in models.values()),
+        "models": models,
+    }
+
+
+def _gemini_usage_path() -> Path:
+    data_home = Path(
+        os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")
+    )
+    return data_home / "joe" / "gemini_usage.json"
+
+
+def _gemini_status(path: Path | None = None) -> dict[str, Any]:
+    target = path or _gemini_usage_path()
+    try:
+        payload = json.loads(target.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {
+            "provider": "gemini",
+            "available": True,
+            "plan": None,
+            "windows": [],
+            "metrics": [],
+            "message": (
+                "Aucun appel Joe mesuré · quota global via /stats model dans Gemini"
+            ),
+        }
+    day = datetime.now().date().isoformat()
+    current = payload.get("days", {}).get(
+        day, {"tokens": 0, "requests": 0, "models": {}}
+    )
+    last = payload.get("last", {})
+    models = ", ".join(sorted(current.get("models", {}))) or "aucun"
+    return {
+        "provider": "gemini",
+        "available": True,
+        "plan": None,
+        "windows": [],
+        "metrics": [
+            {"name": "Tokens aujourd’hui", "value": f"{current['tokens']:,}"},
+            {"name": "Requêtes aujourd’hui", "value": str(current["requests"])},
+            {"name": "Modèles utilisés", "value": models},
+            {
+                "name": "Dernier appel",
+                "value": (
+                    datetime.fromtimestamp(float(last["at"])).strftime("%H:%M")
+                    if last.get("at")
+                    else "aucun"
+                ),
+            },
+        ],
+        "message": "Quota global restant : /stats model dans Gemini",
+    }
 
 
 def _with_last_available(status: dict[str, Any]) -> dict[str, Any]:
@@ -183,7 +313,7 @@ def _codex_status() -> dict[str, Any]:
         "id": 1,
         "method": "initialize",
         "params": {
-            "clientInfo": {"name": "joe", "version": "0.14.0"},
+            "clientInfo": {"name": "joe", "version": "0.15.0"},
             "capabilities": {"experimentalApi": True},
         },
     }

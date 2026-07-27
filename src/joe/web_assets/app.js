@@ -1,4 +1,4 @@
-const APP_VERSION = "0.14.0";
+const APP_VERSION = "0.15.0";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -8,7 +8,8 @@ const state = {
   conversations: [],
   activeConversationId: null,
   panels: new Map(),
-  runs: new Map()
+  runs: new Map(),
+  queues: new Map()
 };
 const $ = id => document.getElementById(id);
 
@@ -61,7 +62,13 @@ function renderUsage() {
       card.appendChild(message);
     } else {
       for (const window of provider.windows) card.appendChild(usageWindow(window));
-      if (provider.stale && provider.message) {
+      for (const metric of provider.metrics || []) {
+        const row = document.createElement("div");
+        row.className = "usage-metric";
+        row.innerHTML = `<span>${escapeHtml(metric.name)}</span><strong>${escapeHtml(metric.value)}</strong>`;
+        card.appendChild(row);
+      }
+      if (provider.message) {
         const message = document.createElement("p");
         message.textContent = provider.message;
         card.appendChild(message);
@@ -422,7 +429,8 @@ async function selectConversation(conversationId) {
   applySettings(conversation.settings || {});
   restoreConversationPanel(conversationId);
   const running = state.runs.has(conversationId);
-  $("send").disabled = running;
+  $("send").disabled = false;
+  $("send").querySelector("span").textContent = running ? "Mettre en file" : "Lancer";
   $("stop").classList.toggle("hidden", !running);
   $("run-state").textContent = running ? "En cours" : "Prêt";
   $("run-state").className = `run-state ${running ? "running" : "idle"}`;
@@ -434,6 +442,7 @@ async function selectConversation(conversationId) {
       renderWorkflowUpdate(event, bubble, activeRun.runId);
     }
   }
+  renderPromptQueue();
 }
 
 function preserveActivePanel() {
@@ -586,14 +595,43 @@ function addMessage(label, text, kind) {
   wrapper.className = `message ${kind}`;
   const title = document.createElement("div");
   title.className = "message-label";
-  title.textContent = label;
+  const titleText = document.createElement("span");
+  titleText.textContent = label;
+  const copy = copyButton(() => bubble.dataset.source || bubble.textContent);
+  title.append(titleText, copy);
   const bubble = document.createElement("div");
   bubble.className = "bubble";
   bubble.textContent = text;
+  bubble.dataset.source = text;
   wrapper.append(title, bubble);
   $("messages").appendChild(wrapper);
   scrollIfFollowing(viewport, follow);
   return bubble;
+}
+
+function copyButton(getText) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "copy-button";
+  button.textContent = "Copier";
+  button.onclick = async event => {
+    event.preventDefault();
+    event.stopPropagation();
+    const text = String(getText() || "");
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const area = document.createElement("textarea");
+      area.value = text;
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand("copy");
+      area.remove();
+    }
+    button.textContent = "Copié";
+    setTimeout(() => { button.textContent = "Copier"; }, 1200);
+  };
+  return button;
 }
 
 function showRoute(mode, primary, reviewer) {
@@ -643,6 +681,9 @@ function renderWorkflowUpdate(event, finalBubble, runId) {
   stage.innerHTML = `<summary><span>${escapeHtml(event.label)}</span><b>${escapeHtml(capitalize(event.provider))} · ${complete ? "terminé" : "en cours"}</b></summary><div class="workflow-opinion"></div>`;
   if (complete && event.content) {
     renderMarkdown(stage.querySelector(".workflow-opinion"), event.content);
+    stage.querySelector("summary").appendChild(
+      copyButton(() => event.content)
+    );
   }
 }
 
@@ -668,6 +709,7 @@ function handleEvent(conversationId, event, finalBubble) {
     if (event.type === "complete" || event.type === "error" || event.type === "cancelled") {
       state.runs.delete(conversationId);
       loadConversations(false);
+      launchNextQueued(conversationId);
     }
     return;
   }
@@ -728,6 +770,7 @@ function handleEvent(conversationId, event, finalBubble) {
     renderMarkdown(finalBubble, event.response);
     finishRun(conversationId, true);
     loadConversations(false);
+    launchNextQueued(conversationId);
   } else if (event.type === "error") {
     finalBubble.textContent = `Erreur : ${event.message}`;
     finishRun(conversationId, false);
@@ -745,6 +788,7 @@ function handleEvent(conversationId, event, finalBubble) {
 function finishRun(conversationId, ok) {
   state.runs.delete(conversationId);
   $("send").disabled = false;
+  $("send").querySelector("span").textContent = "Lancer";
   $("stop").classList.add("hidden");
   $("stop").disabled = false;
   $("stop").querySelector("span").textContent = "Interrompre";
@@ -752,39 +796,109 @@ function finishRun(conversationId, ok) {
   $("run-state").className = `run-state ${ok ? "done" : "idle"}`;
 }
 
-async function startRun(request) {
-  const conversationId = state.activeConversationId;
-  if (!conversationId || state.runs.has(conversationId)) return;
-  state.agents.clear();
-  $("agents").replaceChildren();
-  $("raw-log").textContent = "";
-  $("send").disabled = true;
-  $("stop").classList.remove("hidden");
-  $("run-state").textContent = "En cours";
-  $("run-state").className = "run-state running";
-  addMessage("Toi", request, "user");
-  const finalBubble = addMessage("Joe · synthèse", "Routage local en cours…", "assistant");
+function currentRunSettings() {
   let model = $("model").value;
   if (model === "__custom__") {
     model = window.prompt("Identifiant exact du modèle :") || "";
   }
+  return {
+    agent: $("agent").value,
+    mode: $("mode").value,
+    model,
+    effort: $("effort").value,
+    execution_mode: $("execution-mode").value
+  };
+}
+
+function enqueueRequest(conversationId, request, settings) {
+  const queue = state.queues.get(conversationId) || [];
+  queue.push({ request, settings });
+  state.queues.set(conversationId, queue);
+  renderPromptQueue();
+}
+
+function renderPromptQueue() {
+  const target = $("prompt-queue");
+  const queue = state.queues.get(state.activeConversationId) || [];
+  target.replaceChildren();
+  target.classList.toggle("hidden", !queue.length);
+  if (!queue.length) return;
+  const heading = document.createElement("div");
+  heading.className = "queue-heading";
+  heading.innerHTML = `<strong>File d’attente</strong><span>${queue.length} prompt${queue.length > 1 ? "s" : ""}</span>`;
+  target.appendChild(heading);
+  queue.forEach((item, index) => {
+    const row = document.createElement("div");
+    row.className = "queue-item";
+    const text = document.createElement("span");
+    text.textContent = item.request;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.title = "Retirer de la file";
+    remove.textContent = "×";
+    remove.onclick = () => {
+      queue.splice(index, 1);
+      if (!queue.length) state.queues.delete(state.activeConversationId);
+      renderPromptQueue();
+    };
+    row.append(text, copyButton(() => item.request), remove);
+    target.appendChild(row);
+  });
+}
+
+function launchNextQueued(conversationId) {
+  const queue = state.queues.get(conversationId);
+  if (!queue?.length || state.runs.has(conversationId)) return;
+  const next = queue.shift();
+  if (!queue.length) state.queues.delete(conversationId);
+  if (conversationId === state.activeConversationId) renderPromptQueue();
+  setTimeout(
+    () => startRun(next.request, conversationId, next.settings),
+    100
+  );
+}
+
+async function startRun(
+  request,
+  conversationId = state.activeConversationId,
+  settings = null
+) {
+  if (!conversationId) return;
+  settings = settings || currentRunSettings();
+  if (state.runs.has(conversationId)) {
+    enqueueRequest(conversationId, request, settings);
+    return;
+  }
+  const visible = conversationId === state.activeConversationId;
+  if (visible) {
+    state.agents.clear();
+    $("agents").replaceChildren();
+    $("raw-log").textContent = "";
+    $("send").disabled = false;
+    $("send").querySelector("span").textContent = "Mettre en file";
+    $("stop").classList.remove("hidden");
+    $("run-state").textContent = "En cours";
+    $("run-state").className = "run-state running";
+    addMessage("Toi", request, "user");
+  }
+  const finalBubble = visible
+    ? addMessage("Joe · synthèse", "Routage local en cours…", "assistant")
+    : null;
   const response = await fetch("/api/runs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       request,
       conversation_id: conversationId,
-      agent: $("agent").value,
-      mode: $("mode").value,
-      model,
-      effort: $("effort").value,
-      execution_mode: $("execution-mode").value
+      ...settings
     })
   });
   if (!response.ok) {
     const error = await response.json();
-    finalBubble.textContent = `Erreur : ${error.error || response.statusText}`;
-    finishRun(conversationId, false);
+    if (finalBubble) {
+      finalBubble.textContent = `Erreur : ${error.error || response.statusText}`;
+      finishRun(conversationId, false);
+    }
     return;
   }
   const { run_id } = await response.json();
@@ -805,7 +919,9 @@ async function startRun(request) {
   stream.onerror = () => {
     stream.close();
     if (state.runs.has(conversationId)) {
-      finalBubble.textContent = "Connexion au flux interrompue. Consulte le journal technique.";
+      if (finalBubble) {
+        finalBubble.textContent = "Connexion au flux interrompue. Consulte le journal technique.";
+      }
       finishRun(conversationId, false);
     }
   };
@@ -826,7 +942,7 @@ async function cancelActiveRun() {
 
 $("composer").addEventListener("submit", async event => {
   event.preventDefault();
-  if (!state.activeConversationId || state.runs.has(state.activeConversationId)) return;
+  if (!state.activeConversationId) return;
   const request = $("request").value.trim();
   if (!request) return;
   $("request").value = "";
@@ -880,6 +996,7 @@ function scrollIfFollowing(element, follow) {
 }
 
 function renderMarkdown(target, source) {
+  target.dataset.source = String(source || "");
   const lines = String(source || "").replace(/\r\n/g, "\n").split("\n");
   const html = [];
   let index = 0;

@@ -117,6 +117,9 @@ class RunManager:
             if _complex_request(run.request, route):
                 effort = effort or "high"
                 model = model or _latest_model(route.primary)
+            elif route.mode is Mode.FAST and route.intent is Intent.ANSWER:
+                effort = effort or "low"
+                model = model or _latest_model(route.primary)
             run.emit(
                 {
                     "type": "route",
@@ -331,7 +334,13 @@ def _complex_request(request: str, route: Route) -> bool:
         "expérimental",
     }
     words = set(request.lower().replace(",", " ").replace(".", " ").split())
-    return route.mode is not Mode.FAST or len(request) >= 240 or bool(words & markers)
+    return (
+        route.mode is not Mode.FAST
+        or route.intent is Intent.MODIFY
+        and (len(request) >= 240 or bool(words & markers))
+        or route.intent is Intent.ANALYZE
+        and bool(words & markers)
+    )
 
 
 def _latest_model(provider: str) -> str | None:

@@ -117,6 +117,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b"AI control room" in page
         assert "L’IA à la mode chez les jeunes".encode() in page
         assert b'id="cancel-project"' in page
+        assert b'id="prompt-queue"' in page
 
         connection.request("GET", "/app.js")
         response = connection.getresponse()
@@ -124,6 +125,8 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert response.status == 200
         assert b"renderMarkdown" in script
         assert b"isTableSeparator" in script
+        assert b"launchNextQueued" in script
+        assert b"copyButton" in script
     finally:
         server.shutdown()
         thread.join(timeout=2)
@@ -146,6 +149,13 @@ def test_web_rejects_empty_requests(tmp_path):
     finally:
         server.shutdown()
         thread.join(timeout=2)
+
+
+def test_long_fast_answer_does_not_enable_high_effort():
+    route = Route(Intent.ANSWER, Mode.FAST, "codex")
+    request = "Est-ce que je peux modifier Joe depuis ici ? " * 20
+
+    assert _complex_request(request, route) is False
 
 
 def test_web_deletes_conversation(tmp_path):

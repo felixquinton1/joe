@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Callable
 
 from .models import Intent, ProviderResult
+from .usage import record_gemini_usage
 
 StreamCallback = Callable[[str, str], None]
 
@@ -144,6 +145,8 @@ class Provider:
                 self.name,
                 cancel_event,
             )
+            if self.name == "gemini":
+                record_gemini_usage(stdout)
             stdout = _final_output(self.name, stdout)
             duration = time.monotonic() - start
             kind = classify_error(stderr, process.returncode)
