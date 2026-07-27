@@ -125,6 +125,27 @@ def test_web_rejects_empty_requests(tmp_path):
         thread.join(timeout=2)
 
 
+def test_web_deletes_conversation(tmp_path):
+    server, thread = start_server(tmp_path)
+    try:
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port)
+        connection.request("POST", "/api/conversations", body="{}")
+        response = connection.getresponse()
+        conversation = json.loads(response.read())
+
+        connection.request("DELETE", f"/api/conversations/{conversation['id']}")
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read())["deleted"] is True
+
+        connection.request("GET", f"/api/conversations/{conversation['id']}")
+        response = connection.getresponse()
+        assert response.status == 404
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
 def test_quota_notice_exposes_reset_and_available_fallback_models():
     notice = build_quota_notice(
         "claude",

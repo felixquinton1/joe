@@ -351,6 +351,25 @@ class Handler(BaseHTTPRequestHandler):
         )
         self._json(item, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
 
+    def do_DELETE(self) -> None:
+        path = urlparse(self.path).path
+        if not path.startswith("/api/conversations/"):
+            return self.send_error(HTTPStatus.NOT_FOUND)
+        conversation_id = unquote(path.rsplit("/", 1)[1])
+        if any(
+            run.conversation_id == conversation_id and not run.done
+            for run in self.server.manager.live.values()
+        ):
+            return self._json(
+                {"error": "Interromps la tâche avant de supprimer la conversation."},
+                HTTPStatus.CONFLICT,
+            )
+        deleted = self.server.manager.conversations.delete(conversation_id)
+        self._json(
+            {"deleted": deleted},
+            HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND,
+        )
+
     def _events(self, run_id: str) -> None:
         run = self.server.manager.live.get(run_id)
         if not run:

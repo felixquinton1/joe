@@ -137,6 +137,20 @@ class ConversationStore:
             self._write(payload)
             return conversation
 
+    def delete(self, conversation_id: str) -> bool:
+        with self.lock:
+            payload = self._read()
+            before = len(payload["conversations"])
+            payload["conversations"] = [
+                item
+                for item in payload["conversations"]
+                if item["id"] != conversation_id
+            ]
+            if len(payload["conversations"]) == before:
+                return False
+            self._write(payload)
+            return True
+
     def append_message(
         self,
         conversation_id: str,

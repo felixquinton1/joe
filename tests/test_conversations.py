@@ -75,3 +75,15 @@ def test_cancelled_run_messages_are_removed(tmp_path):
     store.remove_run(conversation["id"], "run-1")
 
     assert store.get(conversation["id"])["messages"] == []
+
+
+def test_conversation_can_be_deleted(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+    conversation = store.create()
+
+    assert store.delete(conversation["id"]) is True
+    assert store.get(conversation["id"]) is None
+    assert store.delete(conversation["id"]) is False

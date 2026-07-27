@@ -74,6 +74,14 @@
       <div class="dialog-actions"><button value="cancel">Annuler</button><button id="save-project" value="default">Enregistrer</button></div>
     </form>
   </dialog>
+  <dialog id="delete-conversation-dialog" class="project-dialog confirm-dialog">
+    <form method="dialog">
+      <span class="eyebrow">Suppression définitive</span>
+      <h2>Supprimer cette conversation ?</h2>
+      <p>La conversation « <strong id="delete-conversation-name"></strong> » et son historique ne seront plus accessibles dans Joe.</p>
+      <div class="dialog-actions"><button value="cancel">Annuler</button><button id="confirm-delete-conversation" class="danger-button" value="default">Supprimer</button></div>
+    </form>
+  </dialog>
   <script src="/app.js"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-const APP_VERSION = "0.7.2";
+const APP_VERSION = "0.7.3";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -249,7 +249,12 @@ function renderConversations() {
     rename.title = "Renommer";
     rename.textContent = "✎";
     rename.onclick = () => renameConversation(conversation);
-    row.append(button, rename, pin);
+    const remove = document.createElement("button");
+    remove.className = "pin-button delete-button";
+    remove.title = "Supprimer";
+    remove.textContent = "×";
+    remove.onclick = () => confirmDeleteConversation(conversation);
+    row.append(button, rename, pin, remove);
     group.appendChild(row);
     }
     target.appendChild(group);
@@ -323,6 +328,37 @@ async function renameConversation(conversation) {
   });
   await loadConversations(false);
   if (conversation.id === state.activeConversationId) $("conversation-title").textContent = title.trim();
+}
+
+function confirmDeleteConversation(conversation) {
+  state.deletingConversation = conversation;
+  $("delete-conversation-name").textContent = conversation.title;
+  $("delete-conversation-dialog").showModal();
+}
+
+async function deleteConversation(event) {
+  event.preventDefault();
+  const conversation = state.deletingConversation;
+  if (!conversation) return;
+  const response = await fetch(`/api/conversations/${conversation.id}`, {
+    method: "DELETE"
+  });
+  if (!response.ok) {
+    const payload = await response.json();
+    $("delete-conversation-dialog").close();
+    window.alert(payload.error || "La conversation n’a pas pu être supprimée.");
+    return;
+  }
+  $("delete-conversation-dialog").close();
+  state.deletingConversation = null;
+  if (conversation.id === state.activeConversationId) {
+    state.activeConversationId = null;
+  }
+  await loadConversations(false);
+  const next = state.conversations.find(
+    item => item.project_id === conversation.project_id
+  ) || state.conversations[0];
+  if (next) await selectConversation(next.id);
 }
 
 function createProject() {
@@ -597,6 +633,7 @@ $("effort").addEventListener("change", saveSettings);
 $("execution-mode").addEventListener("change", saveSettings);
 $("new-project").onclick = createProject;
 $("save-project").onclick = saveProject;
+$("confirm-delete-conversation").onclick = deleteConversation;
 $("stop").onclick = cancelActiveRun;
 $("refresh-usage").onclick = loadUsage;
 
