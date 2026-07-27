@@ -51,6 +51,8 @@ and loads the latest 100 run logs from the project's `.agentflow/runs/` folder.
 Joe never estimates missing quotas: unsupported providers are marked clearly.
 Native JSON streams expose observable progress such as commands, tools, and
 files read or changed; Joe does not expose private chain-of-thought.
+Final answers are rendered locally as safe Markdown, including headings,
+tables, lists, links, inline code, and fenced code blocks.
 Use `joe chat` for the original terminal conversation and `joe web` when you
 need explicit web-server options.
 

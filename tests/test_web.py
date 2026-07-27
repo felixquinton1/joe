@@ -45,6 +45,13 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         response = connection.getresponse()
         assert response.status == 200
         assert b"AI control room" in response.read()
+
+        connection.request("GET", "/app.js")
+        response = connection.getresponse()
+        script = response.read()
+        assert response.status == 200
+        assert b"renderMarkdown" in script
+        assert b"isTableSeparator" in script
     finally:
         server.shutdown()
         thread.join(timeout=2)
