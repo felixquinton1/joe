@@ -224,7 +224,11 @@ class RunManager:
         run.cancel_event.set()
         return True
 
-    def reject_changes(self, run_id: str) -> tuple[bool, str]:
+    def reject_changes(
+        self,
+        run_id: str,
+        selected_files: list[str] | None = None,
+    ) -> tuple[bool, str]:
         rejection = self.git_rejections.get(run_id)
         review_path = self.orchestrator.memory.runs / f"{run_id}.reject.json"
         if not rejection and run_id.replace("-", "").isalnum():
@@ -236,7 +240,11 @@ class RunManager:
             return False, "Ces modifications ne peuvent pas être restaurées automatiquement."
         if any(not run.done for run in self.live.values()):
             return False, "Attends la fin des autres tâches avant de restaurer."
-        restored, message = reject(self.project, rejection)
+        restored, message = reject(
+            self.project,
+            rejection,
+            selected_files=selected_files,
+        )
         if restored:
             self.git_rejections.pop(run_id, None)
             try:
@@ -395,7 +403,27 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path.startswith("/api/runs/") and path.endswith("/reject"):
             run_id = unquote(path.split("/")[-2])
-            restored, message = self.server.manager.reject_changes(run_id)
+            size = int(self.headers.get("Content-Length", "0"))
+            try:
+                payload = json.loads(self.rfile.read(size)) if size else {}
+            except json.JSONDecodeError:
+                return self._json(
+                    {"restored": False, "message": "Requête invalide."},
+                    HTTPStatus.BAD_REQUEST,
+                )
+            selected_files = payload.get("files")
+            if selected_files is not None and (
+                not isinstance(selected_files, list)
+                or not all(isinstance(path, str) for path in selected_files)
+            ):
+                return self._json(
+                    {"restored": False, "message": "Sélection invalide."},
+                    HTTPStatus.BAD_REQUEST,
+                )
+            restored, message = self.server.manager.reject_changes(
+                run_id,
+                selected_files,
+            )
             return self._json(
                 {"restored": restored, "message": message},
                 HTTPStatus.OK if restored else HTTPStatus.CONFLICT,

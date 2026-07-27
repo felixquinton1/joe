@@ -155,17 +155,45 @@ def build_report(
     return report, rejection
 
 
-def reject(project: Path, rejection: dict[str, Any]) -> tuple[bool, str]:
+def reject(
+    project: Path,
+    rejection: dict[str, Any],
+    selected_files: list[str] | None = None,
+) -> tuple[bool, str]:
     if _value(project, "rev-parse", "HEAD") != rejection["head"]:
         return False, "Le commit courant a changé depuis la fin de la tâche."
-    for relative, expected_hash in rejection["untracked"].items():
+    tracked = rejection.get("tracked", [])
+    untracked = rejection.get("untracked", {})
+    available = set(tracked) | set(untracked)
+    selected = available if selected_files is None else set(selected_files)
+    if not selected:
+        return False, "Sélectionne au moins un fichier à rejeter."
+    if not selected <= available:
+        return False, "La sélection contient un fichier inconnu."
+    selected_tracked = [path for path in tracked if path in selected]
+    selected_untracked = {
+        path: file_hash
+        for path, file_hash in untracked.items()
+        if path in selected
+    }
+    for relative, expected_hash in selected_untracked.items():
         path = (project / relative).resolve()
         if path.is_file() and _file_hash(path) != expected_hash:
             return False, f"{relative} a changé depuis la fin de la tâche."
     patch = Path(rejection["patch"])
-    if patch.exists() and patch.stat().st_size:
+    if selected_tracked and patch.exists() and patch.stat().st_size:
+        includes = [
+            f"--include={relative}" for relative in selected_tracked
+        ]
         check = subprocess.run(
-            ["git", "apply", "--check", "--reverse", str(patch)],
+            [
+                "git",
+                "apply",
+                "--check",
+                "--reverse",
+                *includes,
+                str(patch),
+            ],
             cwd=project,
             text=True,
             capture_output=True,
@@ -174,7 +202,7 @@ def reject(project: Path, rejection: dict[str, Any]) -> tuple[bool, str]:
         if check.returncode:
             return False, "Certains fichiers ont changé depuis la fin de la tâche."
         applied = subprocess.run(
-            ["git", "apply", "--reverse", str(patch)],
+            ["git", "apply", "--reverse", *includes, str(patch)],
             cwd=project,
             text=True,
             capture_output=True,
@@ -182,21 +210,31 @@ def reject(project: Path, rejection: dict[str, Any]) -> tuple[bool, str]:
         )
         if applied.returncode:
             return False, applied.stderr.strip() or "Échec de restauration Git."
-        tracked = rejection.get("tracked", [])
-        if tracked:
+        if selected_tracked:
             subprocess.run(
-                ["git", "reset", "--mixed", "HEAD", "--", *tracked],
+                [
+                    "git",
+                    "reset",
+                    "--mixed",
+                    "HEAD",
+                    "--",
+                    *selected_tracked,
+                ],
                 cwd=project,
                 text=True,
                 capture_output=True,
                 check=False,
             )
-    for relative, expected_hash in rejection["untracked"].items():
+    for relative in selected_untracked:
         path = (project / relative).resolve()
         if not path.is_relative_to(project.resolve()) or not path.is_file():
             continue
         path.unlink()
-    return True, "Les modifications de la tâche ont été restaurées."
+    count = len(selected)
+    return True, (
+        f"{count} fichier{'s' if count > 1 else ''} restauré"
+        f"{'s' if count > 1 else ''}."
+    )
 
 
 def _git(project: Path, *args: str) -> subprocess.CompletedProcess[str]:

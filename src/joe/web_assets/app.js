@@ -1,4 +1,4 @@
-const APP_VERSION = "0.12.2";
+const APP_VERSION = "0.13.0";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -150,12 +150,14 @@ function shortCommit(value) {
 
 function renderGitReport(report, runId) {
   if (!report?.available) return;
+  const headChanged = report.head_before !== report.head_after;
+  const devChanged = report.origin_dev_before !== report.origin_dev_after;
+  const hasActivity = report.files.length || headChanged || devChanged || report.fetch_observed;
+  if (!hasActivity) return;
   const viewport = document.querySelector(".conversation");
   const follow = shouldFollow(viewport);
   const card = document.createElement("section");
   card.className = "git-report";
-  const headChanged = report.head_before !== report.head_after;
-  const devChanged = report.origin_dev_before !== report.origin_dev_after;
   const integration = report.origin_dev_integrated === null
     ? "état de dev inconnu"
     : report.origin_dev_integrated
@@ -163,57 +165,73 @@ function renderGitReport(report, runId) {
       : "origin/dev n’est pas intégré";
   card.innerHTML = `
     <header>
-      <div><span class="eyebrow">Git · vérification indépendante</span><strong>${escapeHtml(report.branch || "HEAD détachée")}</strong></div>
-      <span class="change-status">Conservées par défaut</span>
-    </header>
+      <div><span class="eyebrow">Modifications du dépôt</span><div class="diff-summary"><strong>${report.files.length} fichier${report.files.length > 1 ? "s" : ""}</strong><span class="insertions">+${report.insertions}</span><span class="deletions">−${report.deletions}</span></div></div>
+      <span class="change-status">Conservées</span>
+    </header>`;
+  const details = document.createElement("details");
+  details.className = "git-details";
+  details.innerHTML = `
+    <summary>Voir les détails</summary>
     <div class="git-facts">
+      <span>Branche <b>${escapeHtml(report.branch || "HEAD détachée")}</b></span>
       <span>HEAD <b>${shortCommit(report.head_before)} → ${shortCommit(report.head_after)}</b>${headChanged ? " · modifié" : " · inchangé"}</span>
       <span>origin/dev <b>${shortCommit(report.origin_dev_before)} → ${shortCommit(report.origin_dev_after)}</b>${devChanged ? " · référence actualisée" : " · inchangé"} · ${report.fetch_observed ? "fetch observé" : "aucun fetch observé"}</span>
       <span>${integration}</span>
     </div>`;
-  const summary = document.createElement("div");
-  summary.className = "diff-summary";
-  summary.innerHTML = `<strong>${report.files.length} fichier${report.files.length > 1 ? "s" : ""}</strong><span class="insertions">+${report.insertions}</span><span class="deletions">−${report.deletions}</span>`;
-  card.appendChild(summary);
   if (report.files.length) {
+    const hint = document.createElement("p");
+    hint.className = "git-selection-hint";
+    hint.textContent = report.rejectable
+      ? "Coche les fichiers que tu souhaites rejeter."
+      : "Modifications conservées automatiquement.";
+    details.appendChild(hint);
     const list = document.createElement("div");
     list.className = "diff-files";
     for (const file of report.files) {
-      const row = document.createElement("div");
-      row.innerHTML = `<code>${escapeHtml(file.path)}</code><span class="insertions">+${file.insertions}</span><span class="deletions">−${file.deletions}</span>${file.preexisting ? '<small title="Déjà modifié avant la tâche">préexistant</small>' : ""}`;
+      const row = document.createElement("label");
+      row.innerHTML = `${report.rejectable ? `<input type="checkbox" value="${escapeHtml(file.path)}">` : ""}<code>${escapeHtml(file.path)}</code><span class="insertions">+${file.insertions}</span><span class="deletions">−${file.deletions}</span>${file.preexisting ? '<small title="Déjà modifié avant la tâche">préexistant</small>' : ""}`;
       list.appendChild(row);
     }
-    card.appendChild(list);
+    details.appendChild(list);
   }
   if (report.patch_preview) {
-    const details = document.createElement("details");
-    details.className = "diff-preview";
+    const preview = document.createElement("details");
+    preview.className = "diff-preview";
     const summaryNode = document.createElement("summary");
-    summaryNode.textContent = "Voir le diff";
+    summaryNode.textContent = "Voir le diff complet";
     const patch = document.createElement("pre");
     patch.textContent = report.patch_preview;
-    details.append(summaryNode, patch);
-    card.appendChild(details);
+    preview.append(summaryNode, patch);
+    details.appendChild(preview);
   }
   const actions = document.createElement("div");
   actions.className = "git-actions";
   const keep = document.createElement("button");
-  keep.textContent = "Conserver";
+  keep.textContent = "Conserver tout";
   keep.onclick = () => {
     keep.disabled = true;
-    keep.textContent = "Conservé";
-    card.querySelector(".change-status").textContent = "Acceptées";
+    keep.textContent = "Tout est conservé";
+    details.open = false;
   };
   const rejectButton = document.createElement("button");
   rejectButton.className = "reject-changes";
-  rejectButton.textContent = "Rejeter";
+  rejectButton.textContent = "Rejeter la sélection";
   rejectButton.disabled = !report.rejectable || !runId;
   rejectButton.title = report.rejectable
-    ? "Restaurer exactement l’état précédant cette tâche"
+    ? "Restaurer les fichiers sélectionnés à leur état précédent"
     : report.reject_reason || "Restauration automatique indisponible";
   rejectButton.onclick = async () => {
-    if (!window.confirm("Rejeter toutes les modifications de fichiers attribuées à cette tâche ?")) return;
-    const response = await fetch(`/api/runs/${runId}/reject`, { method: "POST" });
+    const files = [...details.querySelectorAll('.diff-files input:checked')].map((input) => input.value);
+    if (!files.length) {
+      window.alert("Sélectionne au moins un fichier à rejeter.");
+      return;
+    }
+    if (!window.confirm(`Rejeter ${files.length} fichier${files.length > 1 ? "s" : ""} sélectionné${files.length > 1 ? "s" : ""} ?`)) return;
+    const response = await fetch(`/api/runs/${runId}/reject`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ files }),
+    });
     const payload = await response.json();
     if (!response.ok) {
       window.alert(payload.message);
@@ -221,7 +239,7 @@ function renderGitReport(report, runId) {
     }
     rejectButton.disabled = true;
     keep.disabled = true;
-    card.querySelector(".change-status").textContent = "Rejetées et restaurées";
+    card.querySelector(".change-status").textContent = "Sélection rejetée";
   };
   actions.append(keep, rejectButton);
   if (!report.rejectable && report.files.length) {
@@ -229,7 +247,8 @@ function renderGitReport(report, runId) {
     reason.textContent = report.reject_reason;
     actions.appendChild(reason);
   }
-  card.appendChild(actions);
+  details.appendChild(actions);
+  card.appendChild(details);
   $("messages").appendChild(card);
   scrollIfFollowing(viewport, follow);
 }

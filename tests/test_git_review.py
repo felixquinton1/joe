@@ -65,6 +65,48 @@ def test_report_does_not_offer_rejection_over_preexisting_work(tmp_path):
     assert rejection is None
 
 
+def test_reject_can_restore_only_selected_files(tmp_path):
+    tracked = repository(tmp_path)
+    before = snapshot(tmp_path)
+    tracked.write_text("one\ntwo\n")
+    created = tmp_path / "created.txt"
+    created.write_text("new\n")
+    _, rejection = build_report(
+        tmp_path, before, "run-selected", concurrent_run=False
+    )
+
+    restored, _ = reject(
+        tmp_path,
+        rejection,
+        selected_files=["created.txt"],
+    )
+
+    assert restored is True
+    assert tracked.read_text() == "one\ntwo\n"
+    assert not created.exists()
+
+
+def test_reject_can_restore_selected_tracked_file(tmp_path):
+    tracked = repository(tmp_path)
+    before = snapshot(tmp_path)
+    tracked.write_text("one\ntwo\n")
+    created = tmp_path / "created.txt"
+    created.write_text("new\n")
+    _, rejection = build_report(
+        tmp_path, before, "run-selected-tracked", concurrent_run=False
+    )
+
+    restored, _ = reject(
+        tmp_path,
+        rejection,
+        selected_files=["tracked.txt"],
+    )
+
+    assert restored is True
+    assert tracked.read_text() == "one\n"
+    assert created.read_text() == "new\n"
+
+
 def test_unchanged_preexisting_files_are_not_attributed_to_run(tmp_path):
     tracked = repository(tmp_path)
     tracked.write_text("existing change\n")
