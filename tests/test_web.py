@@ -93,7 +93,9 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         connection.request("GET", "/")
         response = connection.getresponse()
         assert response.status == 200
-        assert b"AI control room" in response.read()
+        page = response.read()
+        assert b"AI control room" in page
+        assert "L’IA à la mode chez les jeunes".encode() in page
 
         connection.request("GET", "/app.js")
         response = connection.getresponse()
