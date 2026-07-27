@@ -22,9 +22,11 @@ def start_server(tmp_path):
 
 
 def test_web_status_and_assets(tmp_path, monkeypatch):
+    usage_calls = []
     monkeypatch.setattr(
         "joe.web.usage_status",
-        lambda: [{"provider": "codex", "available": True, "windows": []}],
+        lambda force=False: usage_calls.append(force)
+        or [{"provider": "codex", "available": True, "windows": []}],
     )
     server, thread = start_server(tmp_path)
     try:
@@ -101,6 +103,12 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         usage = json.loads(response.read())
         assert response.status == 200
         assert usage[0]["provider"] == "codex"
+
+        connection.request("GET", "/api/usage?force=1")
+        response = connection.getresponse()
+        response.read()
+        assert response.status == 200
+        assert usage_calls[-1] is True
 
         connection.request("GET", "/")
         response = connection.getresponse()

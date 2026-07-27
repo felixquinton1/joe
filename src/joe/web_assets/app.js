@@ -1,4 +1,4 @@
-const APP_VERSION = "0.12.1";
+const APP_VERSION = "0.12.2";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -28,11 +28,23 @@ async function loadCapabilities() {
   updateCapabilityMenus();
 }
 
-async function loadUsage() {
-  const response = await fetch("/api/usage");
-  if (!response.ok) throw new Error("Quotas indisponibles");
-  state.usage = await response.json();
-  renderUsage();
+async function loadUsage(force = false) {
+  const button = $("refresh-usage");
+  if (force) {
+    button.disabled = true;
+    button.classList.add("refreshing");
+  }
+  try {
+    const response = await fetch(`/api/usage${force ? "?force=1" : ""}`);
+    if (!response.ok) throw new Error("Quotas indisponibles");
+    state.usage = await response.json();
+    renderUsage();
+  } finally {
+    if (force) {
+      button.disabled = false;
+      button.classList.remove("refreshing");
+    }
+  }
 }
 
 function renderUsage() {
@@ -779,7 +791,7 @@ $("cancel-project").onclick = () => {
 $("save-project").onclick = saveProject;
 $("confirm-delete-conversation").onclick = deleteConversation;
 $("stop").onclick = cancelActiveRun;
-$("refresh-usage").onclick = loadUsage;
+$("refresh-usage").onclick = () => loadUsage(true);
 
 function escapeHtml(value) {
   const node = document.createElement("span");

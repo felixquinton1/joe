@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from . import __version__
 from .capabilities import provider_capabilities
@@ -340,7 +340,8 @@ class Handler(BaseHTTPRequestHandler):
     server: JoeServer
 
     def do_GET(self) -> None:
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
         if path == "/":
             return self._asset("index.html", "text/html; charset=utf-8")
         if path == "/app.js":
@@ -365,7 +366,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/capabilities":
             return self._json(provider_capabilities())
         if path == "/api/usage":
-            return self._json(usage_status())
+            force = parse_qs(parsed.query).get("force") == ["1"]
+            return self._json(usage_status(force=force))
         if path == "/api/conversations":
             return self._json(self.server.manager.conversations.list())
         if path == "/api/projects":
