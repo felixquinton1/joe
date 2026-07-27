@@ -57,7 +57,11 @@
     <aside class="activity-panel">
       <div class="panel-title"><div><span class="eyebrow">Temps réel</span><h2>Agents</h2></div><span id="run-state" class="run-state idle">Prêt</span></div>
       <div id="agents" class="agent-stack"></div>
-      <details class="raw-panel"><summary>Journal technique</summary><pre id="raw-log"></pre></details>
+      <details class="raw-panel">
+        <summary>Diagnostics <span>en cas d’erreur</span></summary>
+        <p>Événements bruts de Joe : routage, démarrage des agents, erreurs et métadonnées. Utile pour diagnostiquer un blocage ou partager un bug.</p>
+        <pre id="raw-log"></pre>
+      </details>
     </aside>
   </main>
   <script src="/app.js"></script>
