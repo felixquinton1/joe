@@ -21,6 +21,7 @@ DEFAULT_PROJECT_ID = "main"
 class ConversationStore:
     def __init__(self, root: Path, runs: Path):
         self.path = root / "conversations.json"
+        self.backup_path = root / "conversations.json.bak"
         self.runs = runs
         self.lock = threading.Lock()
 
@@ -28,6 +29,12 @@ class ConversationStore:
         if self.path.exists():
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        if self.backup_path.exists():
+            try:
+                self._write(json.loads(self.backup_path.read_text()))
+                return
+            except (OSError, json.JSONDecodeError):
+                pass
         conversations = self._legacy_conversation()
         self._write(
             {
@@ -223,11 +230,15 @@ class ConversationStore:
 
     def _read(self) -> dict[str, Any]:
         self.ensure()
-        try:
-            payload = json.loads(self.path.read_text())
-            return self._normalize(payload)
-        except (OSError, json.JSONDecodeError):
-            return self._normalize({"version": 2, "conversations": []})
+        for path in (self.path, self.backup_path):
+            try:
+                payload = json.loads(path.read_text())
+                return self._normalize(payload)
+            except (OSError, json.JSONDecodeError):
+                continue
+        raise RuntimeError(
+            f"Historique Joe illisible : {self.path} et sa sauvegarde"
+        )
 
     def _legacy_conversation(self) -> list[dict[str, Any]]:
         messages = []
@@ -287,7 +298,9 @@ class ConversationStore:
         return payload
 
     def _write(self, payload: dict[str, Any]) -> None:
-        tmp = self.path.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
-        tmp.chmod(0o600)
-        os.replace(tmp, self.path)
+        content = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+        for path in (self.path, self.backup_path):
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            tmp.write_text(content)
+            tmp.chmod(0o600)
+            os.replace(tmp, path)

@@ -1,4 +1,4 @@
-const APP_VERSION = "0.11.0";
+const APP_VERSION = "0.11.1";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -772,6 +772,10 @@ $("mode").addEventListener("change", saveSettings);
 $("effort").addEventListener("change", saveSettings);
 $("execution-mode").addEventListener("change", saveSettings);
 $("new-project").onclick = createProject;
+$("cancel-project").onclick = () => {
+  state.editingProjectId = null;
+  $("project-dialog").close();
+};
 $("save-project").onclick = saveProject;
 $("confirm-delete-conversation").onclick = deleteConversation;
 $("stop").onclick = cancelActiveRun;

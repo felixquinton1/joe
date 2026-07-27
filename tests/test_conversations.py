@@ -87,3 +87,22 @@ def test_conversation_can_be_deleted(tmp_path):
     assert store.delete(conversation["id"]) is True
     assert store.get(conversation["id"]) is None
     assert store.delete(conversation["id"]) is False
+
+
+def test_history_recovers_from_atomic_backup(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+    conversation = store.create()
+    store.append_message(conversation["id"], "user", "Message préservé")
+    store.path.write_text("{broken")
+
+    recovered = ConversationStore(root, runs).get(conversation["id"])
+
+    assert recovered["messages"][0]["content"] == "Message préservé"
+    assert store.backup_path.stat().st_mode & 0o777 == 0o600
+
+    store.path.unlink()
+    restored = ConversationStore(root, runs).get(conversation["id"])
+    assert restored["messages"][0]["content"] == "Message préservé"

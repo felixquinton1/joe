@@ -104,6 +104,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         page = response.read()
         assert b"AI control room" in page
         assert "L’IA à la mode chez les jeunes".encode() in page
+        assert b'id="cancel-project"' in page
 
         connection.request("GET", "/app.js")
         response = connection.getresponse()
