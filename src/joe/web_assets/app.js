@@ -1,4 +1,4 @@
-const APP_VERSION = "0.10.1";
+const APP_VERSION = "0.10.2";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -151,7 +151,7 @@ function renderGitReport(report, runId) {
     </header>
     <div class="git-facts">
       <span>HEAD <b>${shortCommit(report.head_before)} → ${shortCommit(report.head_after)}</b>${headChanged ? " · modifié" : " · inchangé"}</span>
-      <span>origin/dev <b>${shortCommit(report.origin_dev_before)} → ${shortCommit(report.origin_dev_after)}</b>${devChanged ? " · fetch détecté" : " · inchangé"}</span>
+      <span>origin/dev <b>${shortCommit(report.origin_dev_before)} → ${shortCommit(report.origin_dev_after)}</b>${devChanged ? " · référence actualisée" : " · inchangé"} · ${report.fetch_observed ? "fetch observé" : "aucun fetch observé"}</span>
       <span>${integration}</span>
     </div>`;
   const summary = document.createElement("div");

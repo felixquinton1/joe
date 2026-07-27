@@ -16,6 +16,7 @@ class GitSnapshot:
     origin_dev: str | None
     dirty_files: frozenset[str]
     file_signatures: dict[str, tuple[int, int] | None]
+    fetch_head_signature: tuple[int, int] | None
 
     @property
     def clean(self) -> bool:
@@ -24,7 +25,7 @@ class GitSnapshot:
 
 def snapshot(project: Path) -> GitSnapshot:
     if not (project / ".git").exists():
-        return GitSnapshot(False, None, None, None, frozenset(), {})
+        return GitSnapshot(False, None, None, None, frozenset(), {}, None)
     status = _git(
         project,
         "status",
@@ -44,6 +45,7 @@ def snapshot(project: Path) -> GitSnapshot:
         _value(project, "rev-parse", "--verify", "refs/remotes/origin/dev"),
         dirty_files,
         {path: _file_signature(project / path) for path in dirty_files},
+        _fetch_head_signature(project),
     )
 
 
@@ -131,6 +133,9 @@ def build_report(
         "head_after": after.head,
         "origin_dev_before": before.origin_dev,
         "origin_dev_after": after.origin_dev,
+        "fetch_observed": (
+            before.fetch_head_signature != after.fetch_head_signature
+        ),
         "origin_dev_integrated": integrated,
         "files": files,
         "patch_preview": _git(
@@ -278,6 +283,16 @@ def _file_signature(path: Path) -> tuple[int, int] | None:
         return stat.st_size, stat.st_mtime_ns
     except OSError:
         return None
+
+
+def _fetch_head_signature(project: Path) -> tuple[int, int] | None:
+    git_dir = _value(project, "rev-parse", "--git-dir")
+    if not git_dir:
+        return None
+    path = Path(git_dir)
+    if not path.is_absolute():
+        path = project / path
+    return _file_signature(path / "FETCH_HEAD")
 
 
 def _changed_since_snapshot(

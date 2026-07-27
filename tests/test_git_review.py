@@ -79,3 +79,16 @@ def test_unchanged_preexisting_files_are_not_attributed_to_run(tmp_path):
     assert report["files"] == []
     assert report["insertions"] == 0
     assert report["deletions"] == 0
+
+
+def test_fetch_head_change_is_reported_even_when_remote_ref_is_unchanged(tmp_path):
+    repository(tmp_path)
+    before = snapshot(tmp_path)
+    (tmp_path / ".git" / "FETCH_HEAD").write_text("same remote commit\n")
+
+    report, _ = build_report(
+        tmp_path, before, "run-4", concurrent_run=False
+    )
+
+    assert report["fetch_observed"] is True
+    assert report["origin_dev_before"] == report["origin_dev_after"]
