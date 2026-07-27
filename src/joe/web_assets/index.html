@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Joe — AI control room</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">J</span><div><strong>Joe</strong><small>AI control room</small></div></div>
+    <div class="project"><span class="status-dot"></span><span id="project">Chargement…</span></div>
+  </header>
+  <section class="usage-strip" aria-label="Quotas personnels">
+    <div class="usage-heading">
+      <div><span class="eyebrow">Consommation personnelle</span><strong>Quotas IA</strong></div>
+      <button id="refresh-usage" class="icon-button" title="Actualiser les quotas">↻</button>
+    </div>
+    <div id="usage" class="usage-grid"><span class="usage-loading">Chargement des quotas…</span></div>
+  </section>
+  <main class="layout">
+    <aside class="history-panel">
+      <div class="panel-title"><div><span class="eyebrow">Mémoire</span><h2>Historique</h2></div><button id="refresh-history" class="icon-button" title="Actualiser">↻</button></div>
+      <div id="history" class="history-list"></div>
+    </aside>
+    <section class="workspace">
+      <div class="controls">
+        <div class="control-group routing-controls">
+          <span class="control-title">Routage</span>
+          <label>Agent<select id="agent"><option value="">Automatique</option><option>codex</option><option>claude</option><option>gemini</option><option>copilot</option></select></label>
+          <label>Workflow<select id="mode"><option value="">Automatique</option><option value="fast">FAST</option><option value="review">REVIEW</option><option value="consensus">CONSENSUS</option></select></label>
+        </div>
+        <div class="control-group provider-controls">
+          <span class="control-title">Réglages du fournisseur</span>
+          <label>Modèle<select id="model"><option value="">Défaut du fournisseur</option></select></label>
+          <label>Effort<select id="effort"><option value="">Défaut du modèle</option></select></label>
+          <label>Permissions<select id="execution-mode"><option value="">Automatique</option></select></label>
+        </div>
+      </div>
+      <div class="conversation">
+        <div class="conversation-head"><div><span class="eyebrow">Session active</span><h1>Que veux-tu accomplir ?</h1></div><div id="route-badge" class="route-badge hidden"></div></div>
+        <div id="messages" class="messages">
+          <div class="empty-state"><span class="empty-mark">J</span><h3>Un seul point d’entrée, plusieurs intelligences.</h3><p>Décris simplement ton besoin. Joe choisira le workflow et transmettra le contexte du projet.</p></div>
+        </div>
+      </div>
+      <form id="composer" class="composer">
+        <textarea id="request" rows="3" placeholder="Ex. Ajoute une option pour désactiver la loss Gamma…" required></textarea>
+        <div class="composer-foot"><span>Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne</span><button id="send" type="submit"><span>Lancer</span><b>→</b></button></div>
+      </form>
+    </section>
+    <aside class="activity-panel">
+      <div class="panel-title"><div><span class="eyebrow">Temps réel</span><h2>Agents</h2></div><span id="run-state" class="run-state idle">Prêt</span></div>
+      <div id="agents" class="agent-stack"></div>
+      <details class="raw-panel"><summary>Journal technique</summary><pre id="raw-log"></pre></details>
+    </aside>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

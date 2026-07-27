@@ -1,0 +1,100 @@
+from __future__ import annotations
+
+import json
+import shutil
+import subprocess
+import time
+from typing import Any
+
+_cache: tuple[float, dict[str, Any]] | None = None
+
+
+def provider_capabilities(refresh: bool = False) -> dict[str, Any]:
+    global _cache
+    if not refresh and _cache and time.monotonic() - _cache[0] < 300:
+        return _cache[1]
+    result = {
+        "codex": _codex(),
+        "claude": {
+            "available": bool(shutil.which("claude")),
+            "models": _models("sonnet", "opus", "fable"),
+            "efforts": ["low", "medium", "high", "xhigh", "max"],
+            "execution_modes": [
+                _mode("auto", "Automatique"),
+                _mode("plan", "Plan — lecture seule"),
+                _mode("acceptEdits", "Modifications autorisées"),
+                _mode("dontAsk", "Refuser les permissions non accordées"),
+            ],
+        },
+        "gemini": {
+            "available": bool(shutil.which("gemini")),
+            "models": _models("auto"),
+            "efforts": [],
+            "execution_modes": [
+                _mode("auto", "Automatique"),
+                _mode("plan", "Plan — lecture seule"),
+                _mode("auto_edit", "Modifications autorisées"),
+            ],
+        },
+        "copilot": {
+            "available": bool(shutil.which("copilot")),
+            "models": _models("auto"),
+            "efforts": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
+            "execution_modes": [
+                _mode("auto", "Automatique"),
+                _mode("plan", "Plan — lecture seule"),
+                _mode("modify", "Modifications autorisées"),
+            ],
+        },
+    }
+    _cache = (time.monotonic(), result)
+    return result
+
+
+def _codex() -> dict[str, Any]:
+    models = []
+    if shutil.which("codex"):
+        try:
+            completed = subprocess.run(
+                ["codex", "debug", "models"],
+                text=True,
+                capture_output=True,
+                timeout=8,
+                check=False,
+            )
+            payload = json.loads(completed.stdout)
+            catalog = payload.get("models", payload)
+            for item in catalog:
+                if item.get("visibility") not in {None, "list"}:
+                    continue
+                models.append(
+                    {
+                        "id": item["slug"],
+                        "label": item.get("display_name", item["slug"]),
+                        "default_effort": item.get("default_reasoning_level"),
+                        "efforts": [
+                            level["effort"]
+                            for level in item.get("supported_reasoning_levels", [])
+                        ],
+                    }
+                )
+        except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError, TypeError):
+            pass
+    return {
+        "available": bool(shutil.which("codex")),
+        "models": models,
+        "efforts": [],
+        "execution_modes": [
+            _mode("auto", "Automatique"),
+            _mode("read-only", "Lecture seule"),
+            _mode("workspace-write", "Commandes et modifications du projet"),
+        ],
+    }
+
+
+def _models(*names: str) -> list[dict[str, Any]]:
+    return [{"id": name, "label": name} for name in names]
+
+
+def _mode(identifier: str, label: str) -> dict[str, str]:
+    return {"id": identifier, "label": label}

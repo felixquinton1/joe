@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "joe-orchestrator"
+version = "0.4.0"
+description = "Lightweight local multi-AI CLI orchestrator"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+joe = "joe.cli:main"
+agent = "joe.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+joe = ["web_assets/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
