@@ -1,4 +1,4 @@
-const APP_VERSION = "0.7.1";
+const APP_VERSION = "0.7.2";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -84,6 +84,46 @@ function updateCountdowns() {
       ? "Réinitialisation imminente"
       : `Reset dans ${days ? `${days} j ` : ""}${hours ? `${hours} h ` : ""}${minutes} min`;
   }
+}
+
+function resetDescription(timestamp) {
+  const reset = Number(timestamp);
+  if (!reset) return "heure de retour non exposée";
+  const seconds = Math.max(0, reset - Date.now() / 1000);
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remaining = seconds <= 0
+    ? "réinitialisation imminente"
+    : `dans ${days ? `${days} j ` : ""}${hours ? `${hours} h ` : ""}${minutes} min`;
+  const date = new Date(reset * 1000).toLocaleString("fr-FR", {
+    dateStyle: "short",
+    timeStyle: "short"
+  });
+  return `${remaining} (${date})`;
+}
+
+function showQuotaNotice(event) {
+  const bubble = addMessage("Joe · limite atteinte", "", "notice");
+  const lines = [`${capitalize(event.provider)} a atteint une limite d’utilisation.`];
+  if (event.windows?.length) {
+    for (const window of event.windows) {
+      lines.push(`• ${window.name} : ${resetDescription(window.resets_at)}`);
+    }
+  } else {
+    lines.push(`• ${event.usage_message || "Heure de retour non exposée par la CLI."}`);
+  }
+  if (event.alternatives?.length) {
+    const choices = event.alternatives.map(item => {
+      const models = item.models?.length ? ` (${item.models.join(", ")})` : "";
+      return `${capitalize(item.provider)}${models}`;
+    });
+    lines.push(`Joe essaie automatiquement : ${choices.join(" → ")}.`);
+  } else {
+    lines.push("Aucun autre fournisseur configuré n’est actuellement disponible.");
+  }
+  lines.push("Changer de modèle chez le même fournisseur ne contourne généralement pas une limite partagée.");
+  bubble.textContent = lines.join("\n");
 }
 
 function updateCapabilityMenus() {
@@ -434,6 +474,8 @@ function handleEvent(conversationId, event, finalBubble) {
     const agent = ensureAgent(event.provider);
     agent.card.classList.remove("active");
     agent.status.textContent = event.ok ? "Terminé" : `Échec · ${event.error || "inconnu"}`;
+  } else if (event.type === "quota_notice") {
+    showQuotaNotice(event);
   } else if (event.type === "complete") {
     renderMarkdown(finalBubble, event.response);
     finishRun(conversationId, true);

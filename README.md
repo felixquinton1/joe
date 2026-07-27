@@ -49,6 +49,11 @@ popover when the provider CLI exposes them, provides stable
 agent/workflow/model/effort/permission controls,
 and loads the latest 100 run logs from the project's `.agentflow/runs/` folder.
 Joe never estimates missing quotas: unsupported providers are marked clearly.
+If a provider reaches a limit during a run, Joe adds a visible notice with the
+known reset windows (including model-specific Claude windows when exposed) and
+the installed fallback providers/models it will try automatically. A model
+switch within the same provider is not presented as a way around a shared
+quota.
 Native JSON streams expose observable progress such as commands, tools, and
 files read or changed; Joe does not expose private chain-of-thought.
 Final answers are rendered locally as safe Markdown, including headings,

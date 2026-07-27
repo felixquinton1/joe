@@ -114,7 +114,7 @@ class RunManager:
                 execution_mode=execution_mode,
                 extra_context=self.conversations.context(run.conversation_id),
                 cancel_event=run.cancel_event,
-                on_event=run.emit,
+                on_event=lambda event: self._emit_run_event(run, event),
             )
             self.conversations.append_message(
                 run.conversation_id,
@@ -144,6 +144,20 @@ class RunManager:
                 run.done = True
                 run.condition.notify_all()
 
+    def _emit_run_event(self, run: LiveRun, event: dict[str, Any]) -> None:
+        run.emit(event)
+        if event.get("type") != "provider_end" or event.get("error") != "quota":
+            return
+        config = self.orchestrator.memory.config()
+        run.emit(
+            build_quota_notice(
+                str(event["provider"]),
+                usage_status(),
+                provider_capabilities(),
+                config.get("fallbacks", {}),
+            )
+        )
+
     def cancel(self, run_id: str) -> bool:
         with self.lock:
             run = self.live.get(run_id)
@@ -151,6 +165,41 @@ class RunManager:
             return False
         run.cancel_event.set()
         return True
+
+
+def build_quota_notice(
+    provider: str,
+    usage: list[dict[str, Any]],
+    capabilities: dict[str, Any],
+    fallbacks: dict[str, list[str]],
+) -> dict[str, Any]:
+    provider_usage = next(
+        (item for item in usage if item.get("provider") == provider),
+        {},
+    )
+    alternatives = []
+    for name in fallbacks.get(provider, []):
+        capability = capabilities.get(name, {})
+        if not capability.get("available"):
+            continue
+        alternatives.append(
+            {
+                "provider": name,
+                "models": [
+                    model.get("label", model.get("id"))
+                    for model in capability.get("models", [])
+                    if model.get("label") or model.get("id")
+                ],
+            }
+        )
+    return {
+        "type": "quota_notice",
+        "provider": provider,
+        "windows": provider_usage.get("windows", []),
+        "usage_message": provider_usage.get("message"),
+        "alternatives": alternatives,
+        "automatic_fallback": bool(alternatives),
+    }
 
     def history(self) -> list[dict[str, Any]]:
         self.orchestrator.memory.ensure()

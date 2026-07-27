@@ -2,7 +2,7 @@ import http.client
 import json
 import threading
 
-from joe.web import Handler, JoeServer, LiveRun, RunManager
+from joe.web import Handler, JoeServer, LiveRun, RunManager, build_quota_notice
 
 
 def start_server(tmp_path):
@@ -123,3 +123,31 @@ def test_web_rejects_empty_requests(tmp_path):
     finally:
         server.shutdown()
         thread.join(timeout=2)
+
+
+def test_quota_notice_exposes_reset_and_available_fallback_models():
+    notice = build_quota_notice(
+        "claude",
+        [
+            {
+                "provider": "claude",
+                "windows": [{"name": "Opus · 7 jours", "resets_at": 1_800_000_000}],
+                "message": None,
+            }
+        ],
+        {
+            "gemini": {
+                "available": True,
+                "models": [{"id": "auto", "label": "auto"}],
+            },
+            "codex": {"available": False, "models": []},
+        },
+        {"claude": ["gemini", "codex"]},
+    )
+
+    assert notice["type"] == "quota_notice"
+    assert notice["windows"][0]["name"] == "Opus · 7 jours"
+    assert notice["alternatives"] == [
+        {"provider": "gemini", "models": ["auto"]}
+    ]
+    assert notice["automatic_fallback"] is True

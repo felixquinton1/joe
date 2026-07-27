@@ -55,6 +55,8 @@ def _claude_status(path: Path | None = None) -> dict[str, Any]:
     for name, key, duration in (
         ("5 heures", "five_hour", 300),
         ("7 jours", "seven_day", 10080),
+        ("Sonnet · 7 jours", "seven_day_sonnet", 10080),
+        ("Opus · 7 jours", "seven_day_opus", 10080),
     ):
         item = utilization.get(key)
         if not isinstance(item, dict) or item.get("utilization") is None:
@@ -94,7 +96,7 @@ def _codex_status() -> dict[str, Any]:
         "id": 1,
         "method": "initialize",
         "params": {
-            "clientInfo": {"name": "joe", "version": "0.7.1"},
+            "clientInfo": {"name": "joe", "version": "0.7.2"},
             "capabilities": {"experimentalApi": True},
         },
     }

@@ -54,6 +54,10 @@ def test_claude_status_reads_fresh_local_cache(tmp_path, monkeypatch):
                             "utilization": 75,
                             "resets_at": "2030-01-02T12:00:00+00:00",
                         },
+                        "seven_day_opus": {
+                            "utilization": 90,
+                            "resets_at": "2030-01-03T12:00:00Z",
+                        },
                     },
                 }
             }
@@ -65,6 +69,8 @@ def test_claude_status_reads_fresh_local_cache(tmp_path, monkeypatch):
     assert status["available"] is True
     assert status["windows"][0]["remaining_percent"] == 70
     assert status["windows"][1]["remaining_percent"] == 25
+    assert status["windows"][2]["name"] == "Opus · 7 jours"
+    assert status["windows"][2]["remaining_percent"] == 10
 
 
 def test_claude_status_rejects_stale_cache(tmp_path, monkeypatch):
