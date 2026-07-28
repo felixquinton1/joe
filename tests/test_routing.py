@@ -11,7 +11,7 @@ def test_shared_pipeline_balances_then_admits_a_route():
             "windows": [
                 {
                     "remaining_percent": 4,
-                    "resets_at": 2_000_000,
+                        "resets_at": 2_000_000_000,
                     "duration_minutes": 10_080,
                 }
             ],
@@ -22,7 +22,7 @@ def test_shared_pipeline_balances_then_admits_a_route():
             "windows": [
                 {
                     "remaining_percent": 80,
-                    "resets_at": 2_000_000,
+                        "resets_at": 2_000_000_000,
                     "duration_minutes": 10_080,
                 }
             ],

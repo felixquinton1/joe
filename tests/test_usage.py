@@ -5,6 +5,8 @@ from joe.usage import (
     _claude_status,
     _gemini_status,
     _parse_claude_usage_screen,
+    _provider_capacity,
+    _with_last_available,
     cached_usage_status,
     normalize_codex_usage,
 )
@@ -114,6 +116,95 @@ def test_claude_status_keeps_recent_stale_cache_for_routing(tmp_path, monkeypatc
     assert status["available"] is True
     assert status["stale"] is True
     assert status["windows"][0]["remaining_percent"] == 60
+
+
+def test_claude_status_discards_a_window_after_its_reset(tmp_path, monkeypatch):
+    monkeypatch.setattr("joe.usage.time.time", lambda: 2_000)
+    path = tmp_path / ".claude.json"
+    path.write_text(
+        json.dumps(
+            {
+                "cachedUsageUtilization": {
+                    "fetchedAtMs": 1_900_000,
+                    "utilization": {
+                        "five_hour": {
+                            "utilization": 100,
+                            "resets_at": "1970-01-01T00:25:00Z",
+                        },
+                        "seven_day": {
+                            "utilization": 25,
+                            "resets_at": "2030-01-01T00:00:00Z",
+                        },
+                    },
+                }
+            }
+        )
+    )
+
+    status = _claude_status(path)
+
+    assert [window["name"] for window in status["windows"]] == ["7 jours"]
+    assert status["windows"][0]["remaining_percent"] == 75
+
+
+def test_routing_ignores_an_expired_zero_percent_window():
+    status = {
+        "provider": "claude",
+        "available": True,
+        "windows": [
+            {
+                "name": "5 heures",
+                "remaining_percent": 0,
+                "resets_at": 900,
+            },
+            {
+                "name": "7 jours",
+                "remaining_percent": 70,
+                "resets_at": 2_000,
+            },
+        ],
+    }
+
+    eligible, remaining, _ = _provider_capacity(status, 20, 1_000)
+
+    assert eligible is True
+    assert remaining == 70
+
+
+def test_stale_claude_cache_does_not_replace_recent_live_usage(monkeypatch):
+    monkeypatch.setattr("joe.usage._last_available", {})
+    monkeypatch.setattr("joe.usage.time.monotonic", lambda: 1_000)
+    monkeypatch.setattr("joe.usage.time.time", lambda: 1_000)
+    live = {
+        "provider": "claude",
+        "available": True,
+        "stale": False,
+        "windows": [
+            {
+                "name": "5 heures",
+                "remaining_percent": 55,
+                "resets_at": 2_000,
+            }
+        ],
+    }
+    stale = {
+        "provider": "claude",
+        "available": True,
+        "stale": True,
+        "windows": [
+            {
+                "name": "5 heures",
+                "remaining_percent": 0,
+                "resets_at": 1_500,
+            }
+        ],
+    }
+
+    _with_last_available(live)
+    retained = _with_last_available(stale)
+
+    assert retained["windows"][0]["remaining_percent"] == 55
+    assert retained["stale"] is False
 
 
 def test_claude_status_rejects_cache_older_than_six_hours(tmp_path, monkeypatch):

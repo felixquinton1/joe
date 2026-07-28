@@ -112,7 +112,26 @@ def _gemini_quota_description(auth_type: str | None) -> str:
 def _with_last_available(status: dict[str, Any]) -> dict[str, Any]:
     provider = str(status["provider"])
     now = time.monotonic()
+    status = _without_expired_windows(status, time.time())
     if status.get("available"):
+        previous = _last_available.get(provider)
+        if (
+            provider == "claude"
+            and status.get("stale")
+            and previous
+            and not previous[1].get("stale")
+            and now - previous[0] <= _STALE_USAGE_SECONDS
+        ):
+            retained = _without_expired_windows(previous[1], time.time())
+            if retained.get("available"):
+                age = now - previous[0]
+                retained["stale"] = age > 15 * 60
+                retained["message"] = (
+                    "Dernière actualisation /usage Claude"
+                    if age <= 15 * 60
+                    else "Dernière actualisation /usage Claude · mesure ancienne"
+                )
+                return retained
         _last_available[provider] = (now, status)
         return status
     previous = _last_available.get(provider)
@@ -124,6 +143,29 @@ def _with_last_available(status: dict[str, Any]) -> dict[str, Any]:
         f"Dernière mesure connue · {status.get('message', 'actualisation indisponible')}"
     )
     return fallback
+
+
+def _without_expired_windows(
+    status: dict[str, Any],
+    now: float,
+) -> dict[str, Any]:
+    windows = status.get("windows")
+    if not isinstance(windows, list):
+        return status
+    valid = [
+        window
+        for window in windows
+        if not isinstance(window.get("resets_at"), (int, float))
+        or float(window["resets_at"]) > now
+    ]
+    if len(valid) == len(windows):
+        return status
+    result = dict(status)
+    result["windows"] = valid
+    result["available"] = bool(valid)
+    if not valid:
+        result["message"] = "Quota expiré · actualisation en attente"
+    return result
 
 
 def balance_route(
@@ -357,6 +399,12 @@ def _provider_capacity(
     if not status.get("available"):
         return False, 0, str(status.get("message") or "indisponible")
     windows = status.get("windows") or []
+    windows = [
+        window
+        for window in windows
+        if not isinstance(window.get("resets_at"), (int, float))
+        or float(window["resets_at"]) > now
+    ]
     if not windows:
         return None, None, "plafond non exposé"
     limiting = min(
@@ -387,6 +435,8 @@ def _quota_pressure(
         remaining = float(window.get("remaining_percent", 100))
         reset = window.get("resets_at")
         seconds = float(reset) - now if isinstance(reset, (int, float)) else None
+        if seconds is not None and seconds <= 0:
+            continue
         constrained = remaining <= 5 or (
             remaining <= _LOW_REMAINING_PERCENT
             and (seconds is None or seconds >= _FAR_RESET_SECONDS)

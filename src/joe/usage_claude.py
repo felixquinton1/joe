@@ -40,13 +40,16 @@ def claude_status(
         item = utilization.get(key)
         if not isinstance(item, dict) or item.get("utilization") is None:
             continue
+        resets_at = iso_timestamp(item.get("resets_at"))
+        if resets_at is not None and resets_at <= now_timestamp:
+            continue
         used = max(0.0, min(100.0, float(item["utilization"])))
         windows.append(
             {
                 "name": name,
                 "used_percent": round(used, 1),
                 "remaining_percent": round(100 - used, 1),
-                "resets_at": iso_timestamp(item.get("resets_at")),
+                "resets_at": resets_at,
                 "duration_minutes": duration,
             }
         )
