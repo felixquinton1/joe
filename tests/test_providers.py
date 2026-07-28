@@ -125,6 +125,24 @@ def test_effort_and_safe_execution_modes_are_forwarded():
     assert claude[claude.index("--permission-mode") + 1] == "plan"
 
 
+def test_generic_write_modes_are_translated_for_non_codex_clis():
+    cwd = Path("/tmp/project")
+    claude = Provider("claude", "claude").command(
+        "p", cwd, Intent.ANALYZE, execution_mode="danger-full-access"
+    )
+    gemini = Provider("gemini", "gemini").command(
+        "p", cwd, Intent.ANALYZE, execution_mode="workspace-write"
+    )
+    copilot = Provider("copilot", "copilot").command(
+        "p", cwd, Intent.ANALYZE, execution_mode="workspace-write"
+    )
+
+    assert claude[claude.index("--permission-mode") + 1] == "dontAsk"
+    assert gemini[gemini.index("--approval-mode") + 1] == "auto_edit"
+    assert "--allow-tool=write" in copilot
+    assert "--allow-tool=shell" in copilot
+
+
 def test_additional_project_roots_are_forwarded_to_each_cli():
     cwd = Path("/tmp/project")
     extra = (Path("/tmp/vision"),)

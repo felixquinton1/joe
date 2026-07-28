@@ -1,4 +1,4 @@
-const APP_VERSION = "0.20.0";
+const APP_VERSION = "0.20.1";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -677,6 +677,7 @@ function createProject() {
   $("project-root").value = "";
   $("project-extra-roots").value = "";
   $("project-remote-access").checked = false;
+  $("project-execution-mode").value = "";
   $("project-context").value = "";
   $("project-dialog").showModal();
   requestAnimationFrame(() => $("project-name").focus());
@@ -690,6 +691,7 @@ function openProject(project) {
   $("project-root").value = project.workspace_root || "";
   $("project-extra-roots").value = (project.additional_roots || []).join("\n");
   $("project-remote-access").checked = Boolean(project.remote_access);
+  $("project-execution-mode").value = project.default_execution_mode || "";
   $("project-context").value = project.context || "";
   $("project-dialog").showModal();
 }
@@ -709,6 +711,7 @@ async function saveProject(event) {
       additional_roots: $("project-extra-roots").value
         .split("\n").map(value => value.trim()).filter(Boolean),
       remote_access: $("project-remote-access").checked,
+      default_execution_mode: $("project-execution-mode").value,
       context: $("project-context").value
     })
   });
@@ -882,7 +885,7 @@ function handleEvent(conversationId, event, finalBubble) {
     if (event.reviewer) ensureAgent(event.reviewer);
     const quotaSwitch = event.reason?.includes("quota-switch=");
     const quotaDetail = quotaSwitch ? event.reason.split("; ").at(-1) : "";
-    const execution = [event.model, event.effort ? `effort ${event.effort}` : ""].filter(Boolean).join(" · ");
+    const execution = [event.model, event.effort ? `effort ${event.effort}` : "", event.execution_mode ? `permission ${event.execution_mode}` : ""].filter(Boolean).join(" · ");
     finalBubble.textContent = ["consensus", "review"].includes(event.mode)
       ? "Synthèse finale en attente…"
       : `Routage local terminé${Number.isFinite(event.routing_ms) ? ` en ${event.routing_ms} ms` : ""}.\n${event.mode.toUpperCase()} · ${capitalize(event.primary)} ${event.health_check ? "effectue un test minimal" : "répond"}${event.reviewer ? ` · revue par ${capitalize(event.reviewer)}` : ""}${execution ? ` · ${execution}` : ""}${quotaSwitch ? `\nBascule automatique : ${quotaDetail}.` : ""}`;

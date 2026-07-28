@@ -146,6 +146,12 @@ workspace and forwards only the declared extra roots through the provider's
 native allow-list option. Missing configured roots stop the run instead of
 silently falling back to another directory. AI4Trading may therefore enable
 SSH/Jean Zay without granting another project access to unrelated local files.
+Projects can also define a default permission for explicit operational
+validation requests such as audits, test-suite execution, smoke tests, or
+`git fetch`. Ordinary questions remain read-only. An operational audit routes
+to REVIEW: the primary agent performs the checks with the configured permission,
+then the reviewer evaluates its recorded evidence without rerunning commands
+that need write or network access.
 
 The evidence journal separates local routing inferences, successful provider
 executions, and refused/failed executions. Providers also receive an explicit

@@ -82,7 +82,7 @@ class RunManager:
         run_id: str | None = None,
         resumed: bool = False,
     ) -> LiveRun:
-        workspace, _, _ = self._project_scope(conversation_id)
+        workspace, _, _, _ = self._project_scope(conversation_id)
         run = LiveRun(
             run_id or uuid.uuid4().hex,
             request,
@@ -129,9 +129,16 @@ class RunManager:
         execution_mode: str | None,
     ) -> None:
         try:
-            workspace, additional_roots, remote_access = self._project_scope(
+            (
+                workspace,
+                additional_roots,
+                remote_access,
+                project_execution_mode,
+            ) = self._project_scope(
                 run.conversation_id
             )
+            if not execution_mode and _operational_validation(run.request):
+                execution_mode = project_execution_mode or None
             orchestrator = Orchestrator(
                 workspace,
                 additional_roots=additional_roots,
@@ -155,6 +162,8 @@ class RunManager:
                 forced_agent=bool(agent),
                 forced_mode=bool(mode),
             )
+            if route.mode is Mode.CONSENSUS:
+                execution_mode = None
             run.track_changes = (
                 (
                     route.intent is Intent.MODIFY
@@ -182,6 +191,7 @@ class RunManager:
                     "reason": route.reason,
                     "model": model,
                     "effort": effort,
+                    "execution_mode": execution_mode,
                     "routing_ms": round(
                         (time.monotonic() - routing_started) * 1000
                     ),
@@ -363,7 +373,7 @@ class RunManager:
 
     def _project_scope(
         self, conversation_id: str
-    ) -> tuple[Path, tuple[Path, ...], bool]:
+    ) -> tuple[Path, tuple[Path, ...], bool, str]:
         conversation = self.conversations.get(conversation_id) or {}
         project = self.conversations.get_project(
             str(conversation.get("project_id", "main"))
@@ -383,7 +393,12 @@ class RunManager:
             if root != workspace:
                 roots_list.append(root)
         roots = tuple(roots_list)
-        return workspace, roots, bool(project.get("remote_access"))
+        return (
+            workspace,
+            roots,
+            bool(project.get("remote_access")),
+            str(project.get("default_execution_mode", "")),
+        )
 
     def _schedule_compaction(
         self,
@@ -603,6 +618,24 @@ def _write_enabled(execution_mode: str | None) -> bool:
         "auto_edit",
         "modify",
     }
+
+
+def _operational_validation(request: str) -> bool:
+    lower = request.lower()
+    markers = (
+        "audit",
+        "pytest",
+        "suite de tests",
+        "exécute les tests",
+        "lance les tests",
+        "smoke test",
+        "git fetch",
+        "fetch ",
+        "origin/main",
+        "origin/dev",
+        "authentification",
+    )
+    return any(marker in lower for marker in markers)
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:

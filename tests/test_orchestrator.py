@@ -95,6 +95,9 @@ def test_consensus_is_read_only_and_uses_distinct_proposals(tmp_path):
         for provider in providers.values()
         for mode in provider.execution_modes
     )
+    assert "operational checks belong to a REVIEW workflow" in (
+        providers["codex"].calls[0][0]
+    )
 
 
 def test_consensus_can_use_codex_and_gemini_participants(tmp_path):

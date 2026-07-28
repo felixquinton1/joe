@@ -13,7 +13,7 @@ MODIFY_WORDS = {
 }
 REVIEW_WORDS = {
     "avis", "autre", "critique", "review", "relis", "relecture", "vérifie",
-    "vérifier", "double-check",
+    "vérifier", "double-check", "audit", "audite", "auditer",
 }
 CONSENSUS_PHRASES = {
     "architecture structurante", "difficile à inverser", "irréversible",

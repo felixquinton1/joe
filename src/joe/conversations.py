@@ -16,7 +16,7 @@ DEFAULT_SETTINGS = {
     "execution_mode": "",
 }
 DEFAULT_PROJECT_ID = "main"
-CURRENT_SCHEMA_VERSION = 3
+CURRENT_SCHEMA_VERSION = 4
 
 
 class ConversationStore:
@@ -83,6 +83,7 @@ class ConversationStore:
             "workspace_root": "",
             "additional_roots": [],
             "remote_access": False,
+            "default_execution_mode": "",
             "collapsed": False,
             "position": len(existing),
             "created_at": time.time(),
@@ -115,6 +116,14 @@ class ConversationStore:
                 ][:8]
             if "remote_access" in changes:
                 project["remote_access"] = bool(changes["remote_access"])
+            if "default_execution_mode" in changes:
+                value = str(changes["default_execution_mode"])
+                project["default_execution_mode"] = (
+                    value
+                    if value
+                    in {"", "read-only", "workspace-write", "danger-full-access"}
+                    else ""
+                )
             if "collapsed" in changes:
                 project["collapsed"] = bool(changes["collapsed"])
             if "position" in changes:
@@ -437,6 +446,7 @@ class ConversationStore:
             project.setdefault("workspace_root", "")
             project.setdefault("additional_roots", [])
             project.setdefault("remote_access", False)
+            project.setdefault("default_execution_mode", "")
             project.setdefault("collapsed", False)
             project.setdefault("position", payload["projects"].index(project))
         payload["version"] = CURRENT_SCHEMA_VERSION

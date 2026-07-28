@@ -67,7 +67,13 @@ class Provider:
             permission = (
                 execution_mode
                 if execution_mode in {"plan", "acceptEdits", "dontAsk"}
-                else ("acceptEdits" if modifying else "plan")
+                else (
+                    "dontAsk"
+                    if execution_mode == "danger-full-access"
+                    else "acceptEdits"
+                    if modifying or execution_mode == "workspace-write"
+                    else "plan"
+                )
             )
             command = [
                 self.executable, "--print", "--output-format", "stream-json",
@@ -85,7 +91,13 @@ class Provider:
             approval = (
                 execution_mode
                 if execution_mode in {"plan", "auto_edit"}
-                else ("auto_edit" if modifying else "plan")
+                else (
+                    "auto_edit"
+                    if modifying
+                    or execution_mode
+                    in {"workspace-write", "danger-full-access"}
+                    else "plan"
+                )
             )
             command = [
                 self.executable, "--output-format", "stream-json",
@@ -97,7 +109,11 @@ class Provider:
                 command.extend(["--model", model])
             return [*command, "--prompt", prompt]
         if self.name == "copilot":
-            allow_modify = modifying and execution_mode != "plan"
+            allow_modify = (
+                modifying
+                or execution_mode
+                in {"workspace-write", "danger-full-access", "acceptEdits"}
+            ) and execution_mode != "plan"
             args = [
                 self.executable, "--silent", "--no-color",
                 "--no-remote", "--no-remote-export", "--no-ask-user",

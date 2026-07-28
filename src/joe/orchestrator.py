@@ -315,7 +315,10 @@ class Orchestrator:
         proposal_prompt = (
             context
             + "\n\nPropose independently a solution. Do not modify files. "
-            "State assumptions, trade-offs, and validation."
+            "State assumptions, trade-offs, and validation. Consensus stages are "
+            "intentionally read-only: do not attempt test suites, git fetch, or "
+            "authentication probes, and do not add a generic Refusé section merely "
+            "because those operational checks belong to a REVIEW workflow."
         )
         first, second = participants
         for provider in participants:
@@ -521,7 +524,9 @@ class Orchestrator:
         return (
             context
             + "\n\nReview the candidate below and inspect the repository state. "
-            "Do not modify files. Start with exactly `VERDICT: APPROVED` or "
+            "Do not modify files. Do not rerun commands that require write or "
+            "network access; evaluate the candidate's recorded evidence instead. "
+            "Start with exactly `VERDICT: APPROVED` or "
             "`VERDICT: CORRECTIONS_REQUIRED`. Identify only "
             "material correctness, safety, maintainability, or validation issues. "
             "Say explicitly if no justified issue exists.\n\n<CANDIDATE>\n"

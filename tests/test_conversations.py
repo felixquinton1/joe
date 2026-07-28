@@ -93,6 +93,7 @@ def test_subproject_context_is_shared_by_its_conversations(tmp_path):
             "workspace_root": "/tmp/project",
             "additional_roots": ["/tmp/data"],
             "remote_access": True,
+            "default_execution_mode": "danger-full-access",
         },
     )
     first = store.create(project["id"])
@@ -106,6 +107,7 @@ def test_subproject_context_is_shared_by_its_conversations(tmp_path):
     assert loaded_project["workspace_root"] == "/tmp/project"
     assert loaded_project["additional_roots"] == ["/tmp/data"]
     assert loaded_project["remote_access"] is True
+    assert loaded_project["default_execution_mode"] == "danger-full-access"
 
 
 def test_project_context_is_preserved_when_history_is_truncated(tmp_path):

@@ -63,6 +63,15 @@ def test_large_implementation_automatically_gets_review():
     assert route.reviewer == "claude"
 
 
+def test_operational_audit_uses_review_instead_of_consensus():
+    route = Router().route("Fais un audit global de Joe et exécute les tests")
+
+    assert route.intent is Intent.ANALYZE
+    assert route.mode is Mode.REVIEW
+    assert route.primary == "codex"
+    assert route.reviewer == "claude"
+
+
 def test_long_capability_question_stays_fast_and_read_only():
     route = Router().route(
         "Est-ce que tu peux modifier le code de Joe depuis ici ou dois-je "

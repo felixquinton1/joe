@@ -10,6 +10,7 @@ from joe.web import (
     LiveRun,
     RunManager,
     _complex_request,
+    _operational_validation,
     build_quota_notice,
 )
 
@@ -176,15 +177,27 @@ def test_project_scope_uses_only_explicit_roots(tmp_path, monkeypatch):
         {
             "workspace_root": str(workspace),
             "additional_roots": [str(extra)],
+            "default_execution_mode": "workspace-write",
         },
     )
     conversation = manager.conversations.create(project["id"])
 
-    root, additional, remote = manager._project_scope(conversation["id"])
+    root, additional, remote, execution_mode = manager._project_scope(
+        conversation["id"]
+    )
 
     assert root == workspace.resolve()
     assert additional == (extra.resolve(),)
     assert remote is False
+    assert execution_mode == "workspace-write"
+
+
+def test_only_explicit_operational_checks_use_project_validation_permission():
+    assert _operational_validation(
+        "Fais un audit global et exécute la suite de tests"
+    )
+    assert _operational_validation("git fetch puis vérifie origin/main")
+    assert not _operational_validation("Explique-moi l’architecture de Joe")
 
 
 def test_pending_run_state_is_persisted_atomically(tmp_path, monkeypatch):
