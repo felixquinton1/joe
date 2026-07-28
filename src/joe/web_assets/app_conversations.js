@@ -238,7 +238,7 @@ window.createJoeConversations = function createJoeConversations({
       }
     }
     if (!conversation.messages.length) {
-      $("messages").innerHTML = '<div class="empty-state"><span class="empty-mark">J</span><h3>Nouvelle conversation</h3><p>Les réglages et l’historique de cette conversation resteront indépendants.</p></div>';
+      $("messages").innerHTML = '<div class="empty-state"><span class="empty-mark"><img src="/joe-mark.svg" alt=""></span><h3>Nouvelle conversation</h3><p>Les réglages et l’historique de cette conversation resteront indépendants.</p></div>';
     }
     const conversationViewport = document.querySelector(".conversation");
     conversationViewport.scrollTop = conversationViewport.scrollHeight;

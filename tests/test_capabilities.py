@@ -1,4 +1,4 @@
-from joe.capabilities import provider_capabilities
+from joe.capabilities import provider_capabilities, provider_defaults
 
 
 def test_capabilities_have_safe_defaults_and_provider_specific_controls():
@@ -17,3 +17,15 @@ def test_codex_catalog_efforts_follow_selected_model_when_available():
     models = capabilities["codex"]["models"]
     if models:
         assert all("efforts" in model for model in models)
+
+
+def test_provider_defaults_resolve_a_concrete_catalog_model():
+    capabilities = provider_capabilities()
+
+    model, effort = provider_defaults("codex")
+
+    if capabilities["codex"]["models"]:
+        assert model == capabilities["codex"]["models"][0]["id"]
+        assert effort == capabilities["codex"]["models"][0].get(
+            "default_effort"
+        )

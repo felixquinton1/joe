@@ -56,6 +56,30 @@ def cached_provider_capabilities() -> dict[str, Any]:
     return _cache[1] if _cache else {}
 
 
+def provider_defaults(
+    provider: str,
+    model: str | None = None,
+    effort: str | None = None,
+) -> tuple[str | None, str | None]:
+    models = cached_provider_capabilities().get(provider, {}).get("models", [])
+    selected_model = model or (
+        str(models[0]["id"]) if models else None
+    )
+    selected = next(
+        (
+            item for item in models
+            if str(item.get("id")) == selected_model
+        ),
+        None,
+    )
+    selected_effort = effort or (
+        str(selected["default_effort"])
+        if selected and selected.get("default_effort")
+        else None
+    )
+    return selected_model, selected_effort
+
+
 def _codex() -> dict[str, Any]:
     models = []
     if shutil.which("codex"):

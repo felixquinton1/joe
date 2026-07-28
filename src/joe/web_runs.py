@@ -136,8 +136,6 @@ class RunManager:
                 remote_access,
                 project_execution_mode,
             ) = self._project_scope(run.conversation_id)
-            if not execution_mode and _operational_validation(run.request):
-                execution_mode = project_execution_mode or None
             orchestrator = Orchestrator(
                 workspace,
                 additional_roots=additional_roots,
@@ -157,8 +155,12 @@ class RunManager:
             )
             route = decision.route
             quota_admission = decision.quota_admission
-            if route.mode is Mode.CONSENSUS:
-                execution_mode = None
+            execution_mode = _resolve_execution_mode(
+                execution_mode,
+                project_execution_mode,
+                route,
+                run.request,
+            )
             run.track_changes = (
                 (
                     route.intent is Intent.MODIFY
@@ -671,6 +673,21 @@ def _write_enabled(execution_mode: str | None) -> bool:
         "auto_edit",
         "modify",
     }
+
+
+def _resolve_execution_mode(
+    explicit: str | None,
+    project_default: str | None,
+    route: Route,
+    request: str,
+) -> str | None:
+    if route.mode is Mode.CONSENSUS:
+        return None
+    if explicit:
+        return explicit
+    if route.intent is Intent.MODIFY or _operational_validation(request):
+        return project_default or None
+    return None
 
 
 def _operational_validation(request: str) -> bool:

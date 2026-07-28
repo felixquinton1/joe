@@ -19,6 +19,7 @@ _ASSETS = {
     "/app_usage.js": ("app_usage.js", "text/javascript; charset=utf-8"),
     "/app_conversations.js": ("app_conversations.js", "text/javascript; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+    "/joe-mark.svg": ("joe-mark.svg", "image/svg+xml"),
 }
 
 

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
+from .capabilities import provider_defaults
 from .memory import ProjectMemory
 from .models import Intent, Mode, ProviderResult, Route
 from .orchestrator_workflows import (
@@ -181,8 +182,11 @@ class Orchestrator:
             if name in seen or name not in self.providers or name in (exclude or set()):
                 continue
             seen.add(name)
-            selected_model = model if name == provider_name else None
-            selected_effort = effort if name == provider_name else None
+            selected_model, selected_effort = provider_defaults(
+                name,
+                model if name == provider_name else None,
+                effort if name == provider_name else None,
+            )
             if on_event:
                 version_reader = getattr(
                     self.providers[name], "cli_version", None
@@ -191,8 +195,8 @@ class Orchestrator:
                     {
                         "type": "provider_start",
                         "provider": name,
-                        "model": selected_model or "défaut fournisseur",
-                        "effort": selected_effort or "défaut",
+                        "model": selected_model or "non exposé",
+                        "effort": selected_effort or "défaut fournisseur",
                         "cli_version": (
                             version_reader() if callable(version_reader) else None
                         ),

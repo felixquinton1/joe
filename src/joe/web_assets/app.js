@@ -1,4 +1,4 @@
-const APP_VERSION = "0.21.1";
+const APP_VERSION = "0.21.2";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -340,6 +340,15 @@ function setSummaryPending(finalBubble, pending) {
   );
 }
 
+function updateWorkflowProviderMetadata(provider, metadata) {
+  for (const stage of document.querySelectorAll(".workflow-stage.running")) {
+    const status = stage.querySelector("summary b");
+    if (status?.textContent.toLowerCase().startsWith(provider)) {
+      status.textContent = `${capitalize(provider)} · ${metadata} · en cours`;
+    }
+  }
+}
+
 ({
   loadUsage,
   showQuotaNotice,
@@ -440,7 +449,10 @@ function handleEvent(conversationId, event, finalBubble) {
     row.className = "activity-row provider-metadata";
     row.innerHTML = `<i></i><div><strong>${escapeHtml(capitalize(event.provider))}</strong><span>${escapeHtml(metadata)}</span></div>`;
     agent.activity.appendChild(row);
-    if (!structuredWorkflow) finalBubble.textContent = `${capitalize(event.provider)} démarre…`;
+    updateWorkflowProviderMetadata(event.provider, metadata);
+    if (!structuredWorkflow) {
+      finalBubble.textContent = `${capitalize(event.provider)} · ${metadata}\nDémarrage…`;
+    }
   } else if (event.type === "activity") {
     const agent = ensureAgent(event.provider);
     agent.status.textContent = event.label;

@@ -15,6 +15,7 @@ from joe.web import (
     build_quota_notice,
 )
 from joe.http_utils import MAX_JSON_BODY_BYTES, validate_bind
+from joe.web_runs import _resolve_execution_mode
 
 
 def start_server(tmp_path):
@@ -147,6 +148,14 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b'id="toggle-history"' in page
         assert b'id="toggle-activity"' in page
         assert b'src="/markdown.js"' in page
+        assert b'src="/joe-mark.svg"' in page
+
+        connection.request("GET", "/joe-mark.svg")
+        response = connection.getresponse()
+        logo = response.read()
+        assert response.status == 200
+        assert response.getheader("Content-Type") == "image/svg+xml"
+        assert b"<svg" in logo
 
         connection.request("GET", "/app.js")
         response = connection.getresponse()
@@ -270,6 +279,34 @@ def test_only_explicit_operational_checks_use_project_validation_permission():
     )
     assert _operational_validation("git fetch puis vérifie origin/main")
     assert not _operational_validation("Explique-moi l’architecture de Joe")
+
+
+def test_project_write_default_applies_to_modify_routes():
+    route = Route(Intent.MODIFY, Mode.FAST, "codex")
+
+    assert _resolve_execution_mode(
+        None,
+        "danger-full-access",
+        route,
+        "Ajoute le logo",
+    ) == "danger-full-access"
+    assert _resolve_execution_mode(
+        "read-only",
+        "danger-full-access",
+        route,
+        "Ajoute le logo",
+    ) == "read-only"
+
+
+def test_consensus_remains_read_only_despite_project_default():
+    route = Route(Intent.MODIFY, Mode.CONSENSUS, "codex")
+
+    assert _resolve_execution_mode(
+        None,
+        "danger-full-access",
+        route,
+        "Décide de l’architecture",
+    ) is None
 
 
 def test_pending_run_state_is_persisted_atomically(tmp_path, monkeypatch):
