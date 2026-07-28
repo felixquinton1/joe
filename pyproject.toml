@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "joe-orchestrator"
-version = "0.15.2"
+version = "0.16.0"
 description = "Lightweight local multi-AI CLI orchestrator"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = ["pexpect>=4.8"]
 
 [project.scripts]
 joe = "joe.cli:main"

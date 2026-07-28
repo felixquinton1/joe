@@ -1,14 +1,18 @@
 from pathlib import Path
+import time
 
 from joe.models import Intent, Mode, ProviderResult, Route
 from joe.orchestrator import Orchestrator
 
 
 class FakeProvider:
-    def __init__(self, name: str, *, fail: bool = False, responses=None):
+    def __init__(
+        self, name: str, *, fail: bool = False, responses=None, delay: float = 0
+    ):
         self.name = name
         self.fail = fail
         self.responses = list(responses or [])
+        self.delay = delay
         self.calls = []
 
     def run(
@@ -16,6 +20,7 @@ class FakeProvider:
         execution_mode=None, cancel_event=None, on_stream=None
     ):
         self.calls.append((prompt, cwd, intent, timeout))
+        time.sleep(self.delay)
         if on_stream and not self.fail:
             on_stream("stdout", f"{self.name} response\n")
         response = self.responses.pop(0) if self.responses else f"{self.name} response"
@@ -146,6 +151,24 @@ def test_consensus_emits_structured_completed_opinions(tmp_path):
         for event in completed
         if event["stage"] != "synthesis"
     )
+
+
+def test_consensus_runs_proposals_and_reviews_in_parallel(tmp_path):
+    providers = {
+        "codex": FakeProvider("codex", delay=0.12),
+        "claude": FakeProvider("claude", delay=0.12),
+        "gemini": FakeProvider("gemini"),
+        "copilot": FakeProvider("copilot"),
+    }
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    started = time.monotonic()
+    orchestrator.execute(
+        "important",
+        Route(Intent.ANALYZE, Mode.CONSENSUS, "codex"),
+    )
+
+    assert time.monotonic() - started < 0.4
 
 
 def test_health_check_skips_project_context_and_uses_short_timeout(tmp_path):

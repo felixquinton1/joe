@@ -1,7 +1,10 @@
 import json
+from datetime import datetime
 
 from joe.usage import (
     _claude_status,
+    _gemini_status,
+    _parse_claude_usage_screen,
     cached_usage_status,
     normalize_codex_usage,
 )
@@ -136,3 +139,38 @@ def test_claude_status_rejects_cache_older_than_six_hours(tmp_path, monkeypatch)
 
     assert status["available"] is False
     assert "trop anciennes" in status["message"]
+
+
+def test_parse_claude_usage_screen_returns_live_windows():
+    status = _parse_claude_usage_screen(
+        """
+        Current session
+        13% used
+        Resets 2:19pm (Europe/Paris)
+        Current week (all models)
+        15% used
+        Resets Aug 2, 2:59pm (Europe/Paris)
+        """,
+        now=datetime.fromisoformat("2026-07-28T12:00:00+02:00"),
+    )
+
+    assert status is not None
+    assert status["stale"] is False
+    assert status["windows"][0]["remaining_percent"] == 87
+    assert status["windows"][1]["remaining_percent"] == 85
+    assert all(window["resets_at"] for window in status["windows"])
+
+
+def test_gemini_status_explains_api_key_quota(tmp_path):
+    usage_path = tmp_path / "usage.json"
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text(
+        json.dumps(
+            {"security": {"auth": {"selectedType": "gemini-api-key"}}}
+        )
+    )
+
+    status = _gemini_status(usage_path, settings_path)
+
+    assert status["metrics"][0]["value"] == "Clé API · variable par modèle/offre"
+    assert "réserve globale de tokens" in status["message"]

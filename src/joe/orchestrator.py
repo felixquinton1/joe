@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -284,29 +285,42 @@ class Orchestrator:
             on_event, "consensus", "proposal_codex", "codex",
             "Proposition indépendante", "running",
         )
-        codex = self._run_with_fallback(
-            "codex", proposal_prompt, Intent.ANALYZE, results,
-            model=model if selected_provider == "codex" else None,
-            effort=effort if selected_provider == "codex" else None,
-            execution_mode=execution_mode if selected_provider == "codex" else None,
-            on_event=on_event,
-            cancel_event=cancel_event,
-        )
-        self._workflow_event(
-            on_event, "consensus", "proposal_codex", codex.provider,
-            "Proposition indépendante", "complete", codex.stdout,
-        )
         self._workflow_event(
             on_event, "consensus", "proposal_claude", "claude",
             "Proposition indépendante", "running",
         )
-        claude = self._run_with_fallback(
-            "claude", proposal_prompt, Intent.ANALYZE, results, {codex.provider},
-            model=model if selected_provider == "claude" else None,
-            effort=effort if selected_provider == "claude" else None,
-            execution_mode=execution_mode if selected_provider == "claude" else None,
-            on_event=on_event,
-            cancel_event=cancel_event,
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            codex_future = executor.submit(
+                self._isolated_run,
+                "codex",
+                proposal_prompt,
+                Intent.ANALYZE,
+                {"claude"},
+                model if selected_provider == "codex" else None,
+                effort if selected_provider == "codex" else None,
+                execution_mode if selected_provider == "codex" else None,
+                cancel_event,
+                on_event,
+            )
+            claude_future = executor.submit(
+                self._isolated_run,
+                "claude",
+                proposal_prompt,
+                Intent.ANALYZE,
+                {"codex"},
+                model if selected_provider == "claude" else None,
+                effort if selected_provider == "claude" else None,
+                execution_mode if selected_provider == "claude" else None,
+                cancel_event,
+                on_event,
+            )
+            codex, codex_results = codex_future.result()
+            claude, claude_results = claude_future.result()
+        results.extend(codex_results)
+        results.extend(claude_results)
+        self._workflow_event(
+            on_event, "consensus", "proposal_codex", codex.provider,
+            "Proposition indépendante", "complete", codex.stdout,
         )
         self._workflow_event(
             on_event, "consensus", "proposal_claude", claude.provider,
@@ -316,32 +330,43 @@ class Orchestrator:
             on_event, "consensus", "review_codex", "codex",
             "Examen de la proposition de Claude", "running",
         )
-        codex_review = self._run_with_fallback(
-            "codex",
-            self._review_prompt(context, claude.stdout),
-            Intent.ANALYZE,
-            results,
-            {claude.provider},
-            on_event=on_event,
-            cancel_event=cancel_event,
-        )
-        self._workflow_event(
-            on_event, "consensus", "review_codex", codex_review.provider,
-            "Examen de la proposition de Claude", "complete",
-            codex_review.stdout,
-        )
         self._workflow_event(
             on_event, "consensus", "review_claude", "claude",
             "Examen de la proposition de Codex", "running",
         )
-        claude_review = self._run_with_fallback(
-            "claude",
-            self._review_prompt(context, codex.stdout),
-            Intent.ANALYZE,
-            results,
-            {codex.provider},
-            on_event=on_event,
-            cancel_event=cancel_event,
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            codex_review_future = executor.submit(
+                self._isolated_run,
+                "codex",
+                self._review_prompt(context, claude.stdout),
+                Intent.ANALYZE,
+                {"claude"},
+                None,
+                None,
+                None,
+                cancel_event,
+                on_event,
+            )
+            claude_review_future = executor.submit(
+                self._isolated_run,
+                "claude",
+                self._review_prompt(context, codex.stdout),
+                Intent.ANALYZE,
+                {"codex"},
+                None,
+                None,
+                None,
+                cancel_event,
+                on_event,
+            )
+            codex_review, codex_review_results = codex_review_future.result()
+            claude_review, claude_review_results = claude_review_future.result()
+        results.extend(codex_review_results)
+        results.extend(claude_review_results)
+        self._workflow_event(
+            on_event, "consensus", "review_codex", codex_review.provider,
+            "Examen de la proposition de Claude", "complete",
+            codex_review.stdout,
         )
         self._workflow_event(
             on_event, "consensus", "review_claude", claude_review.provider,
@@ -378,6 +403,33 @@ class Orchestrator:
             "Synthèse du consensus", "complete",
         )
         return synthesis.stdout.strip(), synthesis.provider
+
+    def _isolated_run(
+        self,
+        provider: str,
+        prompt: str,
+        intent: Intent,
+        exclude: set[str],
+        model: str | None,
+        effort: str | None,
+        execution_mode: str | None,
+        cancel_event: threading.Event | None,
+        on_event: Callable[[dict], None] | None,
+    ) -> tuple[ProviderResult, list[ProviderResult]]:
+        local_results: list[ProviderResult] = []
+        result = self._run_with_fallback(
+            provider,
+            prompt,
+            intent,
+            local_results,
+            exclude,
+            model=model,
+            effort=effort,
+            execution_mode=execution_mode,
+            cancel_event=cancel_event,
+            on_event=on_event,
+        )
+        return result, local_results
 
     @staticmethod
     def _review_prompt(context: str, candidate: str) -> str:

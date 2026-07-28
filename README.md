@@ -28,8 +28,9 @@ executable are named Joe.
 - FAST makes one provider call unless that provider fails.
 - REVIEW makes one primary call and one read-only review call, followed by at
   most one justified correction pass.
-- CONSENSUS makes two independent read-only proposals, two cross-reviews, and
-  one synthesis. It never edits the repository.
+- CONSENSUS runs two independent read-only proposals in parallel, then the two
+  cross-reviews in parallel, and finally one synthesis. It never edits the
+  repository.
 - Full stdout/stderr live under `.agentflow/runs/`; active memory is rewritten
   with bounded content.
 
@@ -66,11 +67,14 @@ popover when the provider CLI exposes them, provides stable
 agent/workflow/model/effort/permission controls,
 and loads the latest 100 run logs from the project's `.agentflow/runs/` folder.
 Joe never estimates missing quotas: unsupported providers are marked clearly.
-Gemini headless runs expose per-model token and request statistics but not the
-global remaining percentage. Joe records those local statistics under
+Gemini headless runs expose per-model token and request statistics but no
+single global token allowance: quotas depend on the model, authentication, and
+subscription, and are generally expressed as request limits. Joe records its
+local statistics under
 `$XDG_DATA_HOME/joe/gemini_usage.json` and displays today's Joe consumption,
-last call, and models used. The exact global snapshot remains available through
-`/stats model` in an interactive Gemini CLI session.
+last call, models used, and the detected authentication category. The detailed
+quota snapshot remains available through `/stats model` in an interactive
+Gemini CLI session.
 Automatic FAST routing remains task-first, then balances Codex and Claude when
 the preferred provider has 20% or less remaining and its reset is at least 24
 hours away. Short five-hour windows therefore remain useful instead of being
@@ -87,8 +91,9 @@ minimal: Joe omits project and conversation context, selects Gemini Flash,
 forbids tools, and stops after 30 seconds. A Gemini `429 RESOURCE_EXHAUSTED`
 stops immediately instead of waiting through CLI backoff retries, and the test
 does not silently fall back to another provider.
-Claude routing uses the official local cache refreshed by `/usage`; Joe does
-not send `/usage` as a paid non-interactive model prompt.
+Claude routing uses the official local cache refreshed by `/usage`. Clicking
+the quota refresh button opens a short-lived Claude terminal session and runs
+`/usage` automatically; normal page loading continues to use the cache.
 For requests that are moderately complex, Joe dynamically selects the first
 current Codex/Claude model exposed by the installed CLI and uses `high`
 reasoning effort. Explicit model and effort choices always take precedence.
@@ -98,9 +103,9 @@ treated as an implementation order merely because it mentions modifying code.
 Large implementation requests are routed to REVIEW automatically: the primary
 agent implements, the other agent audits without editing, and the primary gets
 at most one correction pass when the reviewer explicitly reports justified
-issues. During CONSENSUS, Joe shows each completed proposal and cross-review in
-a structured progress panel; only the final synthesis is posted as Joe's global
-answer.
+issues. During CONSENSUS, Joe shows the two proposals and then the two
+cross-reviews progressing concurrently in a structured panel; only the final
+synthesis is posted as Joe's global answer.
 If a provider reaches a limit during a run, Joe adds a visible notice with the
 known reset windows (including model-specific Claude windows when exposed) and
 the installed fallback providers/models it will try automatically. A model

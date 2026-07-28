@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import selectors
 import subprocess
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+
+import pexpect
 
 from .models import Mode, Route
 
@@ -29,7 +32,7 @@ def usage_status(force: bool = False) -> list[dict[str, Any]]:
             return _cache[1]
     fresh = [
         _codex_status(),
-        _claude_status(),
+        _refresh_claude_status() if force else _claude_status(),
         _gemini_status(),
         _unavailable(
             "copilot",
@@ -137,8 +140,13 @@ def _gemini_usage_path() -> Path:
     return data_home / "joe" / "gemini_usage.json"
 
 
-def _gemini_status(path: Path | None = None) -> dict[str, Any]:
+def _gemini_status(
+    path: Path | None = None,
+    settings_path: Path | None = None,
+) -> dict[str, Any]:
     target = path or _gemini_usage_path()
+    auth_type = _gemini_auth_type(settings_path)
+    quota_description = _gemini_quota_description(auth_type)
     try:
         payload = json.loads(target.read_text())
     except (OSError, json.JSONDecodeError):
@@ -147,9 +155,9 @@ def _gemini_status(path: Path | None = None) -> dict[str, Any]:
             "available": True,
             "plan": None,
             "windows": [],
-            "metrics": [],
+            "metrics": [{"name": "Quota", "value": quota_description}],
             "message": (
-                "Aucun appel Joe mesuré · quota global via /stats model dans Gemini"
+                "Aucun appel Joe mesuré · pas de réserve globale de tokens exposée"
             ),
         }
     day = datetime.now().date().isoformat()
@@ -166,6 +174,7 @@ def _gemini_status(path: Path | None = None) -> dict[str, Any]:
         "metrics": [
             {"name": "Tokens aujourd’hui", "value": f"{current['tokens']:,}"},
             {"name": "Requêtes aujourd’hui", "value": str(current["requests"])},
+            {"name": "Quota", "value": quota_description},
             {"name": "Modèles utilisés", "value": models},
             {
                 "name": "Dernier appel",
@@ -176,8 +185,29 @@ def _gemini_status(path: Path | None = None) -> dict[str, Any]:
                 ),
             },
         ],
-        "message": "Quota global restant : /stats model dans Gemini",
+        "message": (
+            "Consommation Joe uniquement · Gemini limite surtout les requêtes "
+            "selon le modèle et l’offre · détail via /stats model"
+        ),
     }
+
+
+def _gemini_auth_type(path: Path | None = None) -> str | None:
+    target = path or Path.home() / ".gemini" / "settings.json"
+    try:
+        payload = json.loads(target.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    selected = payload.get("security", {}).get("auth", {}).get("selectedType")
+    return str(selected) if selected else None
+
+
+def _gemini_quota_description(auth_type: str | None) -> str:
+    if auth_type == "gemini-api-key":
+        return "Clé API · variable par modèle/offre"
+    if auth_type:
+        return "Compte Google · plafond en requêtes"
+    return "Limites variables par modèle/offre"
 
 
 def _with_last_available(status: dict[str, Any]) -> dict[str, Any]:
@@ -306,6 +336,129 @@ def _claude_status(path: Path | None = None) -> dict[str, Any]:
     }
 
 
+def _refresh_claude_status(timeout: int = 18) -> dict[str, Any]:
+    output = ""
+    child = None
+    try:
+        env = os.environ.copy()
+        env["DISABLE_AUTOUPDATER"] = "1"
+        child = pexpect.spawn(
+            "claude",
+            ["--ax-screen-reader", "--permission-mode", "plan"],
+            env=env,
+            encoding="utf-8",
+            timeout=timeout,
+        )
+        child.expect("/effort")
+        child.send("/usage\r")
+        child.expect("Current session")
+        output = child.before + child.after
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            try:
+                output += child.read_nonblocking(8192, 0.5)
+            except pexpect.TIMEOUT:
+                continue
+            except pexpect.EOF:
+                break
+    except (OSError, pexpect.ExceptionPexpect):
+        output = ""
+    finally:
+        if child is not None:
+            if child.isalive():
+                child.sendcontrol("c")
+            child.close(force=True)
+    live = _parse_claude_usage_screen(output)
+    if live:
+        return live
+    fallback = _claude_status()
+    fallback["message"] = (
+        "Actualisation /usage indisponible · dernière mesure locale"
+        if fallback.get("available")
+        else "Actualisation /usage Claude indisponible"
+    )
+    fallback["stale"] = True
+    return fallback
+
+
+def _parse_claude_usage_screen(
+    output: str,
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any] | None:
+    text = _strip_terminal_codes(output)
+    current = now or datetime.now().astimezone()
+    patterns = (
+        ("5 heures", r"Current session\s+(\d+(?:\.\d+)?)%.*?used\s+Resets ([^\r\n]+)", 300),
+        (
+            "7 jours",
+            r"Current week \(all models\)\s+(\d+(?:\.\d+)?)%.*?used\s+Resets ([^\r\n]+)",
+            10080,
+        ),
+    )
+    windows = []
+    for name, pattern, duration in patterns:
+        match = re.search(pattern, text, re.DOTALL)
+        if not match:
+            continue
+        used = max(0.0, min(100.0, float(match.group(1))))
+        windows.append(
+            {
+                "name": name,
+                "used_percent": round(used, 1),
+                "remaining_percent": round(100 - used, 1),
+                "resets_at": _claude_reset_timestamp(match.group(2), current),
+                "duration_minutes": duration,
+            }
+        )
+    if not windows:
+        return None
+    return {
+        "provider": "claude",
+        "available": True,
+        "stale": False,
+        "plan": None,
+        "windows": windows,
+        "message": "Actualisé via /usage Claude",
+    }
+
+
+def _strip_terminal_codes(value: str) -> str:
+    value = re.sub(r"\x1b\][^\x07]*(?:\x07|\x1b\\)", "", value)
+    return re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", value)
+
+
+def _claude_reset_timestamp(value: str, now: datetime) -> float | None:
+    cleaned = re.sub(r"\s*\([^)]*\)\s*$", "", value).strip().replace(" ", "")
+    for pattern in ("%I:%M%p", "%b%d,%I:%M%p"):
+        try:
+            parsed = datetime.strptime(cleaned, pattern)
+        except ValueError:
+            continue
+        if pattern == "%I:%M%p":
+            target = now.replace(
+                hour=parsed.hour,
+                minute=parsed.minute,
+                second=0,
+                microsecond=0,
+            )
+            if target <= now:
+                target += timedelta(days=1)
+        else:
+            target = now.replace(
+                month=parsed.month,
+                day=parsed.day,
+                hour=parsed.hour,
+                minute=parsed.minute,
+                second=0,
+                microsecond=0,
+            )
+            if target < now - timedelta(days=2):
+                target = target.replace(year=target.year + 1)
+        return target.timestamp()
+    return None
+
+
 def _iso_timestamp(value: Any) -> float | None:
     if not isinstance(value, str):
         return None
@@ -322,7 +475,7 @@ def _codex_status() -> dict[str, Any]:
         "id": 1,
         "method": "initialize",
         "params": {
-            "clientInfo": {"name": "joe", "version": "0.15.2"},
+            "clientInfo": {"name": "joe", "version": "0.16.0"},
             "capabilities": {"experimentalApi": True},
         },
     }
