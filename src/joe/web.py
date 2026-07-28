@@ -43,6 +43,7 @@ class LiveRun:
     cancel_event: threading.Event = field(default_factory=threading.Event)
     condition: threading.Condition = field(default_factory=threading.Condition)
     git_before: GitSnapshot | None = None
+    track_changes: bool = False
 
     def emit(self, event: dict[str, Any]) -> None:
         with self.condition:
@@ -148,6 +149,13 @@ class RunManager:
             )
             if not agent:
                 route = balance_route(route, cached_usage_status())
+            run.track_changes = (
+                (
+                    route.intent is Intent.MODIFY
+                    and route.mode is not Mode.CONSENSUS
+                )
+                or _write_enabled(execution_mode)
+            )
             if _complex_request(run.request, route):
                 effort = effort or "high"
                 model = model or _latest_model(route.primary)
@@ -282,6 +290,11 @@ class RunManager:
         )
 
     def _capture_git_report(self, run: LiveRun) -> dict[str, Any]:
+        if not run.track_changes:
+            return {
+                "available": False,
+                "reason": "Requête exécutée en lecture seule",
+            }
         try:
             concurrent_run = any(
                 other.run_id != run.run_id and not other.done
@@ -570,6 +583,16 @@ def _existing_directory(value: Any) -> Path | None:
         return None
     path = Path(str(value)).expanduser().resolve()
     return path if path.is_dir() else None
+
+
+def _write_enabled(execution_mode: str | None) -> bool:
+    return execution_mode in {
+        "workspace-write",
+        "danger-full-access",
+        "acceptEdits",
+        "auto_edit",
+        "modify",
+    }
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:

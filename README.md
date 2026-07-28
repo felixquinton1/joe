@@ -119,6 +119,9 @@ switch within the same provider is not presented as a way around a shared
 quota.
 Native JSON streams expose observable progress such as commands, tools, and
 files read or changed; Joe does not expose private chain-of-thought.
+Repository change cards are generated only for modifying requests or an
+explicitly write-enabled execution. Read-only answers and analyses ignore
+unrelated edits made concurrently by another terminal or agent.
 Final answers are rendered locally as safe Markdown, including headings,
 tables, lists, links, inline code, and fenced code blocks.
 

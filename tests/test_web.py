@@ -261,6 +261,25 @@ def test_background_compaction_saves_successful_gemini_summary(
     assert conversation["id"] not in manager.compacting
 
 
+def test_read_only_run_ignores_unrelated_repository_changes(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(RunManager, "_recover_pending", lambda self: None)
+    monkeypatch.setattr(
+        "joe.web.build_report",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("Git diff must not be inspected")
+        ),
+    )
+    manager = RunManager(tmp_path)
+    run = LiveRun("answer", "simple question", "conversation")
+
+    report = manager._capture_git_report(run)
+
+    assert report["available"] is False
+    assert "lecture seule" in report["reason"]
+
+
 def test_long_fast_answer_does_not_enable_high_effort():
     route = Route(Intent.ANSWER, Mode.FAST, "codex")
     request = "Est-ce que je peux modifier Joe depuis ici ? " * 20
