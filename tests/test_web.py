@@ -164,6 +164,8 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b"loadActiveRuns" in script
         assert b"setSummaryPending" in script
         assert b"event.cli_version" not in script
+        assert b"updateWorkflowFallback" in script
+        assert b"fallback_from" in script
 
         connection.request("GET", "/style.css")
         response = connection.getresponse()

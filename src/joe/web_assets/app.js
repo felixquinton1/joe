@@ -1,4 +1,4 @@
-const APP_VERSION = "0.21.7";
+const APP_VERSION = "0.21.8";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -324,7 +324,13 @@ function renderWorkflowUpdate(event, finalBubble, runId) {
   stage.classList.toggle("complete", complete);
   stage.classList.toggle("failed", failed);
   stage.classList.toggle("running", !complete && !failed);
-  stage.innerHTML = `<summary><span>${escapeHtml(event.label)}</span><b>${escapeHtml(capitalize(event.provider))} · ${complete ? "terminé" : failed ? "échec" : "en cours"}</b></summary><div class="workflow-opinion"></div>`;
+  const providerDetails = [
+    capitalize(event.provider),
+    event.model || "",
+    event.effort ? `effort ${event.effort}` : "",
+    event.fallback_from ? `relais de ${capitalize(event.fallback_from)}` : ""
+  ].filter(Boolean).join(" · ");
+  stage.innerHTML = `<summary><span>${escapeHtml(event.label)}</span><b>${escapeHtml(providerDetails)} · ${complete ? "terminé" : failed ? "échec" : "en cours"}</b></summary><div class="workflow-opinion"></div>`;
   if ((complete || failed) && event.content) {
     renderMarkdown(stage.querySelector(".workflow-opinion"), event.content);
     stage.querySelector("summary").appendChild(
@@ -344,8 +350,20 @@ function updateWorkflowProviderMetadata(provider, metadata) {
   for (const stage of document.querySelectorAll(".workflow-stage.running")) {
     const status = stage.querySelector("summary b");
     if (status?.textContent.toLowerCase().startsWith(provider)) {
-      status.textContent = `${capitalize(provider)} · ${metadata} · en cours`;
+      const relay = stage.dataset.fallbackFrom
+        ? ` · relais de ${capitalize(stage.dataset.fallbackFrom)}`
+        : "";
+      status.textContent = `${capitalize(provider)} · ${metadata}${relay} · en cours`;
     }
+  }
+}
+
+function updateWorkflowFallback(provider, fallback) {
+  for (const stage of document.querySelectorAll(".workflow-stage.running")) {
+    const status = stage.querySelector("summary b");
+    if (!status?.textContent.toLowerCase().startsWith(provider)) continue;
+    stage.dataset.fallbackFrom = provider;
+    status.textContent = `${capitalize(fallback)} · relais de ${capitalize(provider)} · en cours`;
   }
 }
 
@@ -391,7 +409,39 @@ function handleEvent(conversationId, event, finalBubble) {
   const activeRun = state.runs.get(conversationId);
   if (event.type === "route" && activeRun) activeRun.mode = event.mode;
   if (event.type === "workflow_update" && activeRun) {
+    event = {
+      ...(activeRun.workflow.get(event.stage) || {}),
+      ...event
+    };
     activeRun.workflow.set(event.stage, event);
+  }
+  if (event.type === "provider_fallback" && activeRun) {
+    for (const [stage, workflowEvent] of activeRun.workflow) {
+      if (
+        workflowEvent.status === "running"
+        && workflowEvent.provider === event.provider
+      ) {
+        activeRun.workflow.set(stage, {
+          ...workflowEvent,
+          provider: event.fallback,
+          fallback_from: event.provider
+        });
+      }
+    }
+  }
+  if (event.type === "provider_start" && activeRun) {
+    for (const [stage, workflowEvent] of activeRun.workflow) {
+      if (
+        workflowEvent.status === "running"
+        && workflowEvent.provider === event.provider
+      ) {
+        activeRun.workflow.set(stage, {
+          ...workflowEvent,
+          model: event.model,
+          effort: event.effort
+        });
+      }
+    }
   }
   if (conversationId !== state.activeConversationId) {
     const panel = state.panels.get(conversationId);
@@ -486,6 +536,7 @@ function handleEvent(conversationId, event, finalBubble) {
       : `Indisponible · relais ${capitalize(event.fallback)}`;
     const fallback = ensureAgent(event.fallback);
     fallback.status.textContent = `Relais de ${capitalize(event.provider)}`;
+    updateWorkflowFallback(event.provider, event.fallback);
   } else if (event.type === "quota_admission") {
     finalBubble.textContent += `\n${event.message}`;
   } else if (event.type === "evidence") {
