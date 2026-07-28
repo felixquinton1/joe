@@ -1,4 +1,4 @@
-const APP_VERSION = "0.21.0";
+const APP_VERSION = "0.21.1";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -30,127 +30,9 @@ async function loadCapabilities() {
   updateCapabilityMenus();
 }
 
-async function loadUsage(force = false) {
-  const button = $("refresh-usage");
-  if (force) {
-    button.disabled = true;
-    button.classList.add("refreshing");
-  }
-  try {
-    const response = await fetch(`/api/usage${force ? "?force=1" : ""}`);
-    if (!response.ok) throw new Error("Quotas indisponibles");
-    state.usage = await response.json();
-    renderUsage();
-  } finally {
-    if (force) {
-      button.disabled = false;
-      button.classList.remove("refreshing");
-    }
-  }
-}
-
-function renderUsage() {
-  const target = $("usage");
-  target.replaceChildren();
-  for (const provider of state.usage) {
-    const card = document.createElement("article");
-    card.className = `usage-card ${provider.available ? "" : "unavailable"} ${provider.stale ? "stale" : ""}`;
-    const plan = provider.plan ? `<span>${escapeHtml(provider.plan)}</span>` : "";
-    card.innerHTML = `<header><strong>${escapeHtml(provider.provider)}</strong>${plan}</header>`;
-    if (!provider.available) {
-      const message = document.createElement("p");
-      message.textContent = provider.message;
-      card.appendChild(message);
-    } else {
-      for (const window of provider.windows) card.appendChild(usageWindow(window));
-      for (const metric of provider.metrics || []) {
-        const row = document.createElement("div");
-        row.className = "usage-metric";
-        row.innerHTML = `<span>${escapeHtml(metric.name)}</span><strong>${escapeHtml(metric.value)}</strong>`;
-        card.appendChild(row);
-      }
-      if (provider.message) {
-        const message = document.createElement("p");
-        message.textContent = provider.message;
-        card.appendChild(message);
-      }
-    }
-    target.appendChild(card);
-  }
-  updateCountdowns();
-}
-
-function usageWindow(window) {
-  const row = document.createElement("div");
-  row.className = "usage-window";
-  const remaining = Number(window.remaining_percent);
-  row.innerHTML = `
-    <div class="usage-line"><span>${escapeHtml(window.name)}</span><strong>${formatPercent(remaining)} restant</strong></div>
-    <div class="usage-bar"><i style="width:${Math.max(0, Math.min(100, remaining))}%"></i></div>
-    <small class="countdown" data-reset="${window.resets_at || ""}"></small>`;
-  return row;
-}
-
-function formatPercent(value) {
-  return `${Number.isInteger(value) ? value : value.toFixed(1)} %`;
-}
-
-function updateCountdowns() {
-  for (const node of document.querySelectorAll(".countdown")) {
-    const reset = Number(node.dataset.reset);
-    if (!reset) {
-      node.textContent = "Réinitialisation non communiquée";
-      continue;
-    }
-    const seconds = Math.max(0, reset - Date.now() / 1000);
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    node.textContent = seconds <= 0
-      ? "Réinitialisation imminente"
-      : `Reset dans ${days ? `${days} j ` : ""}${hours ? `${hours} h ` : ""}${minutes} min`;
-  }
-}
-
-function resetDescription(timestamp) {
-  const reset = Number(timestamp);
-  if (!reset) return "heure de retour non exposée";
-  const seconds = Math.max(0, reset - Date.now() / 1000);
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const remaining = seconds <= 0
-    ? "réinitialisation imminente"
-    : `dans ${days ? `${days} j ` : ""}${hours ? `${hours} h ` : ""}${minutes} min`;
-  const date = new Date(reset * 1000).toLocaleString("fr-FR", {
-    dateStyle: "short",
-    timeStyle: "short"
-  });
-  return `${remaining} (${date})`;
-}
-
-function showQuotaNotice(event) {
-  const bubble = addMessage("Joe · limite atteinte", "", "notice");
-  const lines = [`${capitalize(event.provider)} a atteint une limite d’utilisation.`];
-  if (event.windows?.length) {
-    for (const window of event.windows) {
-      lines.push(`• ${window.name} : ${resetDescription(window.resets_at)}`);
-    }
-  } else {
-    lines.push(`• ${event.usage_message || "Heure de retour non exposée par la CLI."}`);
-  }
-  if (event.alternatives?.length) {
-    const choices = event.alternatives.map(item => {
-      const models = item.models?.length ? ` (${item.models.join(", ")})` : "";
-      return `${capitalize(item.provider)}${models}`;
-    });
-    lines.push(`Joe essaie automatiquement : ${choices.join(" → ")}.`);
-  } else {
-    lines.push("Aucun autre fournisseur configuré n’est actuellement disponible.");
-  }
-  lines.push("Changer de modèle chez le même fournisseur ne contourne généralement pas une limite partagée.");
-  bubble.textContent = lines.join("\n");
-}
+let loadUsage;
+let showQuotaNotice;
+let updateCountdowns;
 
 function shortCommit(value) {
   return value ? value.slice(0, 8) : "indisponible";
@@ -336,412 +218,17 @@ function addOptions(select, items) {
   }
 }
 
-async function loadConversations(selectFirst = true) {
-  [state.conversations, state.projects] = await Promise.all([
-    fetch("/api/conversations").then(response => response.json()),
-    fetch("/api/projects").then(response => response.json())
-  ]);
-  if (!state.conversations.length) {
-    const created = await createConversation(false);
-    state.conversations = [created];
-  }
-  renderConversations();
-  if (selectFirst && !state.activeConversationId) {
-    await selectConversation(state.conversations[0].id);
-  }
-}
-
-function renderConversations() {
-  const target = $("conversations");
-  target.replaceChildren();
-  for (const project of state.projects) {
-    const group = document.createElement("section");
-    group.className = `project-group ${project.collapsed ? "collapsed" : ""}`;
-    group.dataset.projectId = project.id;
-    const header = document.createElement("div");
-    header.className = "project-group-head";
-    const projectDrag = smallButton("⋮⋮", "Déplacer le projet", () => {});
-    projectDrag.classList.add("drag-handle");
-    projectDrag.draggable = true;
-    projectDrag.ondragstart = event => beginDrag(event, "project", project.id);
-    header.appendChild(projectDrag);
-    const projectName = document.createElement("strong");
-    projectName.textContent = project.name;
-    header.appendChild(projectName);
-    const projectActions = document.createElement("div");
-    const collapse = smallButton(
-      project.collapsed ? "▸" : "▾",
-      project.collapsed ? "Déplier les conversations" : "Replier les conversations",
-      () => toggleProjectCollapsed(project)
-    );
-    const editProject = smallButton("⚙", "Modifier le contexte du sous-projet", () => openProject(project));
-    const addConversation = smallButton("＋", "Nouvelle conversation dans ce sous-projet", () => createConversation(true, project.id));
-    projectActions.append(collapse, editProject, addConversation);
-    header.appendChild(projectActions);
-    header.ondragover = allowDrop;
-    header.ondrop = event => dropOnProject(event, project.id);
-    group.appendChild(header);
-    const conversations = state.conversations
-      .filter(item => item.project_id === project.id)
-      .sort((left, right) => Number(right.pinned) - Number(left.pinned));
-    for (const conversation of conversations) {
-      const row = document.createElement("div");
-      row.className = `conversation-item ${conversation.id === state.activeConversationId ? "active" : ""}`;
-      row.dataset.conversationId = conversation.id;
-      row.ondragover = allowDrop;
-      row.ondrop = event => dropOnConversation(event, conversation);
-      const drag = document.createElement("button");
-      drag.className = "pin-button drag-handle";
-      drag.title = "Déplacer la conversation";
-      drag.textContent = "⋮";
-      drag.draggable = true;
-      drag.ondragstart = event => beginDrag(event, "conversation", conversation.id);
-      const button = document.createElement("button");
-      button.className = "history-item";
-      const date = formatLastCall(conversation.last_call_at);
-      button.innerHTML = `<strong>${escapeHtml(conversation.title)}</strong><span title="${escapeHtml(date.exact)}">${state.runs.has(conversation.id) ? "● En cours" : `${conversation.messages.length} messages`} · ${escapeHtml(date.short)}</span>`;
-      button.onclick = () => selectConversation(conversation.id);
-      const pin = document.createElement("button");
-      pin.className = `pin-button ${conversation.pinned ? "pinned" : ""}`;
-      pin.title = conversation.pinned ? "Désépingler" : "Épingler";
-      pin.textContent = conversation.pinned ? "★" : "☆";
-      pin.onclick = () => togglePin(conversation);
-      const rename = document.createElement("button");
-      rename.className = "pin-button";
-      rename.title = "Renommer";
-      rename.textContent = "✎";
-      rename.onclick = () => renameConversation(conversation);
-      const remove = document.createElement("button");
-      remove.className = "pin-button delete-button";
-      remove.title = "Supprimer";
-      remove.textContent = "×";
-      remove.onclick = () => confirmDeleteConversation(conversation);
-      row.append(drag, button, rename, pin, remove);
-      group.appendChild(row);
-    }
-    target.appendChild(group);
-  }
-}
-
-let draggedItem = null;
-
-function beginDrag(event, type, id) {
-  draggedItem = { type, id };
-  event.dataTransfer.effectAllowed = "move";
-  event.dataTransfer.setData("text/plain", `${type}:${id}`);
-  event.stopPropagation();
-}
-
-function allowDrop(event) {
-  event.preventDefault();
-  event.dataTransfer.dropEffect = "move";
-}
-
-async function dropOnProject(event, projectId) {
-  event.preventDefault();
-  event.stopPropagation();
-  if (!draggedItem) return;
-  if (draggedItem.type === "project") {
-    await moveProjectBefore(draggedItem.id, projectId);
-  } else {
-    await moveConversation(draggedItem.id, projectId);
-  }
-  draggedItem = null;
-}
-
-async function dropOnConversation(event, targetConversation) {
-  event.preventDefault();
-  event.stopPropagation();
-  if (draggedItem?.type !== "conversation") return;
-  await moveConversation(
-    draggedItem.id,
-    targetConversation.project_id,
-    targetConversation.id
-  );
-  draggedItem = null;
-}
-
-async function moveProjectBefore(sourceId, targetId) {
-  if (sourceId === targetId) return;
-  const source = state.projects.find(item => item.id === sourceId);
-  if (!source || !state.projects.some(item => item.id === targetId)) return;
-  state.projects = state.projects.filter(item => item.id !== sourceId);
-  const targetIndex = state.projects.findIndex(item => item.id === targetId);
-  state.projects.splice(targetIndex, 0, source);
-  renderConversations();
-  await Promise.all(state.projects.map((project, position) =>
-    patchProject(project.id, { position })
-  ));
-}
-
-async function moveConversation(sourceId, projectId, beforeId = null) {
-  const source = state.conversations.find(item => item.id === sourceId);
-  if (!source) return;
-  source.project_id = projectId;
-  const others = state.conversations.filter(
-    item => item.project_id === projectId && item.id !== sourceId
-  );
-  const index = beforeId
-    ? Math.max(0, others.findIndex(item => item.id === beforeId))
-    : others.length;
-  others.splice(index, 0, source);
-  const outside = state.conversations.filter(
-    item => item.project_id !== projectId && item.id !== sourceId
-  );
-  state.conversations = [...outside, ...others];
-  renderConversations();
-  await Promise.all(others.map((conversation, position) =>
-    fetch(`/api/conversations/${conversation.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        project_id: conversation.project_id,
-        position
-      })
-    })
-  ));
-}
-
-async function toggleProjectCollapsed(project) {
-  project.collapsed = !project.collapsed;
-  renderConversations();
-  await patchProject(project.id, { collapsed: project.collapsed });
-}
-
-function patchProject(projectId, changes) {
-  return fetch(`/api/projects/${projectId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(changes)
-  });
-}
-
-function formatLastCall(timestamp) {
-  const date = new Date(Number(timestamp || 0) * 1000);
-  if (!Number.isFinite(date.getTime()) || date.getTime() === 0) {
-    return { short: "jamais", exact: "Aucun appel" };
-  }
-  return {
-    short: new Intl.DateTimeFormat("fr-FR", {
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit"
-    }).format(date),
-    exact: new Intl.DateTimeFormat("fr-FR", {
-      dateStyle: "full",
-      timeStyle: "short"
-    }).format(date)
-  };
-}
-
-function smallButton(label, title, action) {
-  const button = document.createElement("button");
-  button.className = "project-action";
-  button.textContent = label;
-  button.title = title;
-  button.onclick = action;
-  return button;
-}
-
-async function selectConversation(conversationId) {
-  preserveActivePanel();
-  closeMobilePanels();
-  const conversation = await fetch(`/api/conversations/${conversationId}`).then(response => response.json());
-  state.activeConversationId = conversationId;
-  state.activeProjectId = conversation.project_id || "main";
-  renderConversations();
-  clearConversation();
-  $("conversation-title").textContent = conversation.title;
-  for (const message of conversation.messages) {
-    if (message.role === "user") {
-      addMessage("Toi", message.content, "user");
-    } else {
-      const bubble = addMessage("Joe · synthèse", "", "assistant");
-      renderMarkdown(bubble, message.content);
-      if (message.git_report) renderGitReport(message.git_report, message.run_id);
-    }
-  }
-  if (!conversation.messages.length) {
-    $("messages").innerHTML = '<div class="empty-state"><span class="empty-mark">J</span><h3>Nouvelle conversation</h3><p>Les réglages et l’historique de cette conversation resteront indépendants.</p></div>';
-  }
-  const conversationViewport = document.querySelector(".conversation");
-  conversationViewport.scrollTop = conversationViewport.scrollHeight;
-  applySettings(conversation.settings || {});
-  restoreConversationPanel(conversationId);
-  const running = state.runs.has(conversationId);
-  $("send").disabled = false;
-  $("send").querySelector("span").textContent = running ? "Mettre en file" : "Lancer";
-  $("stop").classList.toggle("hidden", !running);
-  $("run-state").textContent = running ? "En cours" : "Prêt";
-  $("run-state").className = `run-state ${running ? "running" : "idle"}`;
-  if (running) {
-    const bubble = addMessage("Joe", "Cette tâche continue en arrière-plan…", "assistant");
-    const activeRun = state.runs.get(conversationId);
-    activeRun.bubble = bubble;
-    for (const event of activeRun.workflow.values()) {
-      renderWorkflowUpdate(event, bubble, activeRun.runId);
-    }
-  }
-  renderPromptQueue();
-}
-
-function preserveActivePanel() {
-  if (!state.activeConversationId) return;
-  state.panels.set(state.activeConversationId, {
-    agentNodes: [...$("agents").children],
-    agents: state.agents,
-    evidenceNodes: [...$("evidence-log").children],
-    rawLog: $("raw-log").textContent,
-    runState: $("run-state").textContent,
-    runStateClass: $("run-state").className
-  });
-}
-
-function restoreConversationPanel(conversationId) {
-  const panel = state.panels.get(conversationId);
-  if (!panel) {
-    state.agents = new Map();
-    $("agents").replaceChildren();
-    $("evidence-log").replaceChildren();
-    $("raw-log").textContent = "";
-    return;
-  }
-  state.agents = panel.agents;
-  $("agents").replaceChildren(...panel.agentNodes);
-  $("evidence-log").replaceChildren(...(panel.evidenceNodes || []));
-  $("raw-log").textContent = panel.rawLog;
-  $("run-state").textContent = panel.runState;
-  $("run-state").className = panel.runStateClass;
-}
-
-async function createConversation(select = true, projectId = state.activeProjectId) {
-  const conversation = await fetch("/api/conversations", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ project_id: projectId })
-  }).then(response => response.json());
-  if (select) {
-    await loadConversations(false);
-    await selectConversation(conversation.id);
-  }
-  return conversation;
-}
-
-async function renameConversation(conversation) {
-  const title = window.prompt("Nouveau nom de la conversation :", conversation.title);
-  if (!title?.trim()) return;
-  await fetch(`/api/conversations/${conversation.id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title: title.trim() })
-  });
-  await loadConversations(false);
-  if (conversation.id === state.activeConversationId) $("conversation-title").textContent = title.trim();
-}
-
-function confirmDeleteConversation(conversation) {
-  state.deletingConversation = conversation;
-  $("delete-conversation-name").textContent = conversation.title;
-  $("delete-conversation-dialog").showModal();
-}
-
-async function deleteConversation(event) {
-  event.preventDefault();
-  const conversation = state.deletingConversation;
-  if (!conversation) return;
-  const response = await fetch(`/api/conversations/${conversation.id}`, {
-    method: "DELETE"
-  });
-  if (!response.ok) {
-    const payload = await response.json();
-    $("delete-conversation-dialog").close();
-    window.alert(payload.error || "La conversation n’a pas pu être supprimée.");
-    return;
-  }
-  $("delete-conversation-dialog").close();
-  state.deletingConversation = null;
-  if (conversation.id === state.activeConversationId) {
-    state.activeConversationId = null;
-  }
-  await loadConversations(false);
-  const next = state.conversations.find(
-    item => item.project_id === conversation.project_id
-  ) || state.conversations[0];
-  if (next) await selectConversation(next.id);
-}
-
-function createProject() {
-  state.editingProjectId = null;
-  $("project-dialog-title").textContent = "Nouveau sous-projet";
-  $("save-project").textContent = "Créer";
-  $("project-name").value = "";
-  $("project-root").value = "";
-  $("project-extra-roots").value = "";
-  $("project-remote-access").checked = false;
-  $("project-execution-mode").value = "";
-  $("project-context").value = "";
-  $("project-dialog").showModal();
-  requestAnimationFrame(() => $("project-name").focus());
-}
-
-function openProject(project) {
-  state.editingProjectId = project.id;
-  $("project-dialog-title").textContent = "Modifier le sous-projet";
-  $("save-project").textContent = "Enregistrer";
-  $("project-name").value = project.name;
-  $("project-root").value = project.workspace_root || "";
-  $("project-extra-roots").value = (project.additional_roots || []).join("\n");
-  $("project-remote-access").checked = Boolean(project.remote_access);
-  $("project-execution-mode").value = project.default_execution_mode || "";
-  $("project-context").value = project.context || "";
-  $("project-dialog").showModal();
-}
-
-async function saveProject(event) {
-  event.preventDefault();
-  if (!$("project-name").reportValidity()) return;
-  const creating = !state.editingProjectId;
-  const response = await fetch(
-    creating ? "/api/projects" : `/api/projects/${state.editingProjectId}`,
-    {
-    method: creating ? "POST" : "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name: $("project-name").value,
-      workspace_root: $("project-root").value,
-      additional_roots: $("project-extra-roots").value
-        .split("\n").map(value => value.trim()).filter(Boolean),
-      remote_access: $("project-remote-access").checked,
-      default_execution_mode: $("project-execution-mode").value,
-      context: $("project-context").value
-    })
-  });
-  const project = await response.json();
-  if (creating && $("project-context").value) {
-    await fetch(`/api/projects/${project.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ context: $("project-context").value })
-    });
-  }
-  $("project-dialog").close();
-  state.activeProjectId = project.id;
-  if (creating) {
-    await createConversation(true, project.id);
-  } else {
-    await loadConversations(false);
-  }
-}
-
-async function togglePin(conversation) {
-  await fetch(`/api/conversations/${conversation.id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pinned: !conversation.pinned })
-  });
-  await loadConversations(false);
-}
+let createConversation;
+let createProject;
+let deleteConversation;
+let loadConversations;
+let moveConversation;
+let openProject;
+let renameConversation;
+let saveProject;
+let selectConversation;
+let togglePin;
+let confirmDeleteConversation;
 
 function clearConversation() { $("messages").replaceChildren(); }
 
@@ -846,6 +333,51 @@ function renderWorkflowUpdate(event, finalBubble, runId) {
   }
 }
 
+function setSummaryPending(finalBubble, pending) {
+  finalBubble?.closest(".message")?.classList.toggle(
+    "workflow-summary-pending",
+    pending
+  );
+}
+
+({
+  loadUsage,
+  showQuotaNotice,
+  updateCountdowns
+} = window.createJoeUsage({
+  state,
+  $,
+  escapeHtml,
+  capitalize,
+  addMessage
+}));
+
+({
+  createConversation,
+  createProject,
+  deleteConversation,
+  loadConversations,
+  moveConversation,
+  openProject,
+  renameConversation,
+  saveProject,
+  selectConversation,
+  togglePin,
+  confirmDeleteConversation
+} = window.createJoeConversations({
+  state,
+  $,
+  escapeHtml,
+  closeMobilePanels,
+  clearConversation,
+  addMessage,
+  renderMarkdown,
+  renderGitReport,
+  applySettings,
+  renderWorkflowUpdate,
+  renderPromptQueue
+}));
+
 function handleEvent(conversationId, event, finalBubble) {
   const activeRun = state.runs.get(conversationId);
   if (event.type === "route" && activeRun) activeRun.mode = event.mode;
@@ -885,6 +417,10 @@ function handleEvent(conversationId, event, finalBubble) {
     showRoute(event.mode, event.primary, event.reviewer);
     ensureAgent(event.primary);
     if (event.reviewer) ensureAgent(event.reviewer);
+    setSummaryPending(
+      finalBubble,
+      ["consensus", "review"].includes(event.mode)
+    );
     const quotaSwitch = event.reason?.includes("quota-switch=");
     const quotaDetail = quotaSwitch ? event.reason.split("; ").at(-1) : "";
     const execution = [event.model, event.effort ? `effort ${event.effort}` : "", event.execution_mode ? `permission ${event.execution_mode}` : ""].filter(Boolean).join(" · ");
@@ -895,6 +431,15 @@ function handleEvent(conversationId, event, finalBubble) {
     const agent = ensureAgent(event.provider);
     agent.card.classList.add("active");
     agent.status.textContent = "Démarrage";
+    const metadata = [
+      event.model || "modèle par défaut",
+      event.cli_version ? `CLI ${event.cli_version}` : "",
+      `effort ${event.effort || "défaut"}`
+    ].filter(Boolean).join(" · ");
+    const row = document.createElement("div");
+    row.className = "activity-row provider-metadata";
+    row.innerHTML = `<i></i><div><strong>${escapeHtml(capitalize(event.provider))}</strong><span>${escapeHtml(metadata)}</span></div>`;
+    agent.activity.appendChild(row);
     if (!structuredWorkflow) finalBubble.textContent = `${capitalize(event.provider)} démarre…`;
   } else if (event.type === "activity") {
     const agent = ensureAgent(event.provider);
@@ -918,7 +463,6 @@ function handleEvent(conversationId, event, finalBubble) {
     scrollIfFollowing(agent.output, followOutput);
   } else if (event.type === "workflow_update") {
     renderWorkflowUpdate(event, finalBubble, activeRun?.runId || "");
-    finalBubble.textContent = "Synthèse finale en attente…";
   } else if (event.type === "provider_end") {
     const agent = ensureAgent(event.provider);
     agent.card.classList.remove("active");
@@ -944,15 +488,18 @@ function handleEvent(conversationId, event, finalBubble) {
   } else if (event.type === "git_report") {
     renderGitReport(event, event.run_id);
   } else if (event.type === "complete") {
+    setSummaryPending(finalBubble, false);
     renderMarkdown(finalBubble, event.response);
     finishRun(conversationId, true);
     loadConversations(false);
     launchNextQueued(conversationId);
   } else if (event.type === "error") {
+    setSummaryPending(finalBubble, false);
     finalBubble.textContent = `Erreur : ${event.message}`;
     finishRun(conversationId, false);
     loadConversations(false).then(() => selectConversation(conversationId));
   } else if (event.type === "cancelled") {
+    setSummaryPending(finalBubble, false);
     const prompt = state.runs.get(conversationId)?.request || "";
     finishRun(conversationId, false);
     $("request").value = prompt;

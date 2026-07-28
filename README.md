@@ -267,11 +267,13 @@ The HTTP API has no authentication; prefer SSH port forwarding even when
 ## Validation and CI
 
 The GitHub Actions workflow runs the complete Python suite on Python 3.10 and
-3.12, checks both JavaScript modules with Node.js, and exercises the installed
+3.12, checks the JavaScript assets with Node.js, and exercises the installed
 `joe` entry point with a read-only dry run. Run the same checks locally with:
 
 ```bash
 pytest -q
+node --check src/joe/web_assets/app_usage.js
+node --check src/joe/web_assets/app_conversations.js
 node --check src/joe/web_assets/app.js
 node --check src/joe/web_assets/markdown.js
 joe --dry-run -C . "Ne modifie rien, analyse seulement Joe"

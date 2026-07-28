@@ -27,6 +27,8 @@ jobs:
           node-version: "22"
       - run: python -m pip install -e . pytest
       - run: pytest -q
+      - run: node --check src/joe/web_assets/app_usage.js
+      - run: node --check src/joe/web_assets/app_conversations.js
       - run: node --check src/joe/web_assets/app.js
       - run: node --check src/joe/web_assets/markdown.js
       - run: joe --version

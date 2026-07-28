@@ -3,6 +3,7 @@ import threading
 import time
 from pathlib import Path
 
+import joe.providers as providers
 from joe.models import Intent
 from joe.providers import (
     Provider,
@@ -77,6 +78,24 @@ def test_gemini_watchdog_stops_an_inactive_process(tmp_path):
 
     assert result.timed_out
     assert any("Gemini ne répond plus" in text for _, text in events)
+
+
+def test_silent_provider_emits_elapsed_time_heartbeat(tmp_path, monkeypatch):
+    monkeypatch.setattr(providers, "PROVIDER_HEARTBEAT_SECONDS", 0.01)
+    provider = ScriptProvider("import time; time.sleep(0.35)")
+    events = []
+
+    result = provider.run(
+        "hello",
+        tmp_path,
+        Intent.ANALYZE,
+        timeout=2,
+        on_stream=lambda stream, text: events.append((stream, text)),
+    )
+
+    assert result.ok
+    assert any("Toujours en cours" in text for _, text in events)
+    assert any("Processus actif depuis" in text for _, text in events)
 
 
 def test_provider_can_be_cancelled_without_waiting_for_timeout(tmp_path):

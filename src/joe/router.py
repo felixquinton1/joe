@@ -18,6 +18,13 @@ MODIFY_PHRASES = {
     "mets en oeuvre",
     "applique ces changements",
 }
+FEATURE_REQUEST_PATTERNS = (
+    re.compile(
+        r"\b(?:c['’]est|est[- ]ce|est il)\s+possible\s+de\s+"
+        r"(?:ajouter|afficher|préciser|integrer|intégrer|permettre|corriger)\b",
+        re.IGNORECASE,
+    ),
+)
 READ_ONLY_AMBIGUOUS_MODIFY_WORDS = {"implementation", "implémentation"}
 REVIEW_WORDS = {
     "avis", "autre", "critique", "review", "relis", "relecture", "vérifie",
@@ -120,16 +127,20 @@ class Router:
         capability_question = any(
             phrase in lower for phrase in CAPABILITY_QUESTION_PHRASES
         )
+        feature_request = any(
+            pattern.search(intent_text) for pattern in FEATURE_REQUEST_PATTERNS
+        )
         intent = (
             Intent.MODIFY
             if (
                 intent_words & MODIFY_WORDS
                 or any(phrase in intent_text.lower() for phrase in MODIFY_PHRASES)
+                or feature_request
             )
-            and not capability_question
+            and (not capability_question or feature_request)
             else Intent.ANALYZE
         )
-        if capability_question or (
+        if (capability_question and not feature_request) or (
             request.rstrip().endswith("?") and intent is not Intent.MODIFY
         ):
             intent = Intent.ANSWER

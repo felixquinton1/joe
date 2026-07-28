@@ -160,6 +160,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b"resizeComposer" in script
         assert b"toggleMobilePanel" in script
         assert b"loadActiveRuns" in script
+        assert b"setSummaryPending" in script
 
         connection.request("GET", "/style.css")
         response = connection.getresponse()
@@ -168,6 +169,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b"max-height:min(42vh,360px)" in style
         assert b".bubble,.composer textarea" in style
         assert b".activity-panel.mobile-open" in style
+        assert b".message.workflow-summary-pending" in style
     finally:
         server.shutdown()
         thread.join(timeout=2)

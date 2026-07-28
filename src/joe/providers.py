@@ -9,6 +9,7 @@ import subprocess
 import threading
 import time
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Callable
 
@@ -16,6 +17,7 @@ from .models import Intent, ProviderResult
 from .usage import record_gemini_usage
 
 StreamCallback = Callable[[str, str], None]
+PROVIDER_HEARTBEAT_SECONDS = 10.0
 
 READ_ONLY_MODES = {"read-only", "plan"}
 WORKSPACE_WRITE_MODES = {
@@ -44,6 +46,24 @@ class ProviderCancelled(RuntimeError):
     pass
 
 
+@lru_cache(maxsize=8)
+def _cli_version(executable: str) -> str | None:
+    if not shutil.which(executable):
+        return None
+    try:
+        completed = subprocess.run(
+            [executable, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    value = (completed.stdout or completed.stderr).strip().splitlines()
+    return value[0] if value else None
+
+
 @dataclass(frozen=True)
 class Provider:
     name: str
@@ -51,6 +71,9 @@ class Provider:
     additional_roots: tuple[Path, ...] = ()
     remote_access: bool = False
     watchdog_seconds: float = 90
+
+    def cli_version(self) -> str | None:
+        return _cli_version(self.executable)
 
     def command(
         self,
@@ -295,6 +318,8 @@ def _collect_streams(
         thread.start()
 
     deadline = time.monotonic() + timeout
+    started_at = time.monotonic()
+    next_heartbeat = started_at + PROVIDER_HEARTBEAT_SECONDS
     idle_deadline = (
         time.monotonic() + min(watchdog_seconds, timeout)
         if provider == "gemini"
@@ -336,6 +361,27 @@ def _collect_streams(
         try:
             stream_name, line = events.get(timeout=min(0.25, remaining))
         except queue.Empty:
+            now = time.monotonic()
+            if callback and now >= next_heartbeat:
+                elapsed = max(0, int(now - started_at))
+                minutes, seconds = divmod(elapsed, 60)
+                duration = (
+                    f"{minutes} min {seconds:02d} s"
+                    if minutes
+                    else f"{seconds} s"
+                )
+                callback(
+                    "activity",
+                    json.dumps(
+                        {
+                            "kind": "heartbeat",
+                            "label": "Toujours en cours",
+                            "detail": f"Processus actif depuis {duration}",
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+                next_heartbeat = now + PROVIDER_HEARTBEAT_SECONDS
             continue
         if line is None:
             closed += 1

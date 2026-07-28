@@ -129,3 +129,19 @@ def test_fais_cela_is_an_explicit_follow_up_change():
     route = Router().route("Fais cela et ajoute les tests ciblés")
 
     assert route.intent is Intent.MODIFY
+
+
+def test_feature_request_phrased_as_possibility_is_writable():
+    route = Router().route(
+        "C'est possible de préciser le modèle utilisé dans tous les modes ?"
+    )
+
+    assert route.intent is Intent.MODIFY
+
+
+def test_capability_question_about_access_stays_read_only():
+    route = Router().route(
+        "Est-ce que tu peux modifier le code de Joe depuis cette session ?"
+    )
+
+    assert route.intent is Intent.ANSWER

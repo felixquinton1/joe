@@ -90,7 +90,8 @@ def test_review_uses_primary_intent_then_read_only_review(tmp_path):
         "change", Route(Intent.MODIFY, Mode.REVIEW, "codex", "claude")
     )
     assert "## Contrôle croisé" in response
-    assert "### Avis de Claude" in response
+    assert "Le détail de l’avis de Claude reste disponible" in response
+    assert "claude response" not in response
     assert providers["codex"].calls[0][2] is Intent.MODIFY
     assert providers["claude"].calls[0][2] is Intent.ANALYZE
 
