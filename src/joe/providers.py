@@ -165,7 +165,7 @@ class Provider:
                 record_gemini_usage(stdout)
             stdout = _final_output(self.name, stdout)
             duration = time.monotonic() - start
-            kind = classify_error(stderr, process.returncode)
+            kind = classify_error(f"{stdout}\n{stderr}", process.returncode)
             return ProviderResult(
                 self.name, command, stdout, stderr,
                 process.returncode, duration, error_kind=kind,
@@ -199,7 +199,18 @@ def classify_error(stderr: str, returncode: int) -> str | None:
     lower = stderr.lower()
     if any(word in lower for word in ("auth", "login", "unauthorized", "credential")):
         return "authentication"
-    if any(word in lower for word in ("quota", "rate limit", "capacity", "overloaded")):
+    if any(
+        word in lower
+        for word in (
+            "quota",
+            "rate limit",
+            "capacity",
+            "overloaded",
+            "usage limit",
+            "hit your limit",
+            "limit reached",
+        )
+    ):
         return "quota"
     return "process"
 

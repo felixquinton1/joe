@@ -198,6 +198,7 @@ class Orchestrator:
         on_event: Callable[[dict], None] | None = None,
         timeout_override: int | None = None,
         allow_fallback: bool = True,
+        fallback_error_kinds: set[str] | None = None,
     ) -> ProviderResult:
         config = self.memory.config()
         candidates = [provider_name]
@@ -256,6 +257,31 @@ class Orchestrator:
                 )
             if result.ok and result.stdout.strip():
                 return result
+            if (
+                fallback_error_kinds is not None
+                and result.error_kind not in fallback_error_kinds
+            ):
+                break
+            if allow_fallback and on_event:
+                next_provider = next(
+                    (
+                        candidate
+                        for candidate in candidates
+                        if candidate not in seen
+                        and candidate in self.providers
+                        and candidate not in (exclude or set())
+                    ),
+                    None,
+                )
+                if next_provider:
+                    on_event(
+                        {
+                            "type": "provider_fallback",
+                            "provider": name,
+                            "fallback": next_provider,
+                            "error": result.error_kind,
+                        }
+                    )
         errors = ", ".join(f"{r.provider}:{r.error_kind}" for r in results)
         raise OrchestrationError(f"All providers failed ({errors})")
 
@@ -306,6 +332,7 @@ class Orchestrator:
                     None,
                     cancel_event,
                     on_event,
+                    True,
                 ): provider
                 for provider, other in (
                     ("codex", "claude"),
@@ -342,6 +369,11 @@ class Orchestrator:
                 )
         codex = proposals["codex"]
         claude = proposals["claude"]
+        degraded_providers = {
+            role: proposal.provider
+            for role, proposal in proposals.items()
+            if proposal.provider != role
+        }
         codex_results = proposal_results["codex"]
         claude_results = proposal_results["claude"]
         results.extend(codex_results)
@@ -370,6 +402,7 @@ class Orchestrator:
                     None,
                     cancel_event,
                     on_event,
+                    True,
                 ): provider
                 for provider, other in (
                     ("codex", "claude"),
@@ -414,6 +447,13 @@ class Orchestrator:
                 )
         codex_review = reviews["codex"]
         claude_review = reviews["claude"]
+        degraded_providers.update(
+            {
+                f"revue {role}": review.provider
+                for role, review in reviews.items()
+                if review.provider != role
+            }
+        )
         codex_review_results = review_results["codex"]
         claude_review_results = review_results["claude"]
         results.extend(codex_review_results)
@@ -447,7 +487,15 @@ class Orchestrator:
             on_event, "consensus", "synthesis", synthesis.provider,
             "Synthèse du consensus", "complete",
         )
-        return synthesis.stdout.strip(), synthesis.provider
+        final = synthesis.stdout.strip()
+        if degraded_providers:
+            replacements = ", ".join(
+                f"{role.capitalize()} indisponible, relais par "
+                f"{provider.capitalize()}"
+                for role, provider in degraded_providers.items()
+            )
+            final = f"> ⚠️ **Consensus dégradé** — {replacements}.\n\n{final}"
+        return final, synthesis.provider
 
     def _isolated_run(
         self,
@@ -460,6 +508,7 @@ class Orchestrator:
         execution_mode: str | None,
         cancel_event: threading.Event | None,
         on_event: Callable[[dict], None] | None,
+        allow_quota_fallback: bool = False,
     ) -> tuple[ProviderResult, list[ProviderResult]]:
         local_results: list[ProviderResult] = []
         result = self._run_with_fallback(
@@ -473,7 +522,8 @@ class Orchestrator:
             execution_mode=execution_mode,
             cancel_event=cancel_event,
             on_event=on_event,
-            allow_fallback=False,
+            allow_fallback=allow_quota_fallback,
+            fallback_error_kinds={"quota"} if allow_quota_fallback else None,
         )
         return result, local_results
 

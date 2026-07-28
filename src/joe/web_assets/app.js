@@ -918,6 +918,14 @@ function handleEvent(conversationId, event, finalBubble) {
     const agent = ensureAgent(event.provider);
     agent.card.classList.remove("active");
     agent.status.textContent = event.ok ? "Terminé" : `Échec · ${event.error || "inconnu"}`;
+  } else if (event.type === "provider_fallback") {
+    const agent = ensureAgent(event.provider);
+    agent.card.classList.remove("active");
+    agent.status.textContent = event.error === "quota"
+      ? `Quota épuisé · relais ${capitalize(event.fallback)}`
+      : `Indisponible · relais ${capitalize(event.fallback)}`;
+    const fallback = ensureAgent(event.fallback);
+    fallback.status.textContent = `Relais de ${capitalize(event.provider)}`;
   } else if (event.type === "evidence") {
     const row = document.createElement("div");
     row.className = `evidence-row ${event.status}`;

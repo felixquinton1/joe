@@ -152,6 +152,7 @@ def test_codex_remote_access_is_scoped_to_workspace_write():
 
 def test_error_classification():
     assert classify_error("Rate limit exceeded", 1) == "quota"
+    assert classify_error("You've hit your usage limit · resets 3am", 1) == "quota"
     assert classify_error("Please login", 1) == "authentication"
     assert classify_error("", 2) == "process"
     assert _terminal_gemini_quota(

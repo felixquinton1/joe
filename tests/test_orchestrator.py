@@ -97,34 +97,57 @@ def test_consensus_is_read_only_and_uses_distinct_proposals(tmp_path):
     )
 
 
-def test_consensus_fails_closed_when_a_primary_agent_fails(tmp_path):
+def test_consensus_uses_gemini_when_claude_quota_is_exhausted(tmp_path):
     providers = {
-        "codex": FakeProvider("codex", fail=True),
-        "claude": FakeProvider("claude"),
+        "codex": FakeProvider("codex"),
+        "claude": FakeProvider("claude", fail=True),
         "gemini": FakeProvider("gemini"),
         "copilot": FakeProvider("copilot"),
     }
     orchestrator = Orchestrator(tmp_path, providers=providers)
     events = []
 
+    response, _ = orchestrator.execute(
+        "important",
+        Route(Intent.ANALYZE, Mode.CONSENSUS, "codex"),
+        execution_mode="danger-full-access",
+        on_event=events.append,
+    )
+
+    assert response.startswith("> ⚠️ **Consensus dégradé**")
+    assert "Claude indisponible, relais par Gemini" in response
+    assert any(
+        event.get("type") == "provider_fallback"
+        and event.get("provider") == "claude"
+        and event.get("fallback") == "gemini"
+        for event in events
+    )
+
+
+def test_consensus_still_fails_closed_on_process_error(tmp_path):
+    providers = {
+        "codex": FakeProvider("codex"),
+        "claude": FakeProvider("claude", fail=True),
+        "gemini": FakeProvider("gemini"),
+        "copilot": FakeProvider("copilot"),
+    }
+    providers["claude"].run = lambda *args, **kwargs: ProviderResult(
+        "claude", ["claude"], "", "spawn failed", 1, 0.01,
+        error_kind="process",
+    )
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
     try:
         orchestrator.execute(
             "important",
             Route(Intent.ANALYZE, Mode.CONSENSUS, "codex"),
-            execution_mode="danger-full-access",
-            on_event=events.append,
         )
     except OrchestrationError as error:
-        assert "codex" in str(error)
+        assert "claude:process" in str(error)
     else:
-        raise AssertionError("Consensus must fail when Codex is unavailable")
+        raise AssertionError("Consensus must fail on a material process error")
 
     assert providers["gemini"].calls == []
-    assert any(
-        event.get("stage") == "proposal_codex"
-        and event.get("status") == "failed"
-        for event in events
-    )
 
 
 def test_review_applies_one_correction_pass_when_requested(tmp_path):
