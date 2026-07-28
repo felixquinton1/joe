@@ -77,6 +77,8 @@ stderr, shows provider status and personal quota resets in a compact top-right
 popover when the provider CLI exposes them, provides stable
 agent/workflow/model/effort/permission controls,
 and loads the latest 100 run logs from the project's `.agentflow/runs/` folder.
+Conversation history is loaded independently from optional quota and model
+catalog probes, so a slow provider CLI cannot block the whole interface.
 Joe never estimates missing quotas: unsupported providers are marked clearly.
 Gemini headless runs expose per-model token and request statistics but no
 single global token allowance: quotas depend on the model, authentication, and

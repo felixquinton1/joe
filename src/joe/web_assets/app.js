@@ -1,4 +1,4 @@
-const APP_VERSION = "0.20.1";
+const APP_VERSION = "0.20.2";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -1349,9 +1349,16 @@ setInterval(updateCountdowns, 1000);
 setInterval(() => loadUsage().catch(() => {}), 60000);
 setupPanelResizers();
 
-Promise.all([loadStatus(), loadCapabilities(), loadUsage(), loadActiveRuns()])
+Promise.all([loadStatus(), loadActiveRuns()])
   .then(() => loadConversations())
   .then(connectActiveRuns)
   .catch(error => {
-  $("project").textContent = `Erreur : ${error.message}`;
+    $("project").textContent = `Erreur : ${error.message}`;
+  });
+
+loadCapabilities().catch(() => {
+  state.capabilities = {};
+});
+loadUsage().catch(() => {
+  $("usage").innerHTML = '<span class="usage-loading">Quotas momentanément indisponibles</span>';
 });
