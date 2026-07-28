@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import subprocess
 import sys
@@ -37,6 +38,8 @@ def main(argv: list[str] | None = None) -> int:
         return _web(arguments[1:])
     if arguments and arguments[0] == "sync":
         return _sync(arguments[1:])
+    if arguments and arguments[0] == "kill":
+        return _kill(arguments[1:])
     if arguments and arguments[0] == "chat":
         arguments = arguments[1:]
     args = parser().parse_args(arguments)
@@ -168,6 +171,41 @@ def _tmux_web(args: argparse.Namespace, url: str) -> int:
     )
     if not args.no_browser:
         webbrowser.open(url)
+    return 0
+
+
+def _kill(argv: list[str]) -> int:
+    kill_parser = argparse.ArgumentParser(
+        prog="joe kill",
+        description="Stop every tmux session started by Joe.",
+    )
+    kill_parser.parse_args(argv)
+    if not shutil.which("tmux"):
+        print("Joe : tmux n’est pas installé.")
+        return 0
+    listed = subprocess.run(
+        ["tmux", "list-sessions", "-F", "#{session_name}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    sessions = [
+        name
+        for name in listed.stdout.splitlines()
+        if re.fullmatch(r"joe-\d+", name)
+    ]
+    stopped = 0
+    for session in sessions:
+        result = subprocess.run(
+            ["tmux", "kill-session", "-t", session],
+            check=False,
+        )
+        stopped += result.returncode == 0
+    if not stopped:
+        print("Joe : aucune session tmux active.")
+    else:
+        suffix = "s" if stopped > 1 else ""
+        print(f"Joe : {stopped} session{suffix} tmux arrêtée{suffix}.")
     return 0
 
 

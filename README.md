@@ -64,7 +64,9 @@ joe
 When `tmux` is installed, Joe starts the web server in the detached
 `joe-8765` session and opens `http://127.0.0.1:8765`. Closing the laptop or
 terminal does not stop the server. Use `tmux attach -t joe-8765` to inspect it,
-or `joe web --foreground` for the previous foreground behavior.
+`joe kill` to stop every numbered Joe tmux session, or
+`joe web --foreground` for the previous foreground behavior. `joe kill` never
+touches non-Joe sessions.
 The interface streams provider stdout and
 stderr, shows provider status and personal quota resets in a compact top-right
 popover when the provider CLI exposes them, provides stable
