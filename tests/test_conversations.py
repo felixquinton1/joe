@@ -39,6 +39,14 @@ def test_subproject_context_is_shared_by_its_conversations(tmp_path):
     store = ConversationStore(root, runs)
     project = store.create_project("Phase D")
     store.update_project(project["id"], {"context": "Utiliser uniquement H100."})
+    store.update_project(
+        project["id"],
+        {
+            "workspace_root": "/tmp/project",
+            "additional_roots": ["/tmp/data"],
+            "remote_access": True,
+        },
+    )
     first = store.create(project["id"])
     second = store.create(project["id"])
 
@@ -46,6 +54,10 @@ def test_subproject_context_is_shared_by_its_conversations(tmp_path):
     assert second["project_id"] == project["id"]
     assert "Utiliser uniquement H100." in store.context(first["id"])
     assert "Utiliser uniquement H100." in store.context(second["id"])
+    loaded_project = store.get_project(project["id"])
+    assert loaded_project["workspace_root"] == "/tmp/project"
+    assert loaded_project["additional_roots"] == ["/tmp/data"]
+    assert loaded_project["remote_access"] is True
 
 
 def test_old_runs_are_imported_once(tmp_path):

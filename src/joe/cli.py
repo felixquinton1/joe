@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import shutil
+import subprocess
 import sys
 import threading
 import webbrowser
@@ -101,6 +103,11 @@ def _web(argv: list[str]) -> int:
     web_parser.add_argument("--host", default="127.0.0.1")
     web_parser.add_argument("--port", type=int, default=8765)
     web_parser.add_argument("--no-browser", action="store_true")
+    web_parser.add_argument(
+        "--foreground",
+        action="store_true",
+        help="run the server in this terminal instead of tmux",
+    )
     args = web_parser.parse_args(argv)
     if not args.project.is_dir():
         print(f"joe: project directory does not exist: {args.project}", file=sys.stderr)
@@ -108,6 +115,8 @@ def _web(argv: list[str]) -> int:
     from .web import serve
 
     url = f"http://{args.host}:{args.port}"
+    if not args.foreground and shutil.which("tmux"):
+        return _tmux_web(args, url)
     print(f"Joe Web — {args.project.resolve()}\n{url}\nCtrl+C to stop.")
     if not args.no_browser:
         threading.Timer(0.4, webbrowser.open, args=(url,)).start()
@@ -118,6 +127,47 @@ def _web(argv: list[str]) -> int:
     except OSError as exc:
         print(f"joe: impossible de démarrer le serveur: {exc}", file=sys.stderr)
         return 1
+    return 0
+
+
+def _tmux_web(args: argparse.Namespace, url: str) -> int:
+    session = f"joe-{args.port}"
+    exists = subprocess.run(
+        ["tmux", "has-session", "-t", session],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    ).returncode == 0
+    if not exists:
+        executable = shutil.which("joe")
+        if not executable:
+            print("joe: exécutable introuvable", file=sys.stderr)
+            return 1
+        command = [
+            executable,
+            "web",
+            "-C",
+            str(args.project.resolve()),
+            "--host",
+            args.host,
+            "--port",
+            str(args.port),
+            "--no-browser",
+            "--foreground",
+        ]
+        created = subprocess.run(
+            ["tmux", "new-session", "-d", "-s", session, *command],
+            check=False,
+        )
+        if created.returncode:
+            print("joe: impossible de créer la session tmux", file=sys.stderr)
+            return created.returncode
+    print(
+        f"Joe tourne dans tmux · session {session}\n{url}\n"
+        f"Console : tmux attach -t {session}"
+    )
+    if not args.no_browser:
+        webbrowser.open(url)
     return 0
 
 

@@ -25,10 +25,14 @@ class Orchestrator:
         *,
         providers: dict[str, Provider] | None = None,
         router: Router | None = None,
+        additional_roots: tuple[Path, ...] = (),
+        remote_access: bool = False,
     ):
         self.project = project.resolve()
         self.memory = ProjectMemory(self.project)
-        self.providers = providers or default_providers()
+        self.providers = providers or default_providers(
+            additional_roots, remote_access
+        )
         self.router = router or Router()
 
     def plan(

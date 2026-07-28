@@ -61,7 +61,11 @@ cd /path/to/project
 joe
 ```
 
-Joe opens `http://127.0.0.1:8765`. The interface streams provider stdout and
+When `tmux` is installed, Joe starts the web server in the detached
+`joe-8765` session and opens `http://127.0.0.1:8765`. Closing the laptop or
+terminal does not stop the server. Use `tmux attach -t joe-8765` to inspect it,
+or `joe web --foreground` for the previous foreground behavior.
+The interface streams provider stdout and
 stderr, shows provider status and personal quota resets in a compact top-right
 popover when the provider CLI exposes them, provides stable
 agent/workflow/model/effort/permission controls,
@@ -115,6 +119,26 @@ Native JSON streams expose observable progress such as commands, tools, and
 files read or changed; Joe does not expose private chain-of-thought.
 Final answers are rendered locally as safe Markdown, including headings,
 tables, lists, links, inline code, and fenced code blocks.
+
+Each logical project can define one primary workspace, explicit additional
+roots, and optional remote-command access. Joe starts every provider in that
+workspace and forwards only the declared extra roots through the provider's
+native allow-list option. Missing configured roots stop the run instead of
+silently falling back to another directory. AI4Trading may therefore enable
+SSH/Jean Zay without granting another project access to unrelated local files.
+
+The evidence journal separates local routing inferences, successful provider
+executions, and refused/failed executions. Providers also receive an explicit
+reporting contract: a blocked file or command must be reported as `Refusé`,
+never as verified. This journal records observable evidence, not private model
+reasoning.
+
+Gemini has an inactivity watchdog. After 90 seconds without any output, Joe
+terminates the hung process and lets the normal fallback chain select another
+provider. Active runs are recorded in `.agentflow/pending_runs.json`; after a
+server crash they are restarted from their saved request and conversation
+context. A dead subprocess cannot resume at an instruction boundary, so Joe
+truthfully relaunches the task from the beginning with the same run identifier.
 
 Conversations are persistent per project. Each conversation keeps its full
 message history and independent agent, workflow, model, effort, and permission

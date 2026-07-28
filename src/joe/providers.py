@@ -26,6 +26,9 @@ class ProviderCancelled(RuntimeError):
 class Provider:
     name: str
     executable: str
+    additional_roots: tuple[Path, ...] = ()
+    remote_access: bool = False
+    watchdog_seconds: float = 90
 
     def command(
         self,
@@ -51,6 +54,12 @@ class Provider:
                 "--ephemeral", "--skip-git-repo-check", "--color", "never",
                 "--sandbox", sandbox,
             ])
+            if self.remote_access and sandbox == "workspace-write":
+                command.extend(
+                    ["--config", "sandbox_workspace_write.network_access=true"]
+                )
+            for root in self.additional_roots:
+                command.extend(["--add-dir", str(root)])
             if model:
                 command.extend(["--model", model])
             return [*command, "-C", str(cwd), prompt]
@@ -65,6 +74,8 @@ class Provider:
                 "--verbose",
                 "--permission-mode", permission, "--no-session-persistence",
             ]
+            for root in self.additional_roots:
+                command.extend(["--add-dir", str(root)])
             if effort:
                 command.extend(["--effort", effort])
             if model:
@@ -80,6 +91,8 @@ class Provider:
                 self.executable, "--output-format", "stream-json",
                 "--approval-mode", approval, "--skip-trust",
             ]
+            for root in self.additional_roots:
+                command.extend(["--include-directories", str(root)])
             if model:
                 command.extend(["--model", model])
             return [*command, "--prompt", prompt]
@@ -89,6 +102,8 @@ class Provider:
                 self.executable, "--silent", "--no-color",
                 "--no-remote", "--no-remote-export", "--no-ask-user",
             ]
+            for root in self.additional_roots:
+                args.extend(["--add-dir", str(root)])
             if model:
                 args.extend(["--model", model])
             if effort:
@@ -144,6 +159,7 @@ class Provider:
                 secret_values,
                 self.name,
                 cancel_event,
+                self.watchdog_seconds,
             )
             if self.name == "gemini":
                 record_gemini_usage(stdout)
@@ -197,9 +213,12 @@ def _terminal_gemini_quota(line: str) -> bool:
     )
 
 
-def default_providers() -> dict[str, Provider]:
+def default_providers(
+    additional_roots: tuple[Path, ...] = (),
+    remote_access: bool = False,
+) -> dict[str, Provider]:
     return {
-        name: Provider(name, name)
+        name: Provider(name, name, additional_roots, remote_access)
         for name in ("codex", "claude", "gemini", "copilot")
     }
 
@@ -217,6 +236,7 @@ def _collect_streams(
     secret_values: tuple[str, ...] = (),
     provider: str | None = None,
     cancel_event: threading.Event | None = None,
+    watchdog_seconds: float = 90,
 ) -> tuple[str, str]:
     events: queue.Queue[tuple[str, str | None]] = queue.Queue()
     output = {"stdout": [], "stderr": []}
@@ -236,6 +256,11 @@ def _collect_streams(
         thread.start()
 
     deadline = time.monotonic() + timeout
+    idle_deadline = (
+        time.monotonic() + min(watchdog_seconds, timeout)
+        if provider == "gemini"
+        else None
+    )
     closed = 0
     while closed < 2:
         if cancel_event and cancel_event.is_set():
@@ -251,6 +276,24 @@ def _collect_streams(
             error.stdout = "".join(output["stdout"])  # type: ignore[attr-defined]
             error.stderr = "".join(output["stderr"])  # type: ignore[attr-defined]
             raise error
+        if idle_deadline and time.monotonic() >= idle_deadline:
+            if callback:
+                callback(
+                    "activity",
+                    json.dumps(
+                        {
+                            "kind": "watchdog",
+                            "label": "Gemini ne répond plus",
+                            "detail": "Arrêt et bascule automatique vers un autre agent",
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+            _stop_process(process, force=True)
+            error = TimeoutError("provider inactive")
+            error.stdout = "".join(output["stdout"])  # type: ignore[attr-defined]
+            error.stderr = "Gemini watchdog: no output received"  # type: ignore[attr-defined]
+            raise error
         try:
             stream_name, line = events.get(timeout=min(0.25, remaining))
         except queue.Empty:
@@ -259,6 +302,8 @@ def _collect_streams(
             closed += 1
             continue
         line = _redact_values(line, secret_values)
+        if provider == "gemini":
+            idle_deadline = time.monotonic() + min(watchdog_seconds, timeout)
         output[stream_name].append(line)
         if callback:
             activity = _activity(provider, stream_name, line)

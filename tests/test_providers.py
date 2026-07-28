@@ -16,8 +16,14 @@ from joe.providers import (
 
 
 class ScriptProvider(Provider):
-    def __init__(self, script: str):
-        super().__init__("fake", sys.executable)
+    def __init__(
+        self, script: str, name: str = "fake", watchdog_seconds: float = 90
+    ):
+        super().__init__(
+            name,
+            sys.executable,
+            watchdog_seconds=watchdog_seconds,
+        )
         object.__setattr__(self, "script", script)
 
     def command(
@@ -51,6 +57,26 @@ def test_provider_timeout_is_reported(tmp_path):
     result = provider.run("hello", tmp_path, Intent.ANALYZE, timeout=0.01)
     assert result.timed_out
     assert result.error_kind == "timeout"
+
+
+def test_gemini_watchdog_stops_an_inactive_process(tmp_path):
+    provider = ScriptProvider(
+        "import time; time.sleep(2)",
+        name="gemini",
+        watchdog_seconds=0.05,
+    )
+    events = []
+
+    result = provider.run(
+        "hello",
+        tmp_path,
+        Intent.ANALYZE,
+        timeout=1,
+        on_stream=lambda stream, text: events.append((stream, text)),
+    )
+
+    assert result.timed_out
+    assert any("Gemini ne répond plus" in text for _, text in events)
 
 
 def test_provider_can_be_cancelled_without_waiting_for_timeout(tmp_path):
@@ -97,6 +123,31 @@ def test_effort_and_safe_execution_modes_are_forwarded():
     )
     assert claude[claude.index("--effort") + 1] == "xhigh"
     assert claude[claude.index("--permission-mode") + 1] == "plan"
+
+
+def test_additional_project_roots_are_forwarded_to_each_cli():
+    cwd = Path("/tmp/project")
+    extra = (Path("/tmp/vision"),)
+
+    codex = Provider("codex", "codex", extra).command(
+        "p", cwd, Intent.ANALYZE
+    )
+    assert codex[codex.index("--add-dir") + 1] == "/tmp/vision"
+    for name, flag in (
+        ("claude", "--add-dir"),
+        ("gemini", "--include-directories"),
+        ("copilot", "--add-dir"),
+    ):
+        command = Provider(name, name, extra).command("p", cwd, Intent.ANALYZE)
+        assert command[command.index(flag) + 1] == "/tmp/vision"
+
+
+def test_codex_remote_access_is_scoped_to_workspace_write():
+    command = Provider("codex", "codex", remote_access=True).command(
+        "p", Path("/tmp/project"), Intent.MODIFY
+    )
+
+    assert "sandbox_workspace_write.network_access=true" in command
 
 
 def test_error_classification():

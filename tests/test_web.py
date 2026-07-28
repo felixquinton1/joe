@@ -130,6 +130,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
     finally:
         server.shutdown()
         thread.join(timeout=2)
+        thread.join(timeout=2)
 
 
 def test_web_rejects_empty_requests(tmp_path):
@@ -148,7 +149,71 @@ def test_web_rejects_empty_requests(tmp_path):
         assert "required" in json.loads(response.read())["error"]
     finally:
         server.shutdown()
-        thread.join(timeout=2)
+
+
+def test_project_scope_uses_only_explicit_roots(tmp_path, monkeypatch):
+    monkeypatch.setattr(RunManager, "_recover_pending", lambda self: None)
+    manager = RunManager(tmp_path)
+    workspace = tmp_path / "workspace"
+    extra = tmp_path / "vision"
+    workspace.mkdir()
+    extra.mkdir()
+    project = manager.conversations.create_project("Vision")
+    manager.conversations.update_project(
+        project["id"],
+        {
+            "workspace_root": str(workspace),
+            "additional_roots": [str(extra)],
+        },
+    )
+    conversation = manager.conversations.create(project["id"])
+
+    root, additional, remote = manager._project_scope(conversation["id"])
+
+    assert root == workspace.resolve()
+    assert additional == (extra.resolve(),)
+    assert remote is False
+
+
+def test_pending_run_state_is_persisted_atomically(tmp_path, monkeypatch):
+    monkeypatch.setattr(RunManager, "_recover_pending", lambda self: None)
+    manager = RunManager(tmp_path)
+    conversation = manager.conversations.create()
+    run = LiveRun("persistent", "continue", conversation["id"])
+
+    manager._write_pending(run, "codex", "review", None, "high", None)
+
+    assert manager._read_pending()["persistent"]["request"] == "continue"
+    manager._remove_pending("persistent")
+    assert manager._read_pending() == {}
+
+
+def test_resumed_run_is_announced_without_duplicating_user_message(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(RunManager, "_recover_pending", lambda self: None)
+    monkeypatch.setattr(RunManager, "_execute", lambda self, *args: None)
+    manager = RunManager(tmp_path)
+    conversation = manager.conversations.create()
+    manager.conversations.append_message(
+        conversation["id"], "user", "continue", "persistent"
+    )
+
+    run = manager.start(
+        "continue",
+        conversation["id"],
+        "codex",
+        "fast",
+        None,
+        None,
+        None,
+        run_id="persistent",
+        resumed=True,
+    )
+
+    messages = manager.conversations.get(conversation["id"])["messages"]
+    assert len(messages) == 1
+    assert run.events[0]["type"] == "recovered"
 
 
 def test_long_fast_answer_does_not_enable_high_effort():

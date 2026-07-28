@@ -37,6 +37,7 @@ class LiveRun:
     run_id: str
     request: str
     conversation_id: str
+    workspace: Path | None = None
     events: list[dict[str, Any]] = field(default_factory=list)
     done: bool = False
     cancel_event: threading.Event = field(default_factory=threading.Event)
@@ -63,6 +64,8 @@ class RunManager:
         self.live: dict[str, LiveRun] = {}
         self.git_rejections: dict[str, dict[str, Any]] = {}
         self.lock = threading.Lock()
+        self.pending_path = self.orchestrator.memory.root / "pending_runs.json"
+        self._recover_pending()
 
     def start(
         self,
@@ -73,18 +76,39 @@ class RunManager:
         model: str | None,
         effort: str | None,
         execution_mode: str | None,
+        *,
+        run_id: str | None = None,
+        resumed: bool = False,
     ) -> LiveRun:
+        workspace, _, _ = self._project_scope(conversation_id)
         run = LiveRun(
-            uuid.uuid4().hex,
+            run_id or uuid.uuid4().hex,
             request,
             conversation_id,
-            git_before=snapshot(self.project),
+            workspace=workspace,
+            git_before=snapshot(workspace),
         )
-        self.conversations.append_message(
-            conversation_id, "user", request, run.run_id
-        )
+        if not resumed:
+            self.conversations.append_message(
+                conversation_id, "user", request, run.run_id
+            )
         with self.lock:
             self.live[run.run_id] = run
+            self._write_pending(
+                run,
+                agent,
+                mode,
+                model,
+                effort,
+                execution_mode,
+            )
+        if resumed:
+            run.emit(
+                {
+                    "type": "recovered",
+                    "message": "Tâche relancée après le redémarrage de Joe",
+                }
+            )
         thread = threading.Thread(
             target=self._execute,
             args=(run, agent, mode, model, effort, execution_mode),
@@ -103,9 +127,17 @@ class RunManager:
         execution_mode: str | None,
     ) -> None:
         try:
+            workspace, additional_roots, remote_access = self._project_scope(
+                run.conversation_id
+            )
+            orchestrator = Orchestrator(
+                workspace,
+                additional_roots=additional_roots,
+                remote_access=remote_access,
+            )
             routing_started = time.monotonic()
             forced_mode = Mode(mode) if mode else None
-            route = self.orchestrator.router.route(
+            route = orchestrator.router.route(
                 run.request,
                 forced_agent=agent,
                 forced_mode=forced_mode,
@@ -141,18 +173,37 @@ class RunManager:
                     "health_check": "health-check" in route.reason,
                 }
             )
-            if route.intent is Intent.MODIFY and not os.access(self.project, os.W_OK):
+            run.emit(
+                {
+                    "type": "evidence",
+                    "status": "inferred",
+                    "label": "Routage",
+                    "detail": (
+                        f"{route.mode.value} vers {route.primary}, décidé par "
+                        "les règles locales"
+                    ),
+                }
+            )
+            if route.intent is Intent.MODIFY and not os.access(workspace, os.W_OK):
                 raise PermissionError(
                     "Le projet n'est pas accessible en écriture. "
                     "Relance Joe depuis un montage inscriptible."
                 )
-            response, log = self.orchestrator.execute(
+            evidence_context = (
+                self.conversations.context(run.conversation_id)
+                + "\n\n# Evidence policy\n"
+                "Never claim that a file, command, remote state, or URL was checked "
+                "unless the corresponding tool completed successfully. In reports, "
+                "separate material claims as Vérifié, Inféré, or Refusé. A blocked "
+                "sandbox or permission check is Refusé, never Vérifié."
+            )
+            response, log = orchestrator.execute(
                 run.request,
                 route,
                 model=model,
                 effort=effort,
                 execution_mode=execution_mode,
-                extra_context=self.conversations.context(run.conversation_id),
+                extra_context=evidence_context,
                 cancel_event=run.cancel_event,
                 on_event=lambda event: self._emit_run_event(run, event),
             )
@@ -192,12 +243,27 @@ class RunManager:
             run.emit({"type": "git_report", "run_id": run.run_id, **git_report})
             run.emit({"type": "error", "message": str(exc)})
         finally:
+            self._remove_pending(run.run_id)
             with run.condition:
                 run.done = True
                 run.condition.notify_all()
 
     def _emit_run_event(self, run: LiveRun, event: dict[str, Any]) -> None:
         run.emit(event)
+        if event.get("type") == "provider_end":
+            ok = bool(event.get("ok"))
+            run.emit(
+                {
+                    "type": "evidence",
+                    "status": "verified" if ok else "refused",
+                    "label": str(event.get("provider", "fournisseur")),
+                    "detail": (
+                        "Exécution terminée avec succès"
+                        if ok
+                        else f"Accès ou exécution interrompu : {event.get('error') or 'erreur'}"
+                    ),
+                }
+            )
         if event.get("type") != "provider_end" or event.get("error") != "quota":
             return
         config = self.orchestrator.memory.config()
@@ -217,12 +283,13 @@ class RunManager:
                 for other in self.live.values()
             )
             report, rejection = build_report(
-                self.project,
-                run.git_before or snapshot(self.project),
+                run.workspace or self.project,
+                run.git_before or snapshot(run.workspace or self.project),
                 run.run_id,
                 concurrent_run=concurrent_run,
             )
             if rejection:
+                rejection["_workspace"] = str(run.workspace or self.project)
                 self.git_rejections[run.run_id] = rejection
             return report
         except (OSError, subprocess.SubprocessError):
@@ -253,7 +320,7 @@ class RunManager:
         if any(not run.done for run in self.live.values()):
             return False, "Attends la fin des autres tâches avant de restaurer."
         restored, message = reject(
-            self.project,
+            _existing_directory(rejection.get("_workspace")) or self.project,
             rejection,
             selected_files=selected_files,
         )
@@ -265,6 +332,80 @@ class RunManager:
             except OSError:
                 pass
         return restored, message
+
+    def _project_scope(
+        self, conversation_id: str
+    ) -> tuple[Path, tuple[Path, ...], bool]:
+        conversation = self.conversations.get(conversation_id) or {}
+        project = self.conversations.get_project(
+            str(conversation.get("project_id", "main"))
+        ) or {}
+        configured_workspace = project.get("workspace_root")
+        workspace = _existing_directory(configured_workspace)
+        if configured_workspace and not workspace:
+            raise ValueError(
+                f"Racine de projet inaccessible : {configured_workspace}"
+            )
+        workspace = workspace or self.project
+        roots_list = []
+        for value in project.get("additional_roots", []):
+            root = _existing_directory(value)
+            if not root:
+                raise ValueError(f"Racine autorisée inaccessible : {value}")
+            if root != workspace:
+                roots_list.append(root)
+        roots = tuple(roots_list)
+        return workspace, roots, bool(project.get("remote_access"))
+
+    def _write_pending(
+        self,
+        run: LiveRun,
+        agent: str | None,
+        mode: str | None,
+        model: str | None,
+        effort: str | None,
+        execution_mode: str | None,
+    ) -> None:
+        pending = self._read_pending()
+        pending[run.run_id] = {
+            "request": run.request,
+            "conversation_id": run.conversation_id,
+            "agent": agent,
+            "mode": mode,
+            "model": model,
+            "effort": effort,
+            "execution_mode": execution_mode,
+        }
+        _atomic_json(self.pending_path, pending)
+
+    def _remove_pending(self, run_id: str) -> None:
+        with self.lock:
+            pending = self._read_pending()
+            if pending.pop(run_id, None) is not None:
+                _atomic_json(self.pending_path, pending)
+
+    def _read_pending(self) -> dict[str, dict[str, Any]]:
+        try:
+            payload = json.loads(self.pending_path.read_text())
+            return payload if isinstance(payload, dict) else {}
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    def _recover_pending(self) -> None:
+        for run_id, item in self._read_pending().items():
+            if not self.conversations.get(str(item.get("conversation_id", ""))):
+                continue
+            self.start(
+                str(item.get("request", "")),
+                str(item["conversation_id"]),
+                item.get("agent"),
+                item.get("mode"),
+                item.get("model"),
+                item.get("effort"),
+                item.get("execution_mode"),
+                run_id=run_id,
+                resumed=True,
+            )
 
     def history(self) -> list[dict[str, Any]]:
         self.orchestrator.memory.ensure()
@@ -357,6 +498,22 @@ def _latest_model(provider: str) -> str | None:
         return None
     models = cached_provider_capabilities().get(provider, {}).get("models", [])
     return str(models[0]["id"]) if models else None
+
+
+def _existing_directory(value: Any) -> Path | None:
+    if not value:
+        return None
+    path = Path(str(value)).expanduser().resolve()
+    return path if path.is_dir() else None
+
+
+def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    )
+    os.replace(temporary, path)
 
 class JoeServer(ThreadingHTTPServer):
     manager: RunManager

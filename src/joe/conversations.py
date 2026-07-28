@@ -71,6 +71,9 @@ class ConversationStore:
             "id": uuid.uuid4().hex,
             "name": name.strip()[:64] or "Nouveau sous-projet",
             "context": "",
+            "workspace_root": "",
+            "additional_roots": [],
+            "remote_access": False,
             "created_at": time.time(),
         }
         with self.lock:
@@ -91,6 +94,16 @@ class ConversationStore:
                 project["name"] = str(changes["name"]).strip()[:64] or project["name"]
             if "context" in changes:
                 project["context"] = str(changes["context"])[:16000]
+            if "workspace_root" in changes:
+                project["workspace_root"] = str(changes["workspace_root"]).strip()
+            if isinstance(changes.get("additional_roots"), list):
+                project["additional_roots"] = [
+                    str(root).strip()
+                    for root in changes["additional_roots"]
+                    if str(root).strip()
+                ][:8]
+            if "remote_access" in changes:
+                project["remote_access"] = bool(changes["remote_access"])
             self._write(payload)
             return project
 
@@ -301,6 +314,10 @@ class ConversationStore:
         )
         for conversation in payload.setdefault("conversations", []):
             conversation.setdefault("project_id", DEFAULT_PROJECT_ID)
+        for project in payload["projects"]:
+            project.setdefault("workspace_root", "")
+            project.setdefault("additional_roots", [])
+            project.setdefault("remote_access", False)
         payload["version"] = 2
         return payload
 

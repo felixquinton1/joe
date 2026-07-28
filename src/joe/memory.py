@@ -56,6 +56,7 @@ class ProjectMemory:
                 "runs/\n"
                 "session.md\n"
                 "handoff.md\n"
+                "pending_runs.json\n"
                 "*.reject.json\n"
                 "*.reject.patch\n"
                 "*.tmp\n"

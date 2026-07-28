@@ -1,4 +1,4 @@
-const APP_VERSION = "0.16.0";
+const APP_VERSION = "0.17.0";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -450,6 +450,7 @@ function preserveActivePanel() {
   state.panels.set(state.activeConversationId, {
     agentNodes: [...$("agents").children],
     agents: state.agents,
+    evidenceNodes: [...$("evidence-log").children],
     rawLog: $("raw-log").textContent,
     runState: $("run-state").textContent,
     runStateClass: $("run-state").className
@@ -461,11 +462,13 @@ function restoreConversationPanel(conversationId) {
   if (!panel) {
     state.agents = new Map();
     $("agents").replaceChildren();
+    $("evidence-log").replaceChildren();
     $("raw-log").textContent = "";
     return;
   }
   state.agents = panel.agents;
   $("agents").replaceChildren(...panel.agentNodes);
+  $("evidence-log").replaceChildren(...(panel.evidenceNodes || []));
   $("raw-log").textContent = panel.rawLog;
   $("run-state").textContent = panel.runState;
   $("run-state").className = panel.runStateClass;
@@ -532,6 +535,9 @@ function createProject() {
   $("project-dialog-title").textContent = "Nouveau sous-projet";
   $("save-project").textContent = "Créer";
   $("project-name").value = "";
+  $("project-root").value = "";
+  $("project-extra-roots").value = "";
+  $("project-remote-access").checked = false;
   $("project-context").value = "";
   $("project-dialog").showModal();
   requestAnimationFrame(() => $("project-name").focus());
@@ -542,6 +548,9 @@ function openProject(project) {
   $("project-dialog-title").textContent = "Modifier le sous-projet";
   $("save-project").textContent = "Enregistrer";
   $("project-name").value = project.name;
+  $("project-root").value = project.workspace_root || "";
+  $("project-extra-roots").value = (project.additional_roots || []).join("\n");
+  $("project-remote-access").checked = Boolean(project.remote_access);
   $("project-context").value = project.context || "";
   $("project-dialog").showModal();
 }
@@ -557,6 +566,10 @@ async function saveProject(event) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name: $("project-name").value,
+      workspace_root: $("project-root").value,
+      additional_roots: $("project-extra-roots").value
+        .split("\n").map(value => value.trim()).filter(Boolean),
+      remote_access: $("project-remote-access").checked,
       context: $("project-context").value
     })
   });
@@ -762,6 +775,12 @@ function handleEvent(conversationId, event, finalBubble) {
     const agent = ensureAgent(event.provider);
     agent.card.classList.remove("active");
     agent.status.textContent = event.ok ? "Terminé" : `Échec · ${event.error || "inconnu"}`;
+  } else if (event.type === "evidence") {
+    const row = document.createElement("div");
+    row.className = `evidence-row ${event.status}`;
+    const labels = { verified: "Vérifié", inferred: "Inféré", refused: "Refusé" };
+    row.innerHTML = `<b>${labels[event.status] || escapeHtml(event.status)}</b><span>${escapeHtml(event.label)} · ${escapeHtml(event.detail || "")}</span>`;
+    $("evidence-log").appendChild(row);
   } else if (event.type === "quota_notice") {
     showQuotaNotice(event);
   } else if (event.type === "git_report") {
