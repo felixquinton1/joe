@@ -148,14 +148,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b'id="toggle-history"' in page
         assert b'id="toggle-activity"' in page
         assert b'src="/markdown.js"' in page
-        assert b'src="/joe-mark.svg"' in page
-
-        connection.request("GET", "/joe-mark.svg")
-        response = connection.getresponse()
-        logo = response.read()
-        assert response.status == 200
-        assert response.getheader("Content-Type") == "image/svg+xml"
-        assert b"<svg" in logo
+        assert b'<span class="brand-mark">J</span>' in page
 
         connection.request("GET", "/app.js")
         response = connection.getresponse()
