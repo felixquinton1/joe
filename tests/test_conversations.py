@@ -60,6 +60,28 @@ def test_subproject_context_is_shared_by_its_conversations(tmp_path):
     assert loaded_project["remote_access"] is True
 
 
+def test_project_context_is_preserved_when_history_is_truncated(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+    project = store.create_project("Vision")
+    store.update_project(project["id"], {"context": "RÈGLE_STABLE"})
+    conversation = store.create(project["id"])
+    for index in range(20):
+        store.append_message(
+            conversation["id"],
+            "assistant",
+            f"message-{index}-" + "x" * 500,
+        )
+
+    context = store.context(conversation["id"], limit=1000)
+
+    assert "RÈGLE_STABLE" in context
+    assert "message-19" in context
+    assert len(context) <= 1000
+
+
 def test_old_runs_are_imported_once(tmp_path):
     root = tmp_path / ".agentflow"
     runs = root / "runs"

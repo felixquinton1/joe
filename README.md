@@ -142,7 +142,12 @@ truthfully relaunches the task from the beginning with the same run identifier.
 
 Conversations are persistent per project. Each conversation keeps its full
 message history and independent agent, workflow, model, effort, and permission
-settings. Conversations can be pinned and several can run concurrently; avoid
+settings. Provider processes remain ephemeral: when a conversation switches
+from Codex to Claude or Gemini, Joe rebuilds a bounded shared context containing
+the stable project context, the latest project session/handoff, project
+instructions, and recent conversation turns. Stable project context has a
+reserved budget and is not displaced by a long history.
+Conversations can be pinned and several can run concurrently; avoid
 launching concurrent write tasks against the same files.
 While a conversation is running, additional prompts can be queued with their
 current agent/model settings. They start in order after the active response and

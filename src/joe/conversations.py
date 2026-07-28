@@ -214,16 +214,26 @@ class ConversationStore:
         messages = conversation["messages"]
         if messages and messages[-1]["role"] == "user":
             messages = messages[:-1]
-        lines = ["# Active conversation history"]
         project = self.get_project(conversation.get("project_id", DEFAULT_PROJECT_ID))
+        project_section = ""
         if project and project.get("context"):
-            lines.append(
+            project_section = (
                 f"# Sub-project: {project['name']}\n{project['context']}"
-            )
+            )[: min(4000, limit // 3)]
+        history_budget = max(0, limit - len(project_section) - 40)
+        recent = []
         for message in messages[-20:]:
             label = "User" if message["role"] == "user" else "Assistant"
-            lines.append(f"## {label}\n{message['content']}")
-        return "\n\n".join(lines)[-limit:]
+            recent.append(f"## {label}\n{message['content']}")
+        history = "\n\n".join(recent)[-history_budget:]
+        return "\n\n".join(
+            section
+            for section in (
+                project_section,
+                "# Active conversation history\n" + history,
+            )
+            if section
+        )[:limit]
 
     def previous_provider(self, conversation_id: str) -> str | None:
         conversation = self.get(conversation_id)

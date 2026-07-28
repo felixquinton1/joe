@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -294,42 +294,46 @@ class Orchestrator:
             "Proposition indépendante", "running",
         )
         with ThreadPoolExecutor(max_workers=2) as executor:
-            codex_future = executor.submit(
-                self._isolated_run,
-                "codex",
-                proposal_prompt,
-                Intent.ANALYZE,
-                {"claude"},
-                model if selected_provider == "codex" else None,
-                effort if selected_provider == "codex" else None,
-                execution_mode if selected_provider == "codex" else None,
-                cancel_event,
-                on_event,
-            )
-            claude_future = executor.submit(
-                self._isolated_run,
-                "claude",
-                proposal_prompt,
-                Intent.ANALYZE,
-                {"codex"},
-                model if selected_provider == "claude" else None,
-                effort if selected_provider == "claude" else None,
-                execution_mode if selected_provider == "claude" else None,
-                cancel_event,
-                on_event,
-            )
-            codex, codex_results = codex_future.result()
-            claude, claude_results = claude_future.result()
+            futures = {
+                executor.submit(
+                    self._isolated_run,
+                    provider,
+                    proposal_prompt,
+                    Intent.ANALYZE,
+                    {other},
+                    model if selected_provider == provider else None,
+                    effort if selected_provider == provider else None,
+                    execution_mode if selected_provider == provider else None,
+                    cancel_event,
+                    on_event,
+                ): provider
+                for provider, other in (
+                    ("codex", "claude"),
+                    ("claude", "codex"),
+                )
+            }
+            proposals = {}
+            proposal_results = {}
+            for future in as_completed(futures):
+                provider = futures[future]
+                proposal, local_results = future.result()
+                proposals[provider] = proposal
+                proposal_results[provider] = local_results
+                self._workflow_event(
+                    on_event,
+                    "consensus",
+                    f"proposal_{provider}",
+                    proposal.provider,
+                    "Proposition indépendante",
+                    "complete",
+                    proposal.stdout,
+                )
+        codex = proposals["codex"]
+        claude = proposals["claude"]
+        codex_results = proposal_results["codex"]
+        claude_results = proposal_results["claude"]
         results.extend(codex_results)
         results.extend(claude_results)
-        self._workflow_event(
-            on_event, "consensus", "proposal_codex", codex.provider,
-            "Proposition indépendante", "complete", codex.stdout,
-        )
-        self._workflow_event(
-            on_event, "consensus", "proposal_claude", claude.provider,
-            "Proposition indépendante", "complete", claude.stdout,
-        )
         self._workflow_event(
             on_event, "consensus", "review_codex", "codex",
             "Examen de la proposition de Claude", "running",
@@ -339,44 +343,53 @@ class Orchestrator:
             "Examen de la proposition de Codex", "running",
         )
         with ThreadPoolExecutor(max_workers=2) as executor:
-            codex_review_future = executor.submit(
-                self._isolated_run,
-                "codex",
-                self._review_prompt(context, claude.stdout),
-                Intent.ANALYZE,
-                {"claude"},
-                None,
-                None,
-                None,
-                cancel_event,
-                on_event,
-            )
-            claude_review_future = executor.submit(
-                self._isolated_run,
-                "claude",
-                self._review_prompt(context, codex.stdout),
-                Intent.ANALYZE,
-                {"codex"},
-                None,
-                None,
-                None,
-                cancel_event,
-                on_event,
-            )
-            codex_review, codex_review_results = codex_review_future.result()
-            claude_review, claude_review_results = claude_review_future.result()
+            futures = {
+                executor.submit(
+                    self._isolated_run,
+                    provider,
+                    self._review_prompt(
+                        context,
+                        claude.stdout if provider == "codex" else codex.stdout,
+                    ),
+                    Intent.ANALYZE,
+                    {other},
+                    None,
+                    None,
+                    None,
+                    cancel_event,
+                    on_event,
+                ): provider
+                for provider, other in (
+                    ("codex", "claude"),
+                    ("claude", "codex"),
+                )
+            }
+            reviews = {}
+            review_results = {}
+            for future in as_completed(futures):
+                provider = futures[future]
+                review, local_results = future.result()
+                reviews[provider] = review
+                review_results[provider] = local_results
+                self._workflow_event(
+                    on_event,
+                    "consensus",
+                    f"review_{provider}",
+                    review.provider,
+                    (
+                        "Examen de la proposition de Claude"
+                        if provider == "codex"
+                        else "Examen de la proposition de Codex"
+                    ),
+                    "complete",
+                    review.stdout,
+                )
+        codex_review = reviews["codex"]
+        claude_review = reviews["claude"]
+        codex_review_results = review_results["codex"]
+        claude_review_results = review_results["claude"]
         results.extend(codex_review_results)
         results.extend(claude_review_results)
-        self._workflow_event(
-            on_event, "consensus", "review_codex", codex_review.provider,
-            "Examen de la proposition de Claude", "complete",
-            codex_review.stdout,
-        )
-        self._workflow_event(
-            on_event, "consensus", "review_claude", claude_review.provider,
-            "Examen de la proposition de Codex", "complete",
-            claude_review.stdout,
-        )
         synthesis_prompt = (
             context
             + "\n\nSynthesize the following independent proposals and cross-reviews. "

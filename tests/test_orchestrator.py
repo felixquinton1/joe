@@ -171,6 +171,39 @@ def test_consensus_runs_proposals_and_reviews_in_parallel(tmp_path):
     assert time.monotonic() - started < 0.4
 
 
+def test_consensus_marks_each_proposal_complete_without_waiting_for_peer(
+    tmp_path,
+):
+    providers = {
+        "codex": FakeProvider("codex", delay=0.01),
+        "claude": FakeProvider("claude", delay=0.08),
+        "gemini": FakeProvider("gemini"),
+        "copilot": FakeProvider("copilot"),
+    }
+    events = []
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    orchestrator.execute(
+        "important",
+        Route(Intent.ANALYZE, Mode.CONSENSUS, "codex"),
+        on_event=events.append,
+    )
+
+    codex_complete = next(
+        index
+        for index, event in enumerate(events)
+        if event.get("stage") == "proposal_codex"
+        and event.get("status") == "complete"
+    )
+    claude_finished = next(
+        index
+        for index, event in enumerate(events)
+        if event.get("type") == "provider_end"
+        and event.get("provider") == "claude"
+    )
+    assert codex_complete < claude_finished
+
+
 def test_health_check_skips_project_context_and_uses_short_timeout(tmp_path):
     providers = {
         name: FakeProvider(name)

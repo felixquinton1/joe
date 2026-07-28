@@ -1,4 +1,4 @@
-const APP_VERSION = "0.17.0";
+const APP_VERSION = "0.17.1";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -702,6 +702,7 @@ function renderWorkflowUpdate(event, finalBubble, runId) {
 
 function handleEvent(conversationId, event, finalBubble) {
   const activeRun = state.runs.get(conversationId);
+  if (event.type === "route" && activeRun) activeRun.mode = event.mode;
   if (event.type === "workflow_update" && activeRun) {
     activeRun.workflow.set(event.stage, event);
   }
@@ -727,6 +728,7 @@ function handleEvent(conversationId, event, finalBubble) {
     return;
   }
   finalBubble = state.runs.get(conversationId)?.bubble || finalBubble;
+  const structuredWorkflow = ["consensus", "review"].includes(activeRun?.mode);
   const conversationViewport = document.querySelector(".conversation");
   const followConversation = shouldFollow(conversationViewport);
   const diagnostics = $("raw-log");
@@ -740,12 +742,14 @@ function handleEvent(conversationId, event, finalBubble) {
     const quotaSwitch = event.reason?.includes("quota-switch=");
     const quotaDetail = quotaSwitch ? event.reason.split("; ").at(-1) : "";
     const execution = [event.model, event.effort ? `effort ${event.effort}` : ""].filter(Boolean).join(" · ");
-    finalBubble.textContent = `Routage local terminé${Number.isFinite(event.routing_ms) ? ` en ${event.routing_ms} ms` : ""}.\n${event.mode.toUpperCase()} · ${capitalize(event.primary)} ${event.health_check ? "effectue un test minimal" : "répond"}${event.reviewer ? ` · revue par ${capitalize(event.reviewer)}` : ""}${execution ? ` · ${execution}` : ""}${quotaSwitch ? `\nBascule automatique : ${quotaDetail}.` : ""}`;
+    finalBubble.textContent = ["consensus", "review"].includes(event.mode)
+      ? "Synthèse finale en attente…"
+      : `Routage local terminé${Number.isFinite(event.routing_ms) ? ` en ${event.routing_ms} ms` : ""}.\n${event.mode.toUpperCase()} · ${capitalize(event.primary)} ${event.health_check ? "effectue un test minimal" : "répond"}${event.reviewer ? ` · revue par ${capitalize(event.reviewer)}` : ""}${execution ? ` · ${execution}` : ""}${quotaSwitch ? `\nBascule automatique : ${quotaDetail}.` : ""}`;
   } else if (event.type === "provider_start") {
     const agent = ensureAgent(event.provider);
     agent.card.classList.add("active");
     agent.status.textContent = "Démarrage";
-    finalBubble.textContent = `${capitalize(event.provider)} démarre…`;
+    if (!structuredWorkflow) finalBubble.textContent = `${capitalize(event.provider)} démarre…`;
   } else if (event.type === "activity") {
     const agent = ensureAgent(event.provider);
     agent.status.textContent = event.label;
@@ -760,7 +764,7 @@ function handleEvent(conversationId, event, finalBubble) {
     agent.activity.appendChild(row);
     while (agent.activity.children.length > 12) agent.activity.firstElementChild.remove();
     scrollIfFollowing(agent.activity, followActivity);
-    finalBubble.textContent = `${capitalize(event.provider)} · ${event.label}`;
+    if (!structuredWorkflow) finalBubble.textContent = `${capitalize(event.provider)} · ${event.label}`;
   } else if (event.type === "stream") {
     const agent = ensureAgent(event.provider);
     const followOutput = shouldFollow(agent.output);
@@ -768,9 +772,7 @@ function handleEvent(conversationId, event, finalBubble) {
     scrollIfFollowing(agent.output, followOutput);
   } else if (event.type === "workflow_update") {
     renderWorkflowUpdate(event, finalBubble, activeRun?.runId || "");
-    finalBubble.textContent = event.status === "complete"
-      ? `${capitalize(event.provider)} a terminé : ${event.label.toLowerCase()}.`
-      : `${capitalize(event.provider)} · ${event.label}…`;
+    finalBubble.textContent = "Synthèse finale en attente…";
   } else if (event.type === "provider_end") {
     const agent = ensureAgent(event.provider);
     agent.card.classList.remove("active");
