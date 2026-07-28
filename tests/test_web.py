@@ -1,6 +1,7 @@
 import http.client
 import json
 import threading
+import time
 from types import SimpleNamespace
 
 from joe.models import Intent, Mode, Route
@@ -13,6 +14,7 @@ from joe.web import (
     _operational_validation,
     build_quota_notice,
 )
+from joe.http_utils import MAX_JSON_BODY_BYTES, validate_bind
 
 
 def start_server(tmp_path):
@@ -51,6 +53,13 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert response.status == 200
         assert "reconcileRun(conversationId, runId)" in app
         assert "window.location.reload()" in app
+
+        connection.request("GET", "/markdown.js")
+        response = connection.getresponse()
+        markdown = response.read().decode()
+        assert response.status == 200
+        assert "renderMarkdown" in markdown
+        assert "isTableSeparator" in markdown
 
         connection.request("GET", "/api/capabilities")
         response = connection.getresponse()
@@ -135,18 +144,30 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b'id="prompt-queue"' in page
         assert b'data-resizer="left"' in page
         assert b'data-resizer="right"' in page
+        assert b'id="toggle-history"' in page
+        assert b'id="toggle-activity"' in page
+        assert b'src="/markdown.js"' in page
 
         connection.request("GET", "/app.js")
         response = connection.getresponse()
         script = response.read()
         assert response.status == 200
         assert b"renderMarkdown" in script
-        assert b"isTableSeparator" in script
         assert b"launchNextQueued" in script
         assert b"copyButton" in script
         assert b"moveConversation" in script
         assert b"setupPanelResizers" in script
+        assert b"resizeComposer" in script
+        assert b"toggleMobilePanel" in script
         assert b"loadActiveRuns" in script
+
+        connection.request("GET", "/style.css")
+        response = connection.getresponse()
+        style = response.read()
+        assert response.status == 200
+        assert b"max-height:min(42vh,360px)" in style
+        assert b".bubble,.composer textarea" in style
+        assert b".activity-panel.mobile-open" in style
     finally:
         server.shutdown()
         thread.join(timeout=2)
@@ -169,6 +190,48 @@ def test_web_rejects_empty_requests(tmp_path):
         assert "required" in json.loads(response.read())["error"]
     finally:
         server.shutdown()
+
+
+def test_web_rejects_invalid_or_oversized_json_uniformly(tmp_path):
+    server, thread = start_server(tmp_path)
+    try:
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/api/conversations",
+            body="{",
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        assert response.status == 400
+        assert json.loads(response.read())["error"] == "JSON invalide."
+
+        connection.request(
+            "POST",
+            "/api/projects",
+            body=b"",
+            headers={"Content-Length": str(MAX_JSON_BODY_BYTES + 1)},
+        )
+        response = connection.getresponse()
+        assert response.status == 413
+        assert "maximum" in json.loads(response.read())["error"]
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_non_local_bind_requires_explicit_opt_in():
+    validate_bind("127.0.0.1")
+    validate_bind("::1")
+
+    try:
+        validate_bind("0.0.0.0")
+    except ValueError as error:
+        assert "--allow-remote" in str(error)
+    else:
+        raise AssertionError("A remote bind must require explicit opt-in")
+
+    validate_bind("0.0.0.0", allow_remote=True)
 
 
 def test_project_scope_uses_only_explicit_roots(tmp_path, monkeypatch):
@@ -218,6 +281,40 @@ def test_pending_run_state_is_persisted_atomically(tmp_path, monkeypatch):
     assert manager._read_pending()["persistent"]["request"] == "continue"
     manager._remove_pending("persistent")
     assert manager._read_pending() == {}
+
+
+def test_completed_live_runs_expire_from_memory(tmp_path, monkeypatch):
+    monkeypatch.setattr(RunManager, "_recover_pending", lambda self: None)
+    manager = RunManager(tmp_path)
+    expired = LiveRun("expired", "done", "conversation")
+    expired.done = True
+    expired.finished_at = 10
+    active = LiveRun("active", "work", "conversation")
+    manager.live = {"expired": expired, "active": active}
+
+    with manager.lock:
+        manager._prune_live_locked(now=10 + manager.LIVE_RUN_TTL_SECONDS)
+
+    assert "expired" not in manager.live
+    assert manager.get_run("active") is active
+
+
+def test_completed_live_run_timer_removes_only_matching_generation(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(RunManager, "_recover_pending", lambda self: None)
+    manager = RunManager(tmp_path)
+    completed = LiveRun("same-id", "done", "conversation")
+    completed.done = True
+    completed.finished_at = time.time()
+    manager.live[completed.run_id] = completed
+
+    manager._expire_live_run("same-id", 10)
+    assert manager.get_run("same-id") is completed
+
+    manager._expire_live_run("same-id", completed.finished_at)
+    assert manager.get_run("same-id") is None
 
 
 def test_resumed_run_is_announced_without_duplicating_user_message(

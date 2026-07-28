@@ -19,9 +19,11 @@ from . import __version__
 from .capabilities import cached_provider_capabilities, provider_capabilities
 from .conversations import ConversationStore
 from .git_review import GitSnapshot, build_report, reject, snapshot
+from .http_utils import RequestBodyError, read_json_body, validate_bind
 from .models import Intent, Mode
 from .orchestrator import Orchestrator
-from .usage import admit_route, balance_route, cached_usage_status, usage_status
+from .routing import resolve_route
+from .usage import cached_usage_status, usage_status
 
 
 def _conversation_backup_path(project: Path) -> Path:
@@ -44,6 +46,7 @@ class LiveRun:
     condition: threading.Condition = field(default_factory=threading.Condition)
     git_before: GitSnapshot | None = None
     track_changes: bool = False
+    finished_at: float | None = None
 
     def emit(self, event: dict[str, Any]) -> None:
         with self.condition:
@@ -52,6 +55,9 @@ class LiveRun:
 
 
 class RunManager:
+    LIVE_RUN_TTL_SECONDS = 300
+    MAX_COMPLETED_RUNS = 50
+
     def __init__(self, project: Path):
         self.project = project.resolve()
         self.orchestrator = Orchestrator(self.project)
@@ -95,6 +101,7 @@ class RunManager:
                 conversation_id, "user", request, run.run_id
             )
         with self.lock:
+            self._prune_live_locked()
             self.live[run.run_id] = run
             self._write_pending(
                 run,
@@ -146,22 +153,18 @@ class RunManager:
             )
             routing_started = time.monotonic()
             forced_mode = Mode(mode) if mode else None
-            route = orchestrator.router.route(
+            decision = resolve_route(
+                orchestrator.router,
                 run.request,
+                cached_usage_status(),
                 forced_agent=agent,
                 forced_mode=forced_mode,
                 previous_provider=self.conversations.previous_provider(
                     run.conversation_id
                 ),
             )
-            if not agent:
-                route = balance_route(route, cached_usage_status())
-            route, quota_admission = admit_route(
-                route,
-                cached_usage_status(),
-                forced_agent=bool(agent),
-                forced_mode=bool(mode),
-            )
+            route = decision.route
+            quota_admission = decision.quota_admission
             if route.mode is Mode.CONSENSUS:
                 execution_mode = None
             run.track_changes = (
@@ -279,7 +282,17 @@ class RunManager:
             self._remove_pending(run.run_id)
             with run.condition:
                 run.done = True
+                run.finished_at = time.time()
                 run.condition.notify_all()
+            with self.lock:
+                self._prune_live_locked()
+            cleanup = threading.Timer(
+                self.LIVE_RUN_TTL_SECONDS,
+                self._expire_live_run,
+                args=(run.run_id, run.finished_at),
+            )
+            cleanup.daemon = True
+            cleanup.start()
 
     def _emit_run_event(self, run: LiveRun, event: dict[str, Any]) -> None:
         run.emit(event)
@@ -316,10 +329,11 @@ class RunManager:
                 "reason": "Requête exécutée en lecture seule",
             }
         try:
-            concurrent_run = any(
-                other.run_id != run.run_id and not other.done
-                for other in self.live.values()
-            )
+            with self.lock:
+                concurrent_run = any(
+                    other.run_id != run.run_id and not other.done
+                    for other in self.live.values()
+                )
             report, rejection = build_report(
                 run.workspace or self.project,
                 run.git_before or snapshot(run.workspace or self.project),
@@ -328,14 +342,14 @@ class RunManager:
             )
             if rejection:
                 rejection["_workspace"] = str(run.workspace or self.project)
-                self.git_rejections[run.run_id] = rejection
+                with self.lock:
+                    self.git_rejections[run.run_id] = rejection
             return report
         except (OSError, subprocess.SubprocessError):
             return {"available": False}
 
     def cancel(self, run_id: str) -> bool:
-        with self.lock:
-            run = self.live.get(run_id)
+        run = self.get_run(run_id)
         if not run or run.done:
             return False
         run.cancel_event.set()
@@ -346,7 +360,8 @@ class RunManager:
         run_id: str,
         selected_files: list[str] | None = None,
     ) -> tuple[bool, str]:
-        rejection = self.git_rejections.get(run_id)
+        with self.lock:
+            rejection = self.git_rejections.get(run_id)
         review_path = self.orchestrator.memory.runs / f"{run_id}.reject.json"
         if not rejection and run_id.replace("-", "").isalnum():
             try:
@@ -355,7 +370,7 @@ class RunManager:
                 rejection = None
         if not rejection:
             return False, "Ces modifications ne peuvent pas être restaurées automatiquement."
-        if any(not run.done for run in self.live.values()):
+        if self.active_runs():
             return False, "Attends la fin des autres tâches avant de restaurer."
         restored, message = reject(
             _existing_directory(rejection.get("_workspace")) or self.project,
@@ -363,13 +378,59 @@ class RunManager:
             selected_files=selected_files,
         )
         if restored:
-            self.git_rejections.pop(run_id, None)
+            with self.lock:
+                self.git_rejections.pop(run_id, None)
             try:
                 Path(rejection["patch"]).unlink(missing_ok=True)
                 review_path.unlink(missing_ok=True)
             except OSError:
                 pass
         return restored, message
+
+    def get_run(self, run_id: str) -> LiveRun | None:
+        with self.lock:
+            self._prune_live_locked()
+            return self.live.get(run_id)
+
+    def active_runs(self) -> list[LiveRun]:
+        with self.lock:
+            self._prune_live_locked()
+            return [run for run in self.live.values() if not run.done]
+
+    def has_active_conversation(self, conversation_id: str) -> bool:
+        return any(
+            run.conversation_id == conversation_id
+            for run in self.active_runs()
+        )
+
+    def _prune_live_locked(self, now: float | None = None) -> None:
+        timestamp = time.time() if now is None else now
+        completed = sorted(
+            (run for run in self.live.values() if run.done),
+            key=lambda run: run.finished_at or timestamp,
+            reverse=True,
+        )
+        removable = {
+            run.run_id
+            for index, run in enumerate(completed)
+            if index >= self.MAX_COMPLETED_RUNS
+            or (
+                run.finished_at is not None
+                and timestamp - run.finished_at >= self.LIVE_RUN_TTL_SECONDS
+            )
+        }
+        for run_id in removable:
+            self.live.pop(run_id, None)
+
+    def _expire_live_run(
+        self,
+        run_id: str,
+        finished_at: float | None,
+    ) -> None:
+        with self.lock:
+            run = self.live.get(run_id)
+            if run and run.done and run.finished_at == finished_at:
+                self.live.pop(run_id, None)
 
     def _project_scope(
         self, conversation_id: str
@@ -660,6 +721,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._asset("index.html", "text/html; charset=utf-8")
         if path == "/app.js":
             return self._asset("app.js", "text/javascript; charset=utf-8")
+        if path == "/markdown.js":
+            return self._asset("markdown.js", "text/javascript; charset=utf-8")
         if path == "/style.css":
             return self._asset("style.css", "text/css; charset=utf-8")
         if path == "/api/status":
@@ -692,8 +755,7 @@ class Handler(BaseHTTPRequestHandler):
                         "conversation_id": run.conversation_id,
                         "request": run.request,
                     }
-                    for run in self.server.manager.live.values()
-                    if not run.done
+                    for run in self.server.manager.active_runs()
                 ]
             )
         if path == "/api/projects":
@@ -721,14 +783,9 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path.startswith("/api/runs/") and path.endswith("/reject"):
             run_id = unquote(path.split("/")[-2])
-            size = int(self.headers.get("Content-Length", "0"))
-            try:
-                payload = json.loads(self.rfile.read(size)) if size else {}
-            except json.JSONDecodeError:
-                return self._json(
-                    {"restored": False, "message": "Requête invalide."},
-                    HTTPStatus.BAD_REQUEST,
-                )
+            payload = self._read_payload(allow_empty=True)
+            if payload is None:
+                return
             selected_files = payload.get("files")
             if selected_files is not None and (
                 not isinstance(selected_files, list)
@@ -754,15 +811,17 @@ class Handler(BaseHTTPRequestHandler):
                 HTTPStatus.ACCEPTED if cancelled else HTTPStatus.NOT_FOUND,
             )
         if path == "/api/conversations":
-            size = int(self.headers.get("Content-Length", "0"))
-            payload = json.loads(self.rfile.read(size)) if size else {}
+            payload = self._read_payload(allow_empty=True)
+            if payload is None:
+                return
             return self._json(
                 self.server.manager.conversations.create(payload.get("project_id")),
                 HTTPStatus.CREATED,
             )
         if path == "/api/projects":
-            size = int(self.headers.get("Content-Length", "0"))
-            payload = json.loads(self.rfile.read(size)) if size else {}
+            payload = self._read_payload(allow_empty=True)
+            if payload is None:
+                return
             return self._json(
                 self.server.manager.conversations.create_project(
                     str(payload.get("name", "Nouveau sous-projet"))
@@ -772,8 +831,9 @@ class Handler(BaseHTTPRequestHandler):
         if path != "/api/runs":
             return self.send_error(HTTPStatus.NOT_FOUND)
         try:
-            size = int(self.headers.get("Content-Length", "0"))
-            payload = json.loads(self.rfile.read(size))
+            payload = self._read_payload()
+            if payload is None:
+                return
             request = str(payload.get("request", "")).strip()
             conversation_id = str(payload.get("conversation_id", "")).strip()
             if not request:
@@ -789,7 +849,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("invalid agent")
             if mode not in {None, "fast", "review", "consensus"}:
                 raise ValueError("invalid mode")
-        except (ValueError, json.JSONDecodeError) as exc:
+        except ValueError as exc:
             return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
         run = self.server.manager.start(
             request, conversation_id, agent, mode, model, effort, execution_mode
@@ -802,11 +862,9 @@ class Handler(BaseHTTPRequestHandler):
         is_project = path.startswith("/api/projects/")
         if not is_conversation and not is_project:
             return self.send_error(HTTPStatus.NOT_FOUND)
-        try:
-            size = int(self.headers.get("Content-Length", "0"))
-            payload = json.loads(self.rfile.read(size))
-        except (ValueError, json.JSONDecodeError):
-            return self._json({"error": "invalid JSON"}, HTTPStatus.BAD_REQUEST)
+        payload = self._read_payload()
+        if payload is None:
+            return
         identifier = unquote(path.rsplit("/", 1)[1])
         item = (
             self.server.manager.conversations.update(identifier, payload)
@@ -820,10 +878,7 @@ class Handler(BaseHTTPRequestHandler):
         if not path.startswith("/api/conversations/"):
             return self.send_error(HTTPStatus.NOT_FOUND)
         conversation_id = unquote(path.rsplit("/", 1)[1])
-        if any(
-            run.conversation_id == conversation_id and not run.done
-            for run in self.server.manager.live.values()
-        ):
+        if self.server.manager.has_active_conversation(conversation_id):
             return self._json(
                 {"error": "Interromps la tâche avant de supprimer la conversation."},
                 HTTPStatus.CONFLICT,
@@ -835,7 +890,7 @@ class Handler(BaseHTTPRequestHandler):
         )
 
     def _events(self, run_id: str) -> None:
-        run = self.server.manager.live.get(run_id)
+        run = self.server.manager.get_run(run_id)
         if not run:
             return self.send_error(HTTPStatus.NOT_FOUND)
         self.send_response(HTTPStatus.OK)
@@ -874,6 +929,17 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _read_payload(self, *, allow_empty: bool = False) -> dict[str, Any] | None:
+        try:
+            return read_json_body(
+                self.headers,
+                self.rfile,
+                allow_empty=allow_empty,
+            )
+        except RequestBodyError as exc:
+            self._json({"error": str(exc)}, exc.status)
+            return None
+
     def _json(self, payload: Any, status: HTTPStatus = HTTPStatus.OK) -> None:
         data = json.dumps(payload, ensure_ascii=False).encode()
         self.send_response(status)
@@ -887,7 +953,14 @@ class Handler(BaseHTTPRequestHandler):
         return
 
 
-def serve(project: Path, host: str = "127.0.0.1", port: int = 8765) -> None:
+def serve(
+    project: Path,
+    host: str = "127.0.0.1",
+    port: int = 8765,
+    *,
+    allow_remote: bool = False,
+) -> None:
+    validate_bind(host, allow_remote=allow_remote)
     server = JoeServer((host, port), Handler)
     server.manager = RunManager(project)
     server.serve_forever()

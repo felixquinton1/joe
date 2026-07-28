@@ -11,6 +11,14 @@ MODIFY_WORDS = {
     "fusionner", "pull", "rebase", "commit", "push", "cherry-pick",
     "remove", "fix", "implement", "update", "write",
 }
+MODIFY_PHRASES = {
+    "fais cela",
+    "fais ça",
+    "mets en œuvre",
+    "mets en oeuvre",
+    "applique ces changements",
+}
+READ_ONLY_AMBIGUOUS_MODIFY_WORDS = {"implementation", "implémentation"}
 REVIEW_WORDS = {
     "avis", "autre", "critique", "review", "relis", "relecture", "vérifie",
     "vérifier", "double-check", "audit", "audite", "auditer",
@@ -44,10 +52,47 @@ HEALTH_CHECK_PHRASES = {
     "petit test", "teste ", "test de ", "test du ", "fonctionne",
     "est disponible", "marche",
 }
+READ_ONLY_DIRECTIVES = (
+    r"\bne\s+(?:modifie|change|touche)\s+(?:rien|aucun(?:e)?\s+\w+)",
+    r"\bn['’](?:écris|ecris)\s+(?:rien|dans\s+aucun(?:e)?\s+\w+)",
+    r"\bsans\s+(?:modifier|changer|toucher|écrire|ecrire)\b",
+    r"\b(?:do not|don['’]t)\s+(?:modify|change|edit|write)\b",
+    r"\bwithout\s+(?:modifying|changing|editing|writing)\b",
+    r"\b(?:no|aucune?s?)\s+(?:file\s+changes?|modifications?|changements?)\b",
+)
+NEGATED_ACTION_CLAUSES = (
+    re.compile(
+        r"\b(?:ne\s+|n['’])(?:pas\s+)?"
+        r"(?:exécute|execute|lance|fais|fait|effectue)\s+"
+        r"(?:pas\s+|jamais\s+)?[^,.;!?]*(?=$|[,.;!?])",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:do not|don['’]t)\s+(?:run|execute|perform)\s+"
+        r"[^,.;!?]*(?=$|[,.;!?])",
+        re.IGNORECASE,
+    ),
+)
 
 
 def _tokens(text: str) -> set[str]:
     return set(re.findall(r"[\wÀ-ÿ-]+", text.lower()))
+
+
+def _intent_text(text: str) -> tuple[str, bool]:
+    actionable = text
+    read_only = False
+    for pattern in READ_ONLY_DIRECTIVES:
+        actionable, count = re.subn(
+            pattern,
+            " ",
+            actionable,
+            flags=re.IGNORECASE,
+        )
+        read_only = read_only or bool(count)
+    for pattern in NEGATED_ACTION_CLAUSES:
+        actionable = pattern.sub(" ", actionable)
+    return actionable, read_only
 
 
 class Router:
@@ -61,6 +106,10 @@ class Router:
     ) -> Route:
         lower = request.lower()
         words = _tokens(request)
+        intent_text, read_only_directive = _intent_text(request)
+        intent_words = _tokens(intent_text)
+        if read_only_directive:
+            intent_words -= READ_ONLY_AMBIGUOUS_MODIFY_WORDS
         named_providers = words & PROVIDER_NAMES
         explicit_provider = (
             next(iter(named_providers)) if len(named_providers) == 1 else None
@@ -73,7 +122,11 @@ class Router:
         )
         intent = (
             Intent.MODIFY
-            if words & MODIFY_WORDS and not capability_question
+            if (
+                intent_words & MODIFY_WORDS
+                or any(phrase in intent_text.lower() for phrase in MODIFY_PHRASES)
+            )
+            and not capability_question
             else Intent.ANALYZE
         )
         if capability_question or (
@@ -130,5 +183,10 @@ class Router:
             f"{intent.value}; {mode.value}; preferred={primary}"
             + ("; explicit-provider" if explicit_provider and not forced_agent else "")
             + ("; health-check" if health_check else "")
+            + (
+                "; explicit-read-only"
+                if read_only_directive and intent is not Intent.MODIFY
+                else ""
+            )
         )
         return Route(intent, mode, primary, reviewer, reason)

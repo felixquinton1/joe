@@ -223,9 +223,7 @@ class Orchestrator:
                 timeout_override or int(config["timeout_seconds"]),
                 model=model if name == provider_name else None,
                 effort=effort if name == provider_name else None,
-                execution_mode=(
-                    execution_mode if name == provider_name else None
-                ),
+                execution_mode=execution_mode,
                 cancel_event=cancel_event,
                 on_stream=(
                     lambda stream, text, provider=name: on_event(

@@ -64,6 +64,25 @@ def test_failure_falls_back(tmp_path):
     assert len(providers["gemini"].calls) == 1
 
 
+def test_fallback_preserves_explicit_read_only_permission(tmp_path):
+    providers = {
+        "codex": FakeProvider("codex", fail=True),
+        "claude": FakeProvider("claude"),
+        "gemini": FakeProvider("gemini"),
+        "copilot": FakeProvider("copilot"),
+    }
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    orchestrator.execute(
+        "do not modify",
+        Route(Intent.MODIFY, Mode.FAST, "codex"),
+        execution_mode="plan",
+    )
+
+    assert providers["codex"].execution_modes == ["plan"]
+    assert providers["gemini"].execution_modes == ["plan"]
+
+
 def test_review_uses_primary_intent_then_read_only_review(tmp_path):
     providers = {name: FakeProvider(name) for name in ("codex", "claude", "gemini", "copilot")}
     orchestrator = Orchestrator(tmp_path, providers=providers)

@@ -25,6 +25,9 @@ executable are named Joe.
 
 - Analysis and review calls are read-only.
 - Implementation calls may edit only the selected working directory.
+- Explicit permissions survive every fallback. Joe normalizes provider-specific
+  names such as `plan`, `read-only`, and `dontAsk`, then translates the same or
+  a stricter access level for the fallback provider.
 - FAST makes one provider call unless that provider fails.
 - REVIEW makes one primary call and one read-only review call, followed by at
   most one justified correction pass.
@@ -123,6 +126,10 @@ reasoning effort. Explicit model and effort choices always take precedence.
 Capability questions and other simple FAST answers use `low` effort, even when
 the question is long. Question wording such as "est-ce que tu peux..." is not
 treated as an implementation order merely because it mentions modifying code.
+Explicit negations such as "ne modifie rien", "sans changer les fichiers", and
+"do not modify files" take precedence over the negated modification words.
+Scoped negations still allow the rest of an explicit task: "corrige le bug mais
+ne commit pas" remains an implementation request.
 Large implementation requests are routed to REVIEW automatically: the primary
 agent implements, the other agent audits without editing, and the primary gets
 at most one correction pass when the reviewer explicitly reports justified
@@ -141,6 +148,9 @@ explicitly write-enabled execution. Read-only answers and analyses ignore
 unrelated edits made concurrently by another terminal or agent.
 Final answers are rendered locally as safe Markdown, including headings,
 tables, lists, links, inline code, and fenced code blocks.
+Markdown rendering lives in a separate browser module. The composer grows with
+the prompt up to 42% of the viewport and uses the same font, size, line height,
+case, and letter spacing as response text.
 
 Each logical project can define one primary workspace, explicit additional
 roots, and optional remote-command access. Joe starts every provider in that
@@ -186,10 +196,17 @@ history is retained; only the prompt representation is summarized. This policy
 is configurable under `semantic_compaction` in `.agentflow/config.yaml`.
 Conversations can be pinned and several can run concurrently; avoid
 launching concurrent write tasks against the same files.
+Completed live runs remain reconnectable for five minutes, with at most 50
+completed runs retained in process memory. Project session/handoff updates,
+run-log pruning, and Gemini usage accumulation are serialized and written
+atomically so concurrent runs cannot lose an update or mix the two active
+memory files.
 Projects and conversations can be reordered by drag and drop. Favorites remain
 above non-favorites, each conversation shows its last-call date, and project
 groups can be collapsed. The left and right panels have resize handles; their
 widths intentionally reset to the ergonomic defaults after a page refresh.
+On mobile, Conversations and Activity open from dedicated top-bar buttons
+instead of disappearing.
 While a conversation is running, additional prompts can be queued with their
 current agent/model settings. They start in order after the active response and
 can be copied or removed before execution. Copy controls are also available on
@@ -236,7 +253,37 @@ ssh -L 8765:127.0.0.1:8765 user@server
 ```
 
 Open `http://127.0.0.1:8765` on your computer. The server binds only to
-localhost by default.
+localhost by default. Every JSON endpoint uses the same parser and rejects
+invalid lengths, malformed objects, and bodies over 1 MiB. A non-local bind is
+refused unless the risk is acknowledged explicitly:
+
+```bash
+joe web --host 0.0.0.0 --allow-remote
+```
+
+The HTTP API has no authentication; prefer SSH port forwarding even when
+`--allow-remote` is available.
+
+## Validation and CI
+
+The GitHub Actions workflow runs the complete Python suite on Python 3.10 and
+3.12, checks both JavaScript modules with Node.js, and exercises the installed
+`joe` entry point with a read-only dry run. Run the same checks locally with:
+
+```bash
+pytest -q
+node --check src/joe/web_assets/app.js
+node --check src/joe/web_assets/markdown.js
+joe --dry-run -C . "Ne modifie rien, analyse seulement Joe"
+```
+
+An opt-in `live_smokes` workflow-dispatch job targets an authenticated
+self-hosted runner and contacts all four provider CLIs through
+`joe doctor --live`. The equivalent local command is:
+
+```bash
+JOE_LIVE_SMOKE=1 pytest -q tests/test_live_cli_smoke.py
+```
 
 ## Provider updates
 

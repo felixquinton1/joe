@@ -1,6 +1,7 @@
 import json
 import os
 import stat
+import threading
 
 from joe.memory import ProjectMemory, redact
 
@@ -91,3 +92,31 @@ def test_run_retention_removes_old_and_excess_logs(tmp_path):
         "new-1",
         "new-2",
     ]
+
+
+def test_concurrent_active_updates_keep_session_and_handoff_together(tmp_path):
+    memories = [ProjectMemory(tmp_path), ProjectMemory(tmp_path)]
+    barrier = threading.Barrier(2)
+
+    def update(memory, marker):
+        barrier.wait()
+        memory.update_active(
+            request=marker,
+            provider="codex",
+            mode="fast",
+            response=f"response-{marker}",
+        )
+
+    threads = [
+        threading.Thread(target=update, args=(memory, marker))
+        for memory, marker in zip(memories, ("alpha", "beta"))
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    session = (memories[0].root / "session.md").read_text()
+    handoff = (memories[0].root / "handoff.md").read_text()
+    final_marker = "alpha" if "Objective: alpha" in session else "beta"
+    assert f"Request: {final_marker}" in handoff

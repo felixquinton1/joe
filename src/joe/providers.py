@@ -17,6 +17,28 @@ from .usage import record_gemini_usage
 
 StreamCallback = Callable[[str, str], None]
 
+READ_ONLY_MODES = {"read-only", "plan"}
+WORKSPACE_WRITE_MODES = {
+    "workspace-write",
+    "acceptEdits",
+    "auto_edit",
+    "modify",
+}
+FULL_ACCESS_MODES = {"danger-full-access"}
+RESTRICTED_MODES = {"dontAsk"}
+
+
+def _access_level(execution_mode: str | None, modifying: bool) -> str:
+    if execution_mode in READ_ONLY_MODES:
+        return "read"
+    if execution_mode in WORKSPACE_WRITE_MODES:
+        return "write"
+    if execution_mode in FULL_ACCESS_MODES:
+        return "full"
+    if execution_mode in RESTRICTED_MODES:
+        return "restricted"
+    return "write" if modifying else "read"
+
 
 class ProviderCancelled(RuntimeError):
     pass
@@ -40,10 +62,14 @@ class Provider:
         execution_mode: str | None = None,
     ) -> list[str]:
         modifying = intent is Intent.MODIFY
+        access = _access_level(execution_mode, modifying)
         if self.name == "codex":
-            sandbox = execution_mode if execution_mode in {
-                "read-only", "workspace-write", "danger-full-access"
-            } else ("workspace-write" if modifying else "read-only")
+            sandbox = {
+                "read": "read-only",
+                "write": "workspace-write",
+                "full": "danger-full-access",
+                "restricted": "read-only",
+            }[access]
             command = [
                 self.executable, "--ask-for-approval", "never",
             ]
@@ -64,17 +90,12 @@ class Provider:
                 command.extend(["--model", model])
             return [*command, "-C", str(cwd), prompt]
         if self.name == "claude":
-            permission = (
-                execution_mode
-                if execution_mode in {"plan", "acceptEdits", "dontAsk"}
-                else (
-                    "dontAsk"
-                    if execution_mode == "danger-full-access"
-                    else "acceptEdits"
-                    if modifying or execution_mode == "workspace-write"
-                    else "plan"
-                )
-            )
+            permission = {
+                "read": "plan",
+                "write": "acceptEdits",
+                "full": "dontAsk",
+                "restricted": "dontAsk",
+            }[access]
             command = [
                 self.executable, "--print", "--output-format", "stream-json",
                 "--verbose",
@@ -89,15 +110,7 @@ class Provider:
             return [*command, prompt]
         if self.name == "gemini":
             approval = (
-                execution_mode
-                if execution_mode in {"plan", "auto_edit"}
-                else (
-                    "auto_edit"
-                    if modifying
-                    or execution_mode
-                    in {"workspace-write", "danger-full-access"}
-                    else "plan"
-                )
+                "auto_edit" if access in {"write", "full"} else "plan"
             )
             command = [
                 self.executable, "--output-format", "stream-json",
@@ -109,11 +122,7 @@ class Provider:
                 command.extend(["--model", model])
             return [*command, "--prompt", prompt]
         if self.name == "copilot":
-            allow_modify = (
-                modifying
-                or execution_mode
-                in {"workspace-write", "danger-full-access", "acceptEdits"}
-            ) and execution_mode != "plan"
+            allow_modify = access in {"write", "full"}
             args = [
                 self.executable, "--silent", "--no-color",
                 "--no-remote", "--no-remote-export", "--no-ask-user",
@@ -124,7 +133,7 @@ class Provider:
                 args.extend(["--model", model])
             if effort:
                 args.extend(["--effort", effort])
-            if execution_mode == "plan":
+            if not allow_modify:
                 args.append("--plan")
             if allow_modify:
                 args.extend(["--allow-tool=write", "--allow-tool=shell"])

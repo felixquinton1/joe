@@ -13,7 +13,8 @@ from pathlib import Path
 from . import __version__
 from .models import Mode
 from .orchestrator import OrchestrationError, Orchestrator
-from .usage import admit_route, usage_status
+from .routing import resolve_route
+from .usage import usage_status
 
 PROVIDERS = ("codex", "claude", "gemini", "copilot")
 
@@ -82,13 +83,16 @@ def _handle(
     mode: Mode | None,
     dry_run: bool,
 ) -> int:
-    route = orchestrator.plan(request, forced_agent=agent, forced_mode=mode)
-    route, quota_admission = admit_route(
-        route,
+    decision = resolve_route(
+        orchestrator.router,
+        request,
         usage_status(),
-        forced_agent=bool(agent),
-        forced_mode=bool(mode),
+        forced_agent=agent,
+        forced_mode=mode,
+        previous_provider=orchestrator.memory.previous_provider(),
     )
+    route = decision.route
+    quota_admission = decision.quota_admission
     if quota_admission:
         print(f"[joe] {quota_admission['message']}", file=sys.stderr)
         if quota_admission.get("blocked"):
@@ -119,6 +123,11 @@ def _web(argv: list[str]) -> int:
     web_parser.add_argument("-C", "--project", type=Path, default=Path.cwd())
     web_parser.add_argument("--host", default="127.0.0.1")
     web_parser.add_argument("--port", type=int, default=8765)
+    web_parser.add_argument(
+        "--allow-remote",
+        action="store_true",
+        help="allow a non-local bind despite the unauthenticated HTTP API",
+    )
     web_parser.add_argument("--no-browser", action="store_true")
     web_parser.add_argument(
         "--foreground",
@@ -130,6 +139,13 @@ def _web(argv: list[str]) -> int:
         print(f"joe: project directory does not exist: {args.project}", file=sys.stderr)
         return 2
     from .web import serve
+    from .http_utils import validate_bind
+
+    try:
+        validate_bind(args.host, allow_remote=args.allow_remote)
+    except ValueError as exc:
+        print(f"joe: {exc}", file=sys.stderr)
+        return 2
 
     url = f"http://{args.host}:{args.port}"
     if not args.foreground and shutil.which("tmux"):
@@ -138,7 +154,12 @@ def _web(argv: list[str]) -> int:
     if not args.no_browser:
         threading.Timer(0.4, webbrowser.open, args=(url,)).start()
     try:
-        serve(args.project, args.host, args.port)
+        serve(
+            args.project,
+            args.host,
+            args.port,
+            allow_remote=args.allow_remote,
+        )
     except KeyboardInterrupt:
         print("\nJoe Web stopped.")
     except OSError as exc:
@@ -172,6 +193,8 @@ def _tmux_web(args: argparse.Namespace, url: str) -> int:
             "--no-browser",
             "--foreground",
         ]
+        if args.allow_remote:
+            command.append("--allow-remote")
         created = subprocess.run(
             ["tmux", "new-session", "-d", "-s", session, *command],
             check=False,

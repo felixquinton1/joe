@@ -11,6 +11,10 @@
     <div class="brand"><span class="brand-mark">J</span><div><strong>Joe</strong><small>AI control room · <span id="version">…</span></small></div></div>
     <div class="joe-tagline"><span>✦</span><strong>L’IA à la mode chez les jeunes</strong></div>
     <div class="topbar-tools">
+      <div class="mobile-panel-tools">
+        <button id="toggle-history" type="button" aria-expanded="false">Conversations</button>
+        <button id="toggle-activity" type="button" aria-expanded="false">Activité</button>
+      </div>
       <div class="project"><span class="status-dot"></span><span id="project">Chargement…</span></div>
       <details class="usage-popover">
         <summary title="Consommation personnelle"><span class="quota-dot"></span>Quotas</summary>
@@ -91,6 +95,7 @@
       <div class="dialog-actions"><button value="cancel">Annuler</button><button id="confirm-delete-conversation" class="danger-button" value="default">Supprimer</button></div>
     </form>
   </dialog>
+  <script src="/markdown.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

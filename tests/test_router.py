@@ -91,3 +91,41 @@ def test_explicit_provider_name_routes_directly_to_that_provider():
     assert route.primary == "gemini"
     assert "explicit-provider" in route.reason
     assert "health-check" in route.reason
+
+
+def test_explicit_file_change_negations_stay_read_only():
+    for request in (
+        "Analyse ce module mais ne modifie rien",
+        "Ne change aucun fichier, donne-moi seulement un avis",
+        "Explique le correctif sans changer les fichiers",
+        "Do not modify files; review this implementation",
+    ):
+        route = Router().route(request)
+        assert route.intent is not Intent.MODIFY
+        assert "explicit-read-only" in route.reason
+
+
+def test_negated_execution_clause_does_not_trigger_git_modification():
+    route = Router().route(
+        "N’exécute pas git push ; explique seulement ce qui se passerait"
+    )
+
+    assert route.intent is not Intent.MODIFY
+
+
+def test_scoped_git_negation_does_not_hide_a_real_code_change():
+    route = Router().route("Corrige le bug mais ne commit pas le changement")
+
+    assert route.intent is Intent.MODIFY
+
+
+def test_scoped_read_only_clause_does_not_hide_an_explicit_change():
+    route = Router().route("Corrige le bug sans changer son API publique")
+
+    assert route.intent is Intent.MODIFY
+
+
+def test_fais_cela_is_an_explicit_follow_up_change():
+    route = Router().route("Fais cela et ajoute les tests ciblés")
+
+    assert route.intent is Intent.MODIFY

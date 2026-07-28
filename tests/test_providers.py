@@ -125,6 +125,43 @@ def test_effort_and_safe_execution_modes_are_forwarded():
     assert claude[claude.index("--permission-mode") + 1] == "plan"
 
 
+def test_provider_specific_read_only_modes_translate_across_providers():
+    cwd = Path("/tmp/project")
+
+    codex = Provider("codex", "codex").command(
+        "p", cwd, Intent.MODIFY, execution_mode="plan"
+    )
+    claude = Provider("claude", "claude").command(
+        "p", cwd, Intent.MODIFY, execution_mode="read-only"
+    )
+    gemini = Provider("gemini", "gemini").command(
+        "p", cwd, Intent.MODIFY, execution_mode="plan"
+    )
+    copilot = Provider("copilot", "copilot").command(
+        "p", cwd, Intent.MODIFY, execution_mode="read-only"
+    )
+
+    assert codex[codex.index("--sandbox") + 1] == "read-only"
+    assert claude[claude.index("--permission-mode") + 1] == "plan"
+    assert gemini[gemini.index("--approval-mode") + 1] == "plan"
+    assert "--plan" in copilot
+    assert not any(argument.startswith("--allow-tool") for argument in copilot)
+
+
+def test_restricted_claude_mode_never_escalates_on_other_providers():
+    cwd = Path("/tmp/project")
+
+    claude = Provider("claude", "claude").command(
+        "p", cwd, Intent.MODIFY, execution_mode="dontAsk"
+    )
+    codex = Provider("codex", "codex").command(
+        "p", cwd, Intent.MODIFY, execution_mode="dontAsk"
+    )
+
+    assert claude[claude.index("--permission-mode") + 1] == "dontAsk"
+    assert codex[codex.index("--sandbox") + 1] == "read-only"
+
+
 def test_generic_write_modes_are_translated_for_non_codex_clis():
     cwd = Path("/tmp/project")
     claude = Provider("claude", "claude").command(

@@ -1,4 +1,4 @@
-const APP_VERSION = "0.20.3";
+const APP_VERSION = "0.21.0";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -12,6 +12,7 @@ const state = {
   queues: new Map()
 };
 const $ = id => document.getElementById(id);
+const renderMarkdown = window.JoeMarkdown.renderMarkdown;
 
 async function loadStatus() {
   const status = await fetch("/api/status").then(response => response.json());
@@ -545,6 +546,7 @@ function smallButton(label, title, action) {
 
 async function selectConversation(conversationId) {
   preserveActivePanel();
+  closeMobilePanels();
   const conversation = await fetch(`/api/conversations/${conversationId}`).then(response => response.json());
   state.activeConversationId = conversationId;
   state.activeProjectId = conversation.project_id || "main";
@@ -954,6 +956,7 @@ function handleEvent(conversationId, event, finalBubble) {
     const prompt = state.runs.get(conversationId)?.request || "";
     finishRun(conversationId, false);
     $("request").value = prompt;
+    resizeComposer();
     $("run-state").textContent = "Interrompu";
     loadConversations(false).then(() => selectConversation(conversationId));
   }
@@ -1193,8 +1196,10 @@ $("composer").addEventListener("submit", async event => {
   const request = $("request").value.trim();
   if (!request) return;
   $("request").value = "";
+  resizeComposer();
   await startRun(request);
 });
+$("request").addEventListener("input", resizeComposer);
 $("request").addEventListener("keydown", event => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
@@ -1242,124 +1247,6 @@ function scrollIfFollowing(element, follow) {
   requestAnimationFrame(() => element.scrollTo({ top: element.scrollHeight, behavior: "smooth" }));
 }
 
-function renderMarkdown(target, source) {
-  target.dataset.source = String(source || "");
-  const lines = String(source || "").replace(/\r\n/g, "\n").split("\n");
-  const html = [];
-  let index = 0;
-  while (index < lines.length) {
-    const line = lines[index];
-    if (!line.trim()) {
-      index += 1;
-      continue;
-    }
-    if (line.trim().startsWith("```")) {
-      const language = line.trim().slice(3).trim();
-      const code = [];
-      index += 1;
-      while (index < lines.length && !lines[index].trim().startsWith("```")) {
-        code.push(lines[index]);
-        index += 1;
-      }
-      index += index < lines.length ? 1 : 0;
-      html.push(`<pre><code${language ? ` data-language="${escapeHtml(language)}"` : ""}>${escapeHtml(code.join("\n"))}</code></pre>`);
-      continue;
-    }
-    const heading = line.match(/^(#{1,4})\s+(.+)$/);
-    if (heading) {
-      const level = heading[1].length;
-      html.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`);
-      index += 1;
-      continue;
-    }
-    if (index + 1 < lines.length && isTableSeparator(lines[index + 1])) {
-      const headers = tableCells(line);
-      index += 2;
-      const rows = [];
-      while (index < lines.length && lines[index].includes("|") && lines[index].trim()) {
-        rows.push(tableCells(lines[index]));
-        index += 1;
-      }
-      html.push(`<div class="table-scroll"><table><thead><tr>${headers.map(cell => `<th>${inlineMarkdown(cell)}</th>`).join("")}</tr></thead><tbody>${rows.map(row => `<tr>${headers.map((_, column) => `<td>${inlineMarkdown(row[column] || "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`);
-      continue;
-    }
-    if (/^\s*[-*+]\s+/.test(line)) {
-      const items = [];
-      while (index < lines.length && /^\s*[-*+]\s+/.test(lines[index])) {
-        items.push(lines[index].replace(/^\s*[-*+]\s+/, ""));
-        index += 1;
-      }
-      html.push(`<ul>${items.map(item => `<li>${inlineMarkdown(item)}</li>`).join("")}</ul>`);
-      continue;
-    }
-    if (/^\s*\d+\.\s+/.test(line)) {
-      const items = [];
-      while (index < lines.length && /^\s*\d+\.\s+/.test(lines[index])) {
-        items.push(lines[index].replace(/^\s*\d+\.\s+/, ""));
-        index += 1;
-      }
-      html.push(`<ol>${items.map(item => `<li>${inlineMarkdown(item)}</li>`).join("")}</ol>`);
-      continue;
-    }
-    if (/^>\s?/.test(line)) {
-      const quotes = [];
-      while (index < lines.length && /^>\s?/.test(lines[index])) {
-        quotes.push(lines[index].replace(/^>\s?/, ""));
-        index += 1;
-      }
-      html.push(`<blockquote>${inlineMarkdown(quotes.join(" "))}</blockquote>`);
-      continue;
-    }
-    if (/^---+$/.test(line.trim())) {
-      html.push("<hr>");
-      index += 1;
-      continue;
-    }
-    const paragraph = [line];
-    index += 1;
-    while (index < lines.length && lines[index].trim() && !startsMarkdownBlock(lines, index)) {
-      paragraph.push(lines[index]);
-      index += 1;
-    }
-    html.push(`<p>${paragraph.map(inlineMarkdown).join("<br>")}</p>`);
-  }
-  target.innerHTML = html.join("");
-  target.classList.add("markdown");
-}
-
-function startsMarkdownBlock(lines, index) {
-  const line = lines[index];
-  return /^(#{1,4})\s+/.test(line)
-    || line.trim().startsWith("```")
-    || /^\s*[-*+]\s+/.test(line)
-    || /^\s*\d+\.\s+/.test(line)
-    || /^>\s?/.test(line)
-    || /^---+$/.test(line.trim())
-    || (index + 1 < lines.length && isTableSeparator(lines[index + 1]));
-}
-
-function isTableSeparator(line) {
-  return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
-}
-
-function tableCells(line) {
-  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(cell => cell.trim());
-}
-
-function inlineMarkdown(value) {
-  const code = [];
-  let text = escapeHtml(value).replace(/`([^`]+)`/g, (_, content) => {
-    code.push(content);
-    return `\u0000CODE${code.length - 1}\u0000`;
-  });
-  text = text
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/__([^_]+)__/g, "<strong>$1</strong>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-  return text.replace(/\u0000CODE(\d+)\u0000/g, (_, position) => `<code>${code[Number(position)]}</code>`);
-}
-
 function setupPanelResizers() {
   const layout = document.querySelector(".layout");
   for (const handle of document.querySelectorAll(".panel-resizer")) {
@@ -1390,6 +1277,35 @@ function setupPanelResizers() {
   }
 }
 
+function resizeComposer() {
+  const area = $("request");
+  const maximum = Math.min(window.innerHeight * 0.42, 360);
+  area.style.height = "auto";
+  const target = Math.max(48, Math.min(area.scrollHeight, maximum));
+  area.style.height = `${target}px`;
+  area.style.overflowY = area.scrollHeight > maximum ? "auto" : "hidden";
+}
+
+function closeMobilePanels() {
+  for (const [panelSelector, buttonId] of [
+    [".history-panel", "toggle-history"],
+    [".activity-panel", "toggle-activity"]
+  ]) {
+    document.querySelector(panelSelector)?.classList.remove("mobile-open");
+    $(buttonId)?.setAttribute("aria-expanded", "false");
+  }
+}
+
+function toggleMobilePanel(panelSelector, buttonId) {
+  const panel = document.querySelector(panelSelector);
+  const opening = !panel.classList.contains("mobile-open");
+  closeMobilePanels();
+  if (opening) {
+    panel.classList.add("mobile-open");
+    $(buttonId).setAttribute("aria-expanded", "true");
+  }
+}
+
 setInterval(updateCountdowns, 1000);
 setInterval(() => loadUsage().catch(() => {}), 60000);
 setInterval(async () => {
@@ -1401,6 +1317,15 @@ setInterval(async () => {
   }
 }, 5000);
 setupPanelResizers();
+resizeComposer();
+$("toggle-history").onclick = () => toggleMobilePanel(
+  ".history-panel",
+  "toggle-history"
+);
+$("toggle-activity").onclick = () => toggleMobilePanel(
+  ".activity-panel",
+  "toggle-activity"
+);
 
 Promise.all([loadStatus(), loadActiveRuns()])
   .then(() => loadConversations())

@@ -65,29 +65,38 @@ def record_gemini_usage(
         return
     timestamp = time.time() if now is None else now
     target = path or _gemini_usage_path()
-    try:
-        payload = json.loads(target.read_text()) if target.exists() else {}
-    except (OSError, json.JSONDecodeError):
-        payload = {}
-    day = datetime.fromtimestamp(timestamp).date().isoformat()
-    days = payload.setdefault("days", {})
-    current = days.setdefault(day, {"tokens": 0, "requests": 0, "models": {}})
-    current["tokens"] += stats["tokens"]
-    current["requests"] += stats["requests"]
-    for model, model_stats in stats["models"].items():
-        item = current["models"].setdefault(
-            model, {"tokens": 0, "requests": 0}
+    with _lock:
+        try:
+            payload = json.loads(target.read_text()) if target.exists() else {}
+        except (OSError, json.JSONDecodeError):
+            payload = {}
+        day = datetime.fromtimestamp(timestamp).date().isoformat()
+        days = payload.setdefault("days", {})
+        current = days.setdefault(
+            day,
+            {"tokens": 0, "requests": 0, "models": {}},
         )
-        item["tokens"] += model_stats["tokens"]
-        item["requests"] += model_stats["requests"]
-    payload["last"] = {"at": timestamp, **stats}
-    payload["days"] = dict(sorted(days.items())[-30:])
-    try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
-        target.chmod(0o600)
-    except OSError:
-        return
+        current["tokens"] += stats["tokens"]
+        current["requests"] += stats["requests"]
+        for model, model_stats in stats["models"].items():
+            item = current["models"].setdefault(
+                model,
+                {"tokens": 0, "requests": 0},
+            )
+            item["tokens"] += model_stats["tokens"]
+            item["requests"] += model_stats["requests"]
+        payload["last"] = {"at": timestamp, **stats}
+        payload["days"] = dict(sorted(days.items())[-30:])
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            temporary = target.with_suffix(f".{uuid.uuid4().hex}.tmp")
+            temporary.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2)
+            )
+            temporary.chmod(0o600)
+            os.replace(temporary, target)
+        except OSError:
+            return
 
 
 def _gemini_stats(raw_output: str) -> dict[str, Any] | None:
