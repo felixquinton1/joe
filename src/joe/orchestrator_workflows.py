@@ -358,7 +358,11 @@ def isolated_run(
         cancel_event=cancel_event,
         on_event=on_event,
         allow_fallback=allow_quota_fallback,
-        fallback_error_kinds={"quota"} if allow_quota_fallback else None,
+        fallback_error_kinds=(
+            {"authentication", "quota", "timeout", "unavailable"}
+            if allow_quota_fallback
+            else None
+        ),
     )
     return result, local_results
 

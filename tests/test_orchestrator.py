@@ -194,6 +194,32 @@ def test_consensus_uses_gemini_when_claude_quota_is_exhausted(tmp_path):
     )
 
 
+def test_consensus_replaces_a_timed_out_participant(tmp_path):
+    providers = {
+        name: FakeProvider(name)
+        for name in ("codex", "claude", "gemini", "copilot")
+    }
+    providers["claude"].run = lambda *args, **kwargs: ProviderResult(
+        "claude",
+        ["claude"],
+        "",
+        "provider timed out",
+        124,
+        0.01,
+        timed_out=True,
+        error_kind="timeout",
+    )
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    response, _ = orchestrator.execute(
+        "important",
+        Route(Intent.ANALYZE, Mode.CONSENSUS, "codex"),
+    )
+
+    assert response.startswith("> ⚠️ **Consensus dégradé**")
+    assert "Claude indisponible, relais par Gemini" in response
+
+
 def test_consensus_still_fails_closed_on_process_error(tmp_path):
     providers = {
         "codex": FakeProvider("codex"),

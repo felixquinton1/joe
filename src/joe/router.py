@@ -40,6 +40,15 @@ CONSENSUS_PHRASES = {
     "plan expérimental", "plan scientifique", "plusieurs approches",
     "compromis importants", "consensus",
 }
+STRATEGIC_CHOICE_WORDS = {
+    "commercial", "distribution", "github", "license", "licence",
+    "marketplace", "monétisation", "portfolio", "public", "pypi",
+    "stratégie", "vitrine",
+}
+EXPLICIT_REVIEW_PHRASES = {
+    "auditer par", "faire auditer", "fais-le auditer", "fais le auditer",
+    "fait le auditer", "puis audite", "puis fais auditer",
+}
 ARCHITECTURE_WORDS = {"architecture", "migration", "protocole", "roadmap"}
 CODE_WORDS = {
     "bug", "debug", "python", "test", "tests", "loss", "training", "code",
@@ -150,8 +159,23 @@ class Router:
         ):
             intent = Intent.ANSWER
 
-        follow_up_review = bool(words & REVIEW_WORDS) and previous_provider
-        important = any(phrase in lower for phrase in CONSENSUS_PHRASES)
+        explicit_workflow_review = any(
+            phrase in lower for phrase in EXPLICIT_REVIEW_PHRASES
+        )
+        follow_up_review = (
+            bool(words & REVIEW_WORDS)
+            and previous_provider
+            and not explicit_workflow_review
+        )
+        strategic_choice = (
+            len(request) >= 140
+            and " ou " in lower
+            and len(words & STRATEGIC_CHOICE_WORDS) >= 2
+        )
+        important = (
+            any(phrase in lower for phrase in CONSENSUS_PHRASES)
+            or strategic_choice
+        )
         ambiguous_architecture = bool(words & ARCHITECTURE_WORDS) and any(
             marker in lower for marker in ("choisir", "quelle approche", "propose")
         )
@@ -166,6 +190,8 @@ class Router:
 
         if forced_mode:
             mode = forced_mode
+        elif explicit_workflow_review:
+            mode = Mode.REVIEW
         elif follow_up_review:
             mode = Mode.FAST
         elif important or ambiguous_architecture:
@@ -179,7 +205,7 @@ class Router:
 
         if forced_agent:
             primary = forced_agent
-        elif explicit_provider:
+        elif explicit_provider and not explicit_workflow_review:
             primary = explicit_provider
         elif follow_up_review:
             primary = "claude" if previous_provider == "codex" else "codex"
@@ -194,10 +220,15 @@ class Router:
 
         reviewer = None
         if mode is Mode.REVIEW:
-            reviewer = "claude" if primary == "codex" else "codex"
+            reviewer = (
+                explicit_provider
+                if explicit_workflow_review and explicit_provider
+                else "claude" if primary == "codex" else "codex"
+            )
         reason = (
             f"{intent.value}; {mode.value}; preferred={primary}"
             + ("; explicit-provider" if explicit_provider and not forced_agent else "")
+            + ("; explicit-review-workflow" if explicit_workflow_review else "")
             + ("; health-check" if health_check else "")
             + (
                 "; explicit-read-only"

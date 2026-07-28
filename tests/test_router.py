@@ -72,6 +72,28 @@ def test_operational_audit_uses_review_instead_of_consensus():
     assert route.reviewer == "claude"
 
 
+def test_explicit_plan_then_claude_audit_uses_real_review_workflow():
+    route = Router().route(
+        "Fais un plan d'action et fais-le auditer par Claude",
+        previous_provider="codex",
+    )
+
+    assert route.mode is Mode.REVIEW
+    assert route.primary == "codex"
+    assert route.reviewer == "claude"
+    assert "explicit-review-workflow" in route.reason
+
+
+def test_long_strategic_distribution_choice_uses_consensus():
+    route = Router().route(
+        "Selon toi quelle stratégie adopter pour rendre Joe public et valoriser "
+        "mon portfolio : GitHub public ou PyPI ou extension Marketplace ? "
+        "Le projet n'a pas vocation à devenir commercial."
+    )
+
+    assert route.mode is Mode.CONSENSUS
+
+
 def test_long_capability_question_stays_fast_and_read_only():
     route = Router().route(
         "Est-ce que tu peux modifier le code de Joe depuis ici ou dois-je "
