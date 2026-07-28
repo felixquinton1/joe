@@ -45,6 +45,13 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert "joe/backups" in payload["conversation_backup"]
         assert "codex" in payload["providers"]
 
+        connection.request("GET", "/app.js")
+        response = connection.getresponse()
+        app = response.read().decode()
+        assert response.status == 200
+        assert "reconcileRun(conversationId, runId)" in app
+        assert "window.location.reload()" in app
+
         connection.request("GET", "/api/capabilities")
         response = connection.getresponse()
         capabilities = json.loads(response.read())

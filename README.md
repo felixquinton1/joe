@@ -168,7 +168,10 @@ server crash they are restarted from their saved request and conversation
 context. A dead subprocess cannot resume at an instruction boundary, so Joe
 truthfully relaunches the task from the beginning with the same run identifier.
 After a browser refresh, the interface reattaches to active server-side event
-streams instead of losing their run identifiers.
+streams instead of losing their run identifiers. If the server restarts while
+the page stays open, Joe reconciles the browser state with the active server
+runs: recovered tasks reconnect, while missing runs stop instead of leaving an
+infinite spinner. Open pages also reload when the backend version changes.
 
 Conversations are persistent per project. Each conversation keeps its full
 message history and independent agent, workflow, model, effort, and permission

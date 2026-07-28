@@ -1,4 +1,4 @@
-const APP_VERSION = "0.20.2";
+const APP_VERSION = "0.20.3";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -1103,11 +1103,56 @@ function attachRun(conversationId, runId, request, finalBubble = null) {
     stream.close();
     if (state.runs.has(conversationId)) {
       if (activeRun.bubble) {
-        activeRun.bubble.textContent = "Connexion au flux interrompue. Le run reste disponible côté serveur.";
+        activeRun.bubble.textContent = "Connexion au flux interrompue · vérification du run côté serveur…";
       }
       activeRun.stream = null;
+      setTimeout(() => reconcileRun(conversationId, runId), 1200);
     }
   };
+}
+
+async function reconcileRun(conversationId, previousRunId, attempt = 0) {
+  if (!state.runs.has(conversationId)) return;
+  let runs;
+  try {
+    const response = await fetch("/api/runs/active");
+    if (!response.ok) throw new Error("server unavailable");
+    runs = await response.json();
+  } catch {
+    if (attempt < 10) {
+      setTimeout(
+        () => reconcileRun(conversationId, previousRunId, attempt + 1),
+        1500
+      );
+    }
+    return;
+  }
+  const serverRun = runs.find(
+    run => run.conversation_id === conversationId
+  );
+  if (serverRun) {
+    const local = state.runs.get(conversationId);
+    if (local) local.stream = null;
+    attachRun(
+      conversationId,
+      serverRun.run_id,
+      serverRun.request,
+      local?.bubble || null
+    );
+    return;
+  }
+  const local = state.runs.get(conversationId);
+  if (local?.bubble) {
+    local.bubble.textContent = previousRunId
+      ? "La tâche a été interrompue par le redémarrage de Joe."
+      : "Aucune tâche active côté serveur.";
+  }
+  if (conversationId === state.activeConversationId) {
+    finishRun(conversationId, false);
+  } else {
+    state.runs.delete(conversationId);
+  }
+  loadConversations(false);
 }
 
 async function loadActiveRuns() {
@@ -1347,6 +1392,14 @@ function setupPanelResizers() {
 
 setInterval(updateCountdowns, 1000);
 setInterval(() => loadUsage().catch(() => {}), 60000);
+setInterval(async () => {
+  try {
+    const status = await fetch("/api/status").then(response => response.json());
+    if (status.version && status.version !== APP_VERSION) window.location.reload();
+  } catch {
+    // The server may be restarting; the next interval retries.
+  }
+}, 5000);
 setupPanelResizers();
 
 Promise.all([loadStatus(), loadActiveRuns()])
