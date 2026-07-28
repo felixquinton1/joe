@@ -61,7 +61,8 @@ def provider_defaults(
     model: str | None = None,
     effort: str | None = None,
 ) -> tuple[str | None, str | None]:
-    models = cached_provider_capabilities().get(provider, {}).get("models", [])
+    capabilities = cached_provider_capabilities() or provider_capabilities()
+    models = capabilities.get(provider, {}).get("models", [])
     selected_model = model or (
         str(models[0]["id"]) if models else None
     )

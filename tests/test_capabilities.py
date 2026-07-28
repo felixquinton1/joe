@@ -1,3 +1,4 @@
+import joe.capabilities as capabilities_module
 from joe.capabilities import provider_capabilities, provider_defaults
 
 
@@ -29,3 +30,23 @@ def test_provider_defaults_resolve_a_concrete_catalog_model():
         assert effort == capabilities["codex"]["models"][0].get(
             "default_effort"
         )
+
+
+def test_provider_defaults_load_capabilities_when_cache_is_empty(monkeypatch):
+    monkeypatch.setattr(capabilities_module, "_cache", None)
+    monkeypatch.setattr(
+        capabilities_module,
+        "provider_capabilities",
+        lambda: {
+            "codex": {
+                "models": [
+                    {
+                        "id": "gpt-5.6-sol",
+                        "default_effort": "low",
+                    }
+                ]
+            }
+        },
+    )
+
+    assert provider_defaults("codex") == ("gpt-5.6-sol", "low")

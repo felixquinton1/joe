@@ -48,6 +48,35 @@ def test_fast_uses_one_call(tmp_path):
     assert log.exists()
 
 
+def test_provider_start_reports_only_concrete_model_and_effort(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        "joe.orchestrator.provider_defaults",
+        lambda provider, model, effort: (
+            model or "gpt-5.6-sol",
+            effort or "low",
+        ),
+    )
+    providers = {"codex": FakeProvider("codex")}
+    events = []
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    orchestrator.execute(
+        "simple",
+        Route(Intent.ANALYZE, Mode.FAST, "codex"),
+        on_event=events.append,
+    )
+
+    start = next(event for event in events if event["type"] == "provider_start")
+    assert start == {
+        "type": "provider_start",
+        "provider": "codex",
+        "model": "gpt-5.6-sol",
+        "effort": "low",
+    }
+
+
 def test_failure_falls_back(tmp_path):
     providers = {
         "codex": FakeProvider("codex", fail=True),
