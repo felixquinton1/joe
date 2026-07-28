@@ -1,4 +1,5 @@
 import json
+import os
 import stat
 
 from joe.memory import ProjectMemory, redact
@@ -66,3 +67,27 @@ def test_project_memory_gitignore_separates_shared_and_local_state(tmp_path):
     assert "session.md" in rules
     assert "project.md" not in rules
     assert "config.yaml" not in rules
+
+
+def test_run_retention_removes_old_and_excess_logs(tmp_path):
+    memory = ProjectMemory(tmp_path)
+    memory.ensure()
+    config_path = memory.root / "config.yaml"
+    config = json.loads(config_path.read_text())
+    config["run_retention"] = {
+        "max_runs": 2,
+        "max_age_days": 1,
+        "max_total_mb": 10,
+    }
+    config_path.write_text(json.dumps(config))
+    old = memory.runs / "old.json"
+    old.write_text("{}")
+    os.utime(old, (1, 1))
+    memory.save_run("new-1", {"final": "one"})
+    memory.save_run("new-2", {"final": "two"})
+
+    assert not old.exists()
+    assert sorted(path.stem for path in memory.runs.glob("*.json")) == [
+        "new-1",
+        "new-2",
+    ]

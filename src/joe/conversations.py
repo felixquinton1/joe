@@ -16,6 +16,7 @@ DEFAULT_SETTINGS = {
     "execution_mode": "",
 }
 DEFAULT_PROJECT_ID = "main"
+CURRENT_SCHEMA_VERSION = 3
 
 
 class ConversationStore:
@@ -33,6 +34,7 @@ class ConversationStore:
 
     def ensure(self) -> None:
         if self.path.exists():
+            self._read()
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         for backup in self._backup_candidates():
@@ -45,7 +47,7 @@ class ConversationStore:
         conversations = self._legacy_conversation()
         self._write(
             {
-                "version": 2,
+                "version": CURRENT_SCHEMA_VERSION,
                 "projects": [
                     {
                         "id": DEFAULT_PROJECT_ID,
@@ -351,7 +353,8 @@ class ConversationStore:
             self._write(payload)
 
     def _read(self) -> dict[str, Any]:
-        self.ensure()
+        if not self.path.exists():
+            self.ensure()
         for path in (self.path, *self._backup_candidates()):
             try:
                 payload = json.loads(path.read_text())
@@ -401,8 +404,15 @@ class ConversationStore:
             None,
         )
 
-    @staticmethod
-    def _normalize(payload: dict[str, Any]) -> dict[str, Any]:
+    def _normalize(self, payload: dict[str, Any]) -> dict[str, Any]:
+        version = int(payload.get("version", 1))
+        if version > CURRENT_SCHEMA_VERSION:
+            raise RuntimeError(
+                "Historique Joe créé par une version plus récente "
+                f"(schéma {version}, supporté {CURRENT_SCHEMA_VERSION})"
+            )
+        if version < CURRENT_SCHEMA_VERSION:
+            self._migration_backup(payload, version)
         payload.setdefault(
             "projects",
             [
@@ -429,11 +439,31 @@ class ConversationStore:
             project.setdefault("remote_access", False)
             project.setdefault("collapsed", False)
             project.setdefault("position", payload["projects"].index(project))
-        payload["version"] = 2
+        payload["version"] = CURRENT_SCHEMA_VERSION
+        if version < CURRENT_SCHEMA_VERSION:
+            self._write(payload)
         return payload
+
+    def _migration_backup(
+        self, payload: dict[str, Any], source_version: int
+    ) -> None:
+        migration_dir = self.backup_path.parent / "migrations"
+        migration_dir.mkdir(parents=True, exist_ok=True)
+        migration_dir.chmod(0o700)
+        target = migration_dir / (
+            f"conversations-v{source_version}-"
+            f"{time.strftime('%Y%m%dT%H%M%S')}.json"
+        )
+        if target.exists():
+            return
+        target.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+        )
+        target.chmod(0o600)
 
     def _write(self, payload: dict[str, Any]) -> None:
         content = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+        self._daily_backup(content)
         for path in (self.path, self.backup_path):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.parent.chmod(0o700)
@@ -441,6 +471,16 @@ class ConversationStore:
             tmp.write_text(content)
             tmp.chmod(0o600)
             os.replace(tmp, path)
+
+    def _daily_backup(self, content: str) -> None:
+        daily = self.backup_path.parent / "daily"
+        target = daily / f"conversations-{time.strftime('%Y-%m-%d')}.json"
+        if target.exists():
+            return
+        daily.mkdir(parents=True, exist_ok=True)
+        daily.chmod(0o700)
+        target.write_text(content)
+        target.chmod(0o600)
 
     def _backup_candidates(self) -> tuple[Path, ...]:
         if self.backup_path == self.legacy_backup_path:

@@ -208,7 +208,10 @@ def classify_error(stderr: str, returncode: int) -> str | None:
             "overloaded",
             "usage limit",
             "hit your limit",
+            "session limit",
             "limit reached",
+            "rate_limit",
+            '"api_error_status":429',
         )
     ):
         return "quota"

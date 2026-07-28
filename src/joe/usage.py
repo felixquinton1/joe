@@ -15,6 +15,7 @@ from typing import Any
 
 import pexpect
 
+from . import __version__
 from .models import Mode, Route
 
 _CACHE_SECONDS = 60
@@ -256,6 +257,226 @@ def balance_route(
             f"{route.reason}; quota-switch={route.primary}->{alternative}; "
             f"{pressure}"
         ),
+    )
+
+
+def admit_route(
+    route: Route,
+    statuses: list[dict[str, Any]],
+    *,
+    forced_agent: bool = False,
+    forced_mode: bool = False,
+    now: float | None = None,
+) -> tuple[Route, dict[str, Any] | None]:
+    """Select an affordable workflow without treating unknown quota as empty."""
+    if not statuses:
+        return route, None
+    timestamp = time.time() if now is None else now
+    threshold = _workflow_threshold(route)
+    by_provider = {str(item.get("provider")): item for item in statuses}
+    capacity = {
+        provider: _provider_capacity(
+            by_provider.get(provider), threshold, timestamp
+        )
+        for provider in ("codex", "claude", "gemini")
+    }
+    constrained = {
+        provider: detail
+        for provider, (eligible, _, detail) in capacity.items()
+        if eligible is False
+    }
+    if forced_mode:
+        relevant = {
+            name: detail
+            for name, detail in constrained.items()
+            if name in {route.primary, route.reviewer}
+        }
+        if relevant:
+            return route, {
+                "level": "warning",
+                "message": (
+                    "Workflow forcé malgré les quotas connus : "
+                    + ", ".join(
+                        f"{name} ({detail})"
+                        for name, detail in relevant.items()
+                    )
+                ),
+                "forced": True,
+            }
+        return route, None
+    forced_provider_warning = (
+        constrained.get(route.primary) if forced_agent else None
+    )
+
+    eligible = [
+        provider
+        for provider in ("codex", "claude", "gemini")
+        if capacity[provider][0] is not False
+    ]
+    eligible.sort(
+        key=lambda provider: (
+            provider == route.primary,
+            capacity[provider][1] if capacity[provider][1] is not None else -1,
+            provider != "gemini",
+        ),
+        reverse=True,
+    )
+    if forced_agent and route.primary not in eligible:
+        eligible.insert(0, route.primary)
+
+    needed = 2 if route.mode in {Mode.REVIEW, Mode.CONSENSUS} else 1
+    if len(eligible) < needed:
+        if not eligible:
+            fast_threshold = 3 if route.intent.value == "answer" else 8
+            affordable_single = [
+                provider
+                for provider in ("codex", "claude", "gemini")
+                if _provider_capacity(
+                    by_provider.get(provider), fast_threshold, timestamp
+                )[0]
+                is not False
+            ]
+            if affordable_single:
+                affordable_single.sort(
+                    key=lambda provider: (
+                        _provider_capacity(
+                            by_provider.get(provider),
+                            fast_threshold,
+                            timestamp,
+                        )[1]
+                        or -1
+                    ),
+                    reverse=True,
+                )
+                single = affordable_single[0]
+                return Route(
+                    route.intent,
+                    Mode.FAST,
+                    single,
+                    None,
+                    f"{route.reason}; quota-workflow={route.mode.value}->fast",
+                ), {
+                    "level": "warning",
+                    "message": (
+                        f"Réserve insuffisante pour {route.mode.value.upper()} : "
+                        f"{single.capitalize()} répond seul. "
+                        "Force le mode pour tenter le workflow complet."
+                    ),
+                    "forced": False,
+                }
+            return route, {
+                "level": "error",
+                "message": (
+                    "Aucun fournisseur ne dispose d’une réserve connue suffisante. "
+                    "Choisis explicitement un agent ou un mode pour tenter quand même."
+                ),
+                "forced": False,
+                "blocked": True,
+            }
+        reduced = Route(
+            route.intent,
+            Mode.FAST,
+            eligible[0],
+            None,
+            f"{route.reason}; quota-workflow={route.mode.value}->fast",
+        )
+        return reduced, {
+            "level": "warning",
+            "message": (
+                f"Réserve insuffisante pour {route.mode.value.upper()} : "
+                f"{eligible[0].capitalize()} répond seul. "
+                "Force le mode pour tenter le workflow complet."
+            ),
+            "forced": False,
+        }
+
+    original_reviewer = route.reviewer
+    if needed == 2 and not original_reviewer:
+        original_reviewer = (
+            "claude" if route.primary == "codex" else "codex"
+        )
+    primary = route.primary if route.primary in eligible else eligible[0]
+    others = [provider for provider in eligible if provider != primary]
+    reviewer = others[0] if needed == 2 else route.reviewer
+    adjusted = Route(
+        route.intent,
+        route.mode,
+        primary,
+        reviewer,
+        route.reason,
+    )
+    changes = []
+    if primary != route.primary:
+        changes.append(f"{route.primary}->{primary}")
+    if needed == 2 and reviewer != original_reviewer:
+        changes.append(f"{original_reviewer}->{reviewer}")
+    if not changes:
+        if forced_provider_warning:
+            return adjusted, {
+                "level": "warning",
+                "message": (
+                    f"{route.primary.capitalize()} est forcé malgré sa réserve "
+                    f"connue ({forced_provider_warning})."
+                ),
+                "forced": True,
+            }
+        return adjusted, None
+    adjusted = Route(
+        adjusted.intent,
+        adjusted.mode,
+        adjusted.primary,
+        adjusted.reviewer,
+        f"{adjusted.reason}; quota-admission={','.join(changes)}",
+    )
+    message = "Participants adaptés aux quotas : " + ", ".join(changes) + "."
+    if forced_provider_warning:
+        message += (
+            f" {route.primary.capitalize()} reste forcé malgré "
+            f"{forced_provider_warning}."
+        )
+    return adjusted, {
+        "level": "info",
+        "message": message,
+        "forced": bool(forced_provider_warning),
+    }
+
+
+def _workflow_threshold(route: Route) -> float:
+    if route.mode is Mode.CONSENSUS:
+        return 20
+    if route.mode is Mode.REVIEW:
+        return 12
+    if route.intent.value == "answer":
+        return 3
+    return 8
+
+
+def _provider_capacity(
+    status: dict[str, Any] | None,
+    threshold: float,
+    now: float,
+) -> tuple[bool | None, float | None, str]:
+    if status is None:
+        return None, None, "quota inconnu"
+    if not status.get("available"):
+        return False, 0, str(status.get("message") or "indisponible")
+    windows = status.get("windows") or []
+    if not windows:
+        return None, None, "plafond non exposé"
+    limiting = min(
+        windows,
+        key=lambda window: float(window.get("remaining_percent", 100)),
+    )
+    remaining = float(limiting.get("remaining_percent", 100))
+    reset = limiting.get("resets_at")
+    seconds = float(reset) - now if isinstance(reset, (int, float)) else None
+    enough = remaining >= threshold
+    if not enough and remaining > 5 and seconds is not None and seconds <= 7200:
+        enough = True
+    return (
+        enough,
+        remaining,
+        f"{remaining:g} % restant sur {limiting.get('name', 'quota')}",
     )
 
 
@@ -539,7 +760,7 @@ def _codex_status() -> dict[str, Any]:
         "id": 1,
         "method": "initialize",
         "params": {
-            "clientInfo": {"name": "joe", "version": "0.19.0"},
+            "clientInfo": {"name": "joe", "version": __version__},
             "capabilities": {"experimentalApi": True},
         },
     }

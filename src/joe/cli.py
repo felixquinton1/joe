@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import shutil
 import subprocess
@@ -12,6 +13,7 @@ from pathlib import Path
 from . import __version__
 from .models import Mode
 from .orchestrator import OrchestrationError, Orchestrator
+from .usage import admit_route, usage_status
 
 PROVIDERS = ("codex", "claude", "gemini", "copilot")
 
@@ -40,6 +42,8 @@ def main(argv: list[str] | None = None) -> int:
         return _sync(arguments[1:])
     if arguments and arguments[0] == "kill":
         return _kill(arguments[1:])
+    if arguments and arguments[0] == "doctor":
+        return _doctor(arguments[1:])
     if arguments and arguments[0] == "chat":
         arguments = arguments[1:]
     args = parser().parse_args(arguments)
@@ -79,6 +83,16 @@ def _handle(
     dry_run: bool,
 ) -> int:
     route = orchestrator.plan(request, forced_agent=agent, forced_mode=mode)
+    route, quota_admission = admit_route(
+        route,
+        usage_status(),
+        forced_agent=bool(agent),
+        forced_mode=bool(mode),
+    )
+    if quota_admission:
+        print(f"[joe] {quota_admission['message']}", file=sys.stderr)
+        if quota_admission.get("blocked"):
+            return 1
     print(
         f"[joe] {route.mode.value.upper()} · {route.intent.value} · {route.primary}",
         file=sys.stderr,
@@ -207,6 +221,40 @@ def _kill(argv: list[str]) -> int:
         suffix = "s" if stopped > 1 else ""
         print(f"Joe : {stopped} session{suffix} tmux arrêtée{suffix}.")
     return 0
+
+
+def _doctor(argv: list[str]) -> int:
+    doctor_parser = argparse.ArgumentParser(
+        prog="joe doctor",
+        description="Check Joe storage and local AI provider health.",
+    )
+    doctor_parser.add_argument("-C", "--project", type=Path, default=Path.cwd())
+    doctor_parser.add_argument(
+        "--live",
+        action="store_true",
+        help="send one very short prompt to every installed provider",
+    )
+    doctor_parser.add_argument("--json", action="store_true")
+    args = doctor_parser.parse_args(argv)
+    if not args.project.is_dir():
+        print(
+            f"joe doctor: project directory does not exist: {args.project}",
+            file=sys.stderr,
+        )
+        return 2
+    from .doctor import doctor_report, format_doctor
+
+    report = doctor_report(args.project, live=args.live)
+    print(
+        json.dumps(report, indent=2, ensure_ascii=False)
+        if args.json
+        else format_doctor(report)
+    )
+    storage_ok = bool(report["storage"]["writable"])
+    live_ok = all(
+        item.get("live", {}).get("ok", True) for item in report["providers"]
+    )
+    return 0 if storage_ok and live_ok else 1
 
 
 def _sync(argv: list[str]) -> int:

@@ -97,6 +97,24 @@ def test_consensus_is_read_only_and_uses_distinct_proposals(tmp_path):
     )
 
 
+def test_consensus_can_use_codex_and_gemini_participants(tmp_path):
+    providers = {
+        name: FakeProvider(name)
+        for name in ("codex", "claude", "gemini", "copilot")
+    }
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    response, _ = orchestrator.execute(
+        "important",
+        Route(Intent.ANALYZE, Mode.CONSENSUS, "codex", "gemini"),
+    )
+
+    assert response == "gemini response"
+    assert providers["codex"].calls
+    assert providers["gemini"].calls
+    assert providers["claude"].calls == []
+
+
 def test_consensus_uses_gemini_when_claude_quota_is_exhausted(tmp_path):
     providers = {
         "codex": FakeProvider("codex"),

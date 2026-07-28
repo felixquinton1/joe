@@ -13,6 +13,11 @@ DEFAULT_CONFIG = {
     "timeout_seconds": 900,
     "max_context_chars": 16000,
     "max_active_file_chars": 8000,
+    "run_retention": {
+        "max_runs": 500,
+        "max_age_days": 30,
+        "max_total_mb": 500,
+    },
     "semantic_compaction": {
         "enabled": True,
         "threshold_chars": 30000,
@@ -64,6 +69,8 @@ class ProjectMemory:
                 "session.md\n"
                 "handoff.md\n"
                 "pending_runs.json\n"
+                "backups/\n"
+                "migrations/\n"
                 "*.reject.json\n"
                 "*.reject.patch\n"
                 "*.tmp\n"
@@ -110,7 +117,32 @@ class ProjectMemory:
         path = self.runs / f"{run_id}.json"
         safe = redact_values(payload)
         self._atomic_write(path, json.dumps(safe, indent=2, ensure_ascii=False) + "\n")
+        self.prune_runs()
         return path
+
+    def prune_runs(self, now: float | None = None) -> list[Path]:
+        policy = self.config().get("run_retention", {})
+        max_runs = max(1, int(policy.get("max_runs", 500)))
+        max_age = max(1, int(policy.get("max_age_days", 30))) * 86400
+        max_bytes = max(1, int(policy.get("max_total_mb", 500))) * 1024 * 1024
+        timestamp = datetime.now(timezone.utc).timestamp() if now is None else now
+        entries = sorted(
+            (path for path in self.runs.glob("*.json") if path.is_file()),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        kept_bytes = 0
+        removed = []
+        for index, path in enumerate(entries):
+            stat = path.stat()
+            expired = timestamp - stat.st_mtime > max_age
+            oversized = kept_bytes + stat.st_size > max_bytes
+            if index >= max_runs or expired or oversized:
+                path.unlink(missing_ok=True)
+                removed.append(path)
+            else:
+                kept_bytes += stat.st_size
+        return removed
 
     def update_active(
         self,

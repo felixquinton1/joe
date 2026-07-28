@@ -21,7 +21,7 @@ from .conversations import ConversationStore
 from .git_review import GitSnapshot, build_report, reject, snapshot
 from .models import Intent, Mode
 from .orchestrator import Orchestrator
-from .usage import balance_route, cached_usage_status, usage_status
+from .usage import admit_route, balance_route, cached_usage_status, usage_status
 
 
 def _conversation_backup_path(project: Path) -> Path:
@@ -149,6 +149,12 @@ class RunManager:
             )
             if not agent:
                 route = balance_route(route, cached_usage_status())
+            route, quota_admission = admit_route(
+                route,
+                cached_usage_status(),
+                forced_agent=bool(agent),
+                forced_mode=bool(mode),
+            )
             run.track_changes = (
                 (
                     route.intent is Intent.MODIFY
@@ -182,6 +188,10 @@ class RunManager:
                     "health_check": "health-check" in route.reason,
                 }
             )
+            if quota_admission:
+                run.emit({"type": "quota_admission", **quota_admission})
+                if quota_admission.get("blocked"):
+                    raise RuntimeError(quota_admission["message"])
             run.emit(
                 {
                     "type": "evidence",

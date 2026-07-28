@@ -1,6 +1,8 @@
 import json
 
-from joe.conversations import ConversationStore
+import pytest
+
+from joe.conversations import CURRENT_SCHEMA_VERSION, ConversationStore
 
 
 def test_conversation_messages_settings_and_pin_persist(tmp_path):
@@ -222,3 +224,53 @@ def test_history_recovers_from_atomic_backup(tmp_path):
     store.path.unlink()
     restored = ConversationStore(root, runs).get(conversation["id"])
     assert restored["messages"][0]["content"] == "Message préservé"
+
+
+def test_old_history_is_migrated_with_a_pre_migration_snapshot(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    backup = tmp_path / "external" / "conversations.json"
+    root.joinpath("conversations.json").write_text(
+        json.dumps({"version": 2, "conversations": []})
+    )
+
+    store = ConversationStore(root, runs, backup_path=backup)
+    store.ensure()
+
+    assert json.loads(store.path.read_text())["version"] == CURRENT_SCHEMA_VERSION
+    snapshots = list((backup.parent / "migrations").glob("*.json"))
+    assert len(snapshots) == 1
+    assert json.loads(snapshots[0].read_text())["version"] == 2
+
+
+def test_newer_history_schema_is_never_overwritten(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    path = root / "conversations.json"
+    path.write_text(
+        json.dumps(
+            {"version": CURRENT_SCHEMA_VERSION + 1, "conversations": []}
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="version plus récente"):
+        ConversationStore(root, runs).ensure()
+
+    assert json.loads(path.read_text())["version"] == CURRENT_SCHEMA_VERSION + 1
+
+
+def test_one_daily_backup_is_kept_outside_the_project(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    backup = tmp_path / "external" / "conversations.json"
+    store = ConversationStore(root, runs, backup_path=backup)
+
+    store.create()
+    store.create()
+
+    daily = list((backup.parent / "daily").glob("*.json"))
+    assert len(daily) == 1
+    assert daily[0].stat().st_mode & 0o777 == 0o600

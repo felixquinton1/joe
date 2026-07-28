@@ -142,6 +142,11 @@ class Orchestrator:
                 context,
                 results,
                 on_event,
+                participants=(
+                    route.primary,
+                    route.reviewer
+                    or ("claude" if route.primary == "codex" else "codex"),
+                ),
                 selected_provider=route.primary,
                 model=model,
                 effort=effort,
@@ -300,6 +305,7 @@ class Orchestrator:
         results: list[ProviderResult],
         on_event: Callable[[dict], None] | None = None,
         *,
+        participants: tuple[str, str] = ("codex", "claude"),
         selected_provider: str | None = None,
         model: str | None = None,
         effort: str | None = None,
@@ -311,14 +317,12 @@ class Orchestrator:
             + "\n\nPropose independently a solution. Do not modify files. "
             "State assumptions, trade-offs, and validation."
         )
-        self._workflow_event(
-            on_event, "consensus", "proposal_codex", "codex",
-            "Proposition indépendante", "running",
-        )
-        self._workflow_event(
-            on_event, "consensus", "proposal_claude", "claude",
-            "Proposition indépendante", "running",
-        )
+        first, second = participants
+        for provider in participants:
+            self._workflow_event(
+                on_event, "consensus", f"proposal_{provider}", provider,
+                "Proposition indépendante", "running",
+            )
         with ThreadPoolExecutor(max_workers=2) as executor:
             futures = {
                 executor.submit(
@@ -334,10 +338,7 @@ class Orchestrator:
                     on_event,
                     True,
                 ): provider
-                for provider, other in (
-                    ("codex", "claude"),
-                    ("claude", "codex"),
-                )
+                for provider, other in ((first, second), (second, first))
             }
             proposals = {}
             proposal_results = {}
@@ -367,25 +368,20 @@ class Orchestrator:
                     "complete",
                     proposal.stdout,
                 )
-        codex = proposals["codex"]
-        claude = proposals["claude"]
+        first_proposal = proposals[first]
+        second_proposal = proposals[second]
         degraded_providers = {
             role: proposal.provider
             for role, proposal in proposals.items()
             if proposal.provider != role
         }
-        codex_results = proposal_results["codex"]
-        claude_results = proposal_results["claude"]
-        results.extend(codex_results)
-        results.extend(claude_results)
-        self._workflow_event(
-            on_event, "consensus", "review_codex", "codex",
-            "Examen de la proposition de Claude", "running",
-        )
-        self._workflow_event(
-            on_event, "consensus", "review_claude", "claude",
-            "Examen de la proposition de Codex", "running",
-        )
+        results.extend(proposal_results[first])
+        results.extend(proposal_results[second])
+        for provider, other in ((first, second), (second, first)):
+            self._workflow_event(
+                on_event, "consensus", f"review_{provider}", provider,
+                f"Examen de la proposition de {other.capitalize()}", "running",
+            )
         with ThreadPoolExecutor(max_workers=2) as executor:
             futures = {
                 executor.submit(
@@ -393,7 +389,11 @@ class Orchestrator:
                     provider,
                     self._review_prompt(
                         context,
-                        claude.stdout if provider == "codex" else codex.stdout,
+                        (
+                            second_proposal.stdout
+                            if provider == first
+                            else first_proposal.stdout
+                        ),
                     ),
                     Intent.ANALYZE,
                     {other},
@@ -404,10 +404,7 @@ class Orchestrator:
                     on_event,
                     True,
                 ): provider
-                for provider, other in (
-                    ("codex", "claude"),
-                    ("claude", "codex"),
-                )
+                for provider, other in ((first, second), (second, first))
             }
             reviews = {}
             review_results = {}
@@ -421,11 +418,8 @@ class Orchestrator:
                         "consensus",
                         f"review_{provider}",
                         provider,
-                        (
-                            "Examen de la proposition de Claude"
-                            if provider == "codex"
-                            else "Examen de la proposition de Codex"
-                        ),
+                        f"Examen de la proposition de "
+                        f"{(second if provider == first else first).capitalize()}",
                         "failed",
                         str(error),
                     )
@@ -437,16 +431,13 @@ class Orchestrator:
                     "consensus",
                     f"review_{provider}",
                     review.provider,
-                    (
-                        "Examen de la proposition de Claude"
-                        if provider == "codex"
-                        else "Examen de la proposition de Codex"
-                    ),
+                    f"Examen de la proposition de "
+                    f"{(second if provider == first else first).capitalize()}",
                     "complete",
                     review.stdout,
                 )
-        codex_review = reviews["codex"]
-        claude_review = reviews["claude"]
+        first_review = reviews[first]
+        second_review = reviews[second]
         degraded_providers.update(
             {
                 f"revue {role}": review.provider
@@ -454,10 +445,8 @@ class Orchestrator:
                 if review.provider != role
             }
         )
-        codex_review_results = review_results["codex"]
-        claude_review_results = review_results["claude"]
-        results.extend(codex_review_results)
-        results.extend(claude_review_results)
+        results.extend(review_results[first])
+        results.extend(review_results[second])
         synthesis_prompt = (
             context
             + "\n\nSynthesize the following independent proposals and cross-reviews. "
@@ -466,10 +455,10 @@ class Orchestrator:
             "the orchestration mechanism, invent extra agents, or modify files.\n\n"
             + json.dumps(
                 {
-                    "codex_proposal": codex.stdout,
-                    "claude_proposal": claude.stdout,
-                    "codex_review": codex_review.stdout,
-                    "claude_review": claude_review.stdout,
+                    f"{first}_proposal": first_proposal.stdout,
+                    f"{second}_proposal": second_proposal.stdout,
+                    f"{first}_review": first_review.stdout,
+                    f"{second}_review": second_review.stdout,
                 },
                 ensure_ascii=False,
             )

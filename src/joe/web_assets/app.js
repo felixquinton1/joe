@@ -1,4 +1,4 @@
-const APP_VERSION = "0.19.0";
+const APP_VERSION = "0.20.0";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -926,6 +926,8 @@ function handleEvent(conversationId, event, finalBubble) {
       : `Indisponible · relais ${capitalize(event.fallback)}`;
     const fallback = ensureAgent(event.fallback);
     fallback.status.textContent = `Relais de ${capitalize(event.provider)}`;
+  } else if (event.type === "quota_admission") {
+    finalBubble.textContent += `\n${event.message}`;
   } else if (event.type === "evidence") {
     const row = document.createElement("div");
     row.className = `evidence-row ${event.status}`;

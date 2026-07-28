@@ -1,5 +1,5 @@
 from joe.models import Intent, Mode, Route
-from joe.usage import balance_route
+from joe.usage import admit_route, balance_route
 
 
 def status(provider, remaining, reset):
@@ -77,3 +77,110 @@ def test_consensus_and_unknown_usage_are_not_rebalanced():
 
     assert balance_route(consensus, [], now=10_000) == consensus
     assert balance_route(fast, [], now=10_000) == fast
+
+
+def test_consensus_replaces_low_claude_with_gemini():
+    route = Route(Intent.ANALYZE, Mode.CONSENSUS, "codex")
+    gemini = {
+        "provider": "gemini",
+        "available": True,
+        "windows": [],
+    }
+
+    admitted, notice = admit_route(
+        route,
+        [
+            status("codex", 70, 200_000),
+            status("claude", 10, 200_000),
+            gemini,
+        ],
+        now=10_000,
+    )
+
+    assert admitted.mode is Mode.CONSENSUS
+    assert admitted.primary == "codex"
+    assert admitted.reviewer == "gemini"
+    assert "claude->gemini" in notice["message"]
+
+
+def test_consensus_becomes_fast_when_only_one_provider_has_capacity():
+    route = Route(Intent.ANALYZE, Mode.CONSENSUS, "codex")
+    unavailable_gemini = {
+        "provider": "gemini",
+        "available": False,
+        "windows": [],
+        "message": "quota épuisé",
+    }
+
+    admitted, notice = admit_route(
+        route,
+        [
+            status("codex", 4, 200_000),
+            status("claude", 4, 200_000),
+            unavailable_gemini,
+        ],
+        now=10_000,
+    )
+
+    assert admitted == route
+    assert notice["level"] == "error"
+    assert notice["blocked"] is True
+    assert "Aucun fournisseur" in notice["message"]
+
+
+def test_consensus_uses_one_affordable_provider_when_two_are_too_costly():
+    route = Route(Intent.ANALYZE, Mode.CONSENSUS, "codex")
+
+    admitted, notice = admit_route(
+        route,
+        [
+            status("codex", 10, 200_000),
+            status("claude", 4, 200_000),
+            {
+                "provider": "gemini",
+                "available": False,
+                "windows": [],
+            },
+        ],
+        now=10_000,
+    )
+
+    assert admitted.mode is Mode.FAST
+    assert admitted.primary == "codex"
+    assert "répond seul" in notice["message"]
+
+
+def test_forced_consensus_can_attempt_despite_low_quota():
+    route = Route(Intent.ANALYZE, Mode.CONSENSUS, "codex")
+
+    admitted, notice = admit_route(
+        route,
+        [
+            status("codex", 4, 200_000),
+            status("claude", 4, 200_000),
+        ],
+        forced_mode=True,
+        now=10_000,
+    )
+
+    assert admitted == route
+    assert notice["forced"] is True
+    assert "forcé" in notice["message"]
+
+
+def test_forced_agent_is_kept_and_warned_when_its_quota_is_low():
+    route = Route(Intent.ANALYZE, Mode.FAST, "claude")
+
+    admitted, notice = admit_route(
+        route,
+        [
+            status("claude", 2, 200_000),
+            status("codex", 80, 200_000),
+        ],
+        forced_agent=True,
+        now=10_000,
+    )
+
+    assert admitted.primary == "claude"
+    assert notice["forced"] is True
+    assert "forcé" in notice["message"]

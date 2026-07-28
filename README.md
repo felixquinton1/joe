@@ -30,8 +30,8 @@ executable are named Joe.
   most one justified correction pass.
 - CONSENSUS runs two independent read-only proposals in parallel, then the two
   cross-reviews in parallel, and finally one synthesis. It never edits the
-  repository. Codex and Claude are mandatory for the four opinion stages; a
-  primary failure aborts explicitly instead of being silently replaced.
+  repository. Codex and Claude are preferred; Gemini can replace a provider
+  whose known quota is too low. Process failures still abort explicitly.
 - Full stdout/stderr live under `.agentflow/runs/`; active memory is rewritten
   with bounded content.
 
@@ -49,6 +49,10 @@ Joe keeps product code and user data separate:
 - every conversation write is also mirrored outside all repositories under
   `$XDG_DATA_HOME/joe/backups/<project-id>/conversations.json` (default:
   `~/.local/share/joe/backups/...`).
+- one dated conversation snapshot is retained per day, and schema migrations
+  preserve the complete pre-migration payload before changing it;
+- finalized run logs are retained for 30 days by default, with additional
+  limits of 500 runs and 500 MB configurable under `run_retention`.
 
 Each generated `.agentflow/` contains its own `.gitignore`, so this separation
 also applies to projects that do not yet have a root `.gitignore`.
@@ -82,11 +86,19 @@ local statistics under
 last call, models used, and the detected authentication category. The detailed
 quota snapshot remains available through `/stats model` in an interactive
 Gemini CLI session.
-Automatic FAST routing remains task-first, then balances Codex and Claude when
+Automatic routing remains task-first, then balances Codex and Claude when
 the preferred provider has 20% or less remaining and its reset is at least 24
 hours away. Short five-hour windows therefore remain useful instead of being
-prematurely preserved. At 5% or less it switches regardless of reset distance. A manually
-selected provider always wins, and REVIEW/CONSENSUS semantics are unchanged.
+prematurely preserved. At 5% or less it switches regardless of reset distance.
+A manually selected provider always wins. Before REVIEW or CONSENSUS, Joe checks
+the latest cached personal quota data. The minimum reserve is 3% for a simple
+answer, 8% for normal FAST work, 12% for REVIEW, and 20% for CONSENSUS. A reset
+within two hours relaxes the threshold down to 5%. If one participant is
+constrained, Joe selects another available provider, including Gemini. If only
+one provider can afford a normal FAST call, Joe runs it alone and explains the
+downgrade. If none can, Joe stops before calling a model; explicitly choosing a
+workflow allows a deliberate attempt. Unknown quotas are never treated as
+exhausted.
 Routing itself is deterministic and does not call a model. It never waits for
 fresh quota or model-catalog probes: the latest background cache is used, and
 the interface reports the local routing duration separately from provider
@@ -192,6 +204,18 @@ shared context automatically injected into all its conversations. Conversation
 and sub-project names can be edited from the sidebar.
 Use `joe chat` for the original terminal conversation and `joe web` when you
 need explicit web-server options.
+
+## Diagnostics
+
+Check storage, installed provider versions, and cached quota visibility without
+sending a prompt:
+
+```bash
+joe doctor -C /path/to/project
+```
+
+Use `joe doctor --live` to send exactly one short, read-only prompt to each
+installed provider and report its duration and classified failure reason.
 
 Use `joe web --no-browser` on a remote server when automatic browser opening is
 not useful, then forward the port:
