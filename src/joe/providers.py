@@ -9,7 +9,6 @@ import subprocess
 import threading
 import time
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 from typing import Callable
 
@@ -46,24 +45,6 @@ class ProviderCancelled(RuntimeError):
     pass
 
 
-@lru_cache(maxsize=8)
-def _cli_version(executable: str) -> str | None:
-    if not shutil.which(executable):
-        return None
-    try:
-        completed = subprocess.run(
-            [executable, "--version"],
-            capture_output=True,
-            text=True,
-            timeout=3,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    value = (completed.stdout or completed.stderr).strip().splitlines()
-    return value[0] if value else None
-
-
 @dataclass(frozen=True)
 class Provider:
     name: str
@@ -71,9 +52,6 @@ class Provider:
     additional_roots: tuple[Path, ...] = ()
     remote_access: bool = False
     watchdog_seconds: float = 90
-
-    def cli_version(self) -> str | None:
-        return _cli_version(self.executable)
 
     def command(
         self,

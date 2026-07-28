@@ -24,6 +24,11 @@ FEATURE_REQUEST_PATTERNS = (
         r"(?:ajouter|afficher|préciser|integrer|intégrer|permettre|corriger)\b",
         re.IGNORECASE,
     ),
+    re.compile(
+        r"\b(?:j['’]aimerais?|je\s+voudrais)\s+(?:seulement\s+)?"
+        r"(?:avoir|afficher|ajouter|mettre|retirer|enlever)\b",
+        re.IGNORECASE,
+    ),
 )
 READ_ONLY_AMBIGUOUS_MODIFY_WORDS = {"implementation", "implémentation"}
 REVIEW_WORDS = {

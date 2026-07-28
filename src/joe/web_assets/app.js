@@ -1,4 +1,4 @@
-const APP_VERSION = "0.21.3";
+const APP_VERSION = "0.21.4";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -442,7 +442,6 @@ function handleEvent(conversationId, event, finalBubble) {
     agent.status.textContent = "Démarrage";
     const metadata = [
       event.model || "modèle par défaut",
-      event.cli_version ? `CLI ${event.cli_version}` : "",
       `effort ${event.effort || "défaut"}`
     ].filter(Boolean).join(" · ");
     const row = document.createElement("div");

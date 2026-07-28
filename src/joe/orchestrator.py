@@ -188,18 +188,12 @@ class Orchestrator:
                 effort if name == provider_name else None,
             )
             if on_event:
-                version_reader = getattr(
-                    self.providers[name], "cli_version", None
-                )
                 on_event(
                     {
                         "type": "provider_start",
                         "provider": name,
                         "model": selected_model or "non exposé",
                         "effort": selected_effort or "défaut fournisseur",
-                        "cli_version": (
-                            version_reader() if callable(version_reader) else None
-                        ),
                     }
                 )
             result = self.providers[name].run(

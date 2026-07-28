@@ -139,6 +139,14 @@ def test_feature_request_phrased_as_possibility_is_writable():
     assert route.intent is Intent.MODIFY
 
 
+def test_feature_request_phrased_as_a_preference_is_writable():
+    route = Router().route(
+        "J'aimerais seulement avoir le modèle et l'effort dans les panneaux"
+    )
+
+    assert route.intent is Intent.MODIFY
+
+
 def test_capability_question_about_access_stays_read_only():
     route = Router().route(
         "Est-ce que tu peux modifier le code de Joe depuis cette session ?"
