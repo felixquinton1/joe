@@ -220,9 +220,22 @@ class ConversationStore:
             project_section = (
                 f"# Sub-project: {project['name']}\n{project['context']}"
             )[: min(4000, limit // 3)]
-        history_budget = max(0, limit - len(project_section) - 40)
+        summary = str(conversation.get("context_summary", "")).strip()
+        summary_section = (
+            "# Earlier conversation summary\n" + summary[:4000]
+            if summary
+            else ""
+        )
+        history_budget = max(
+            0,
+            limit - len(project_section) - len(summary_section) - 80,
+        )
+        summarized = min(
+            int(conversation.get("summarized_message_count", 0)),
+            len(messages),
+        )
         recent = []
-        for message in messages[-20:]:
+        for message in messages[max(summarized, len(messages) - 20):]:
             label = "User" if message["role"] == "user" else "Assistant"
             recent.append(f"## {label}\n{message['content']}")
         history = "\n\n".join(recent)[-history_budget:]
@@ -230,10 +243,60 @@ class ConversationStore:
             section
             for section in (
                 project_section,
+                summary_section,
                 "# Active conversation history\n" + history,
             )
             if section
         )[:limit]
+
+    def compaction_candidate(
+        self,
+        conversation_id: str,
+        *,
+        threshold_chars: int = 30000,
+        keep_recent: int = 8,
+    ) -> dict[str, Any] | None:
+        conversation = self.get(conversation_id)
+        if not conversation:
+            return None
+        messages = conversation["messages"]
+        start = min(
+            int(conversation.get("summarized_message_count", 0)),
+            len(messages),
+        )
+        end = max(start, len(messages) - keep_recent)
+        pending = messages[start:end]
+        if sum(len(str(item.get("content", ""))) for item in pending) < threshold_chars:
+            return None
+        transcript = "\n\n".join(
+            f"{item.get('role', 'unknown').upper()}:\n{item.get('content', '')}"
+            for item in pending
+        )
+        return {
+            "previous_summary": str(conversation.get("context_summary", "")),
+            "transcript": transcript,
+            "message_count": end,
+        }
+
+    def save_compaction(
+        self,
+        conversation_id: str,
+        summary: str,
+        message_count: int,
+    ) -> bool:
+        with self.lock:
+            payload = self._read()
+            conversation = self._find(payload, conversation_id)
+            if not conversation or message_count > len(conversation["messages"]):
+                return False
+            if message_count <= int(
+                conversation.get("summarized_message_count", 0)
+            ):
+                return False
+            conversation["context_summary"] = summary.strip()[:8000]
+            conversation["summarized_message_count"] = message_count
+            self._write(payload)
+            return True
 
     def previous_provider(self, conversation_id: str) -> str | None:
         conversation = self.get(conversation_id)
@@ -324,6 +387,8 @@ class ConversationStore:
         )
         for conversation in payload.setdefault("conversations", []):
             conversation.setdefault("project_id", DEFAULT_PROJECT_ID)
+            conversation.setdefault("context_summary", "")
+            conversation.setdefault("summarized_message_count", 0)
         for project in payload["projects"]:
             project.setdefault("workspace_root", "")
             project.setdefault("additional_roots", [])

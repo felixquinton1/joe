@@ -1,6 +1,7 @@
 import http.client
 import json
 import threading
+from types import SimpleNamespace
 
 from joe.models import Intent, Mode, Route
 from joe.web import (
@@ -214,6 +215,50 @@ def test_resumed_run_is_announced_without_duplicating_user_message(
     messages = manager.conversations.get(conversation["id"])["messages"]
     assert len(messages) == 1
     assert run.events[0]["type"] == "recovered"
+
+
+def test_background_compaction_saves_successful_gemini_summary(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(RunManager, "_recover_pending", lambda self: None)
+    manager = RunManager(tmp_path)
+    conversation = manager.conversations.create()
+    manager.conversations.append_message(
+        conversation["id"], "assistant", "ancien contexte"
+    )
+
+    class Gemini:
+        def run(self, *args, **kwargs):
+            return SimpleNamespace(ok=True, stdout="Résumé compact")
+
+    orchestrator = SimpleNamespace(
+        project=tmp_path,
+        providers={"gemini": Gemini()},
+        memory=SimpleNamespace(
+            config=lambda: {
+                "semantic_compaction": {
+                    "provider": "gemini",
+                    "model": "gemini-3-flash-preview",
+                }
+            }
+        ),
+    )
+    candidate = {
+        "previous_summary": "",
+        "transcript": "ASSISTANT: ancien contexte",
+        "message_count": 1,
+    }
+
+    manager.compacting.add(conversation["id"])
+    manager._compact_conversation(
+        conversation["id"],
+        orchestrator,
+        candidate,
+    )
+
+    loaded = manager.conversations.get(conversation["id"])
+    assert loaded["context_summary"] == "Résumé compact"
+    assert conversation["id"] not in manager.compacting
 
 
 def test_long_fast_answer_does_not_enable_high_effort():

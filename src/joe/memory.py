@@ -13,6 +13,13 @@ DEFAULT_CONFIG = {
     "timeout_seconds": 900,
     "max_context_chars": 16000,
     "max_active_file_chars": 8000,
+    "semantic_compaction": {
+        "enabled": True,
+        "threshold_chars": 30000,
+        "keep_recent_messages": 8,
+        "provider": "gemini",
+        "model": "gemini-3-flash-preview",
+    },
     "fallbacks": {
         "codex": ["gemini", "claude", "copilot"],
         "claude": ["gemini", "codex", "copilot"],

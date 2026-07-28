@@ -149,6 +149,10 @@ from Codex to Claude or Gemini, Joe rebuilds a bounded shared context containing
 the stable project context, the latest project session/handoff, project
 instructions, and recent conversation turns. Stable project context has a
 reserved budget and is not displaced by a long history.
+When unsummarized older messages exceed 30,000 characters, Joe starts a
+tool-free Gemini Flash compaction after returning the visible answer. The full
+history is retained; only the prompt representation is summarized. This policy
+is configurable under `semantic_compaction` in `.agentflow/config.yaml`.
 Conversations can be pinned and several can run concurrently; avoid
 launching concurrent write tasks against the same files.
 While a conversation is running, additional prompts can be queued with their

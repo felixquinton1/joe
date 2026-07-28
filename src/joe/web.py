@@ -64,6 +64,7 @@ class RunManager:
         self.live: dict[str, LiveRun] = {}
         self.git_rejections: dict[str, dict[str, Any]] = {}
         self.lock = threading.Lock()
+        self.compacting: set[str] = set()
         self.pending_path = self.orchestrator.memory.root / "pending_runs.json"
         self._recover_pending()
 
@@ -224,6 +225,10 @@ class RunManager:
                     "log": str(log),
                 }
             )
+            self._schedule_compaction(
+                run.conversation_id,
+                orchestrator,
+            )
         except Exception as exc:
             git_report = self._capture_git_report(run)
             if run.cancel_event.is_set():
@@ -356,6 +361,66 @@ class RunManager:
                 roots_list.append(root)
         roots = tuple(roots_list)
         return workspace, roots, bool(project.get("remote_access"))
+
+    def _schedule_compaction(
+        self,
+        conversation_id: str,
+        orchestrator: Orchestrator,
+    ) -> None:
+        config = orchestrator.memory.config().get("semantic_compaction", {})
+        if not config.get("enabled", True):
+            return
+        candidate = self.conversations.compaction_candidate(
+            conversation_id,
+            threshold_chars=int(config.get("threshold_chars", 30000)),
+            keep_recent=int(config.get("keep_recent_messages", 8)),
+        )
+        if not candidate:
+            return
+        with self.lock:
+            if conversation_id in self.compacting:
+                return
+            self.compacting.add(conversation_id)
+        threading.Thread(
+            target=self._compact_conversation,
+            args=(conversation_id, orchestrator, candidate),
+            daemon=True,
+        ).start()
+
+    def _compact_conversation(
+        self,
+        conversation_id: str,
+        orchestrator: Orchestrator,
+        candidate: dict[str, Any],
+    ) -> None:
+        try:
+            config = orchestrator.memory.config().get("semantic_compaction", {})
+            provider = str(config.get("provider", "gemini"))
+            prompt = (
+                "Compact this conversation for handoff between coding agents. "
+                "Preserve user goals, verified facts, decisions, rejected options, "
+                "open tasks, commands, and relevant file paths. Do not invent facts. "
+                "Return concise Markdown only. Do not use tools or inspect files.\n\n"
+                f"# Previous summary\n{candidate['previous_summary'] or 'None'}\n\n"
+                f"# New transcript\n{candidate['transcript']}"
+            )
+            result = orchestrator.providers[provider].run(
+                prompt,
+                orchestrator.project,
+                Intent.ANSWER,
+                60,
+                model=str(config.get("model", "gemini-3-flash-preview")),
+                execution_mode="plan",
+            )
+            if result.ok and result.stdout.strip():
+                self.conversations.save_compaction(
+                    conversation_id,
+                    result.stdout,
+                    int(candidate["message_count"]),
+                )
+        finally:
+            with self.lock:
+                self.compacting.discard(conversation_id)
 
     def _write_pending(
         self,

@@ -82,6 +82,42 @@ def test_project_context_is_preserved_when_history_is_truncated(tmp_path):
     assert len(context) <= 1000
 
 
+def test_semantic_compaction_preserves_full_history_and_reduces_prompt(
+    tmp_path,
+):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+    conversation = store.create()
+    for index in range(12):
+        store.append_message(
+            conversation["id"],
+            "assistant",
+            f"old-{index}-" + "x" * 100,
+        )
+
+    candidate = store.compaction_candidate(
+        conversation["id"],
+        threshold_chars=200,
+        keep_recent=4,
+    )
+
+    assert candidate is not None
+    assert candidate["message_count"] == 8
+    assert store.save_compaction(
+        conversation["id"],
+        "Décision compacte vérifiée.",
+        candidate["message_count"],
+    )
+    loaded = store.get(conversation["id"])
+    assert len(loaded["messages"]) == 12
+    context = store.context(conversation["id"])
+    assert "Décision compacte vérifiée." in context
+    assert "old-11" in context
+    assert "old-0" not in context
+
+
 def test_old_runs_are_imported_once(tmp_path):
     root = tmp_path / ".agentflow"
     runs = root / "runs"
