@@ -2,7 +2,7 @@ from pathlib import Path
 import time
 
 from joe.models import Intent, Mode, ProviderResult, Route
-from joe.orchestrator import Orchestrator
+from joe.orchestrator import OrchestrationError, Orchestrator
 
 
 class FakeProvider:
@@ -14,12 +14,14 @@ class FakeProvider:
         self.responses = list(responses or [])
         self.delay = delay
         self.calls = []
+        self.execution_modes = []
 
     def run(
         self, prompt, cwd, intent, timeout, *, model=None, effort=None,
         execution_mode=None, cancel_event=None, on_stream=None
     ):
         self.calls.append((prompt, cwd, intent, timeout))
+        self.execution_modes.append(execution_mode)
         time.sleep(self.delay)
         if on_stream and not self.fail:
             on_stream("stdout", f"{self.name} response\n")
@@ -87,6 +89,41 @@ def test_consensus_is_read_only_and_uses_distinct_proposals(tmp_path):
         call[2] is Intent.ANALYZE
         for provider in providers.values()
         for call in provider.calls
+    )
+    assert all(
+        mode is None
+        for provider in providers.values()
+        for mode in provider.execution_modes
+    )
+
+
+def test_consensus_fails_closed_when_a_primary_agent_fails(tmp_path):
+    providers = {
+        "codex": FakeProvider("codex", fail=True),
+        "claude": FakeProvider("claude"),
+        "gemini": FakeProvider("gemini"),
+        "copilot": FakeProvider("copilot"),
+    }
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+    events = []
+
+    try:
+        orchestrator.execute(
+            "important",
+            Route(Intent.ANALYZE, Mode.CONSENSUS, "codex"),
+            execution_mode="danger-full-access",
+            on_event=events.append,
+        )
+    except OrchestrationError as error:
+        assert "codex" in str(error)
+    else:
+        raise AssertionError("Consensus must fail when Codex is unavailable")
+
+    assert providers["gemini"].calls == []
+    assert any(
+        event.get("stage") == "proposal_codex"
+        and event.get("status") == "failed"
+        for event in events
     )
 
 

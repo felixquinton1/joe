@@ -1,4 +1,4 @@
-const APP_VERSION = "0.18.1";
+const APP_VERSION = "0.19.0";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -355,44 +355,183 @@ function renderConversations() {
   target.replaceChildren();
   for (const project of state.projects) {
     const group = document.createElement("section");
-    group.className = "project-group";
+    group.className = `project-group ${project.collapsed ? "collapsed" : ""}`;
+    group.dataset.projectId = project.id;
     const header = document.createElement("div");
     header.className = "project-group-head";
-    header.innerHTML = `<strong>${escapeHtml(project.name)}</strong>`;
+    const projectDrag = smallButton("⋮⋮", "Déplacer le projet", () => {});
+    projectDrag.classList.add("drag-handle");
+    projectDrag.draggable = true;
+    projectDrag.ondragstart = event => beginDrag(event, "project", project.id);
+    header.appendChild(projectDrag);
+    const projectName = document.createElement("strong");
+    projectName.textContent = project.name;
+    header.appendChild(projectName);
     const projectActions = document.createElement("div");
+    const collapse = smallButton(
+      project.collapsed ? "▸" : "▾",
+      project.collapsed ? "Déplier les conversations" : "Replier les conversations",
+      () => toggleProjectCollapsed(project)
+    );
     const editProject = smallButton("⚙", "Modifier le contexte du sous-projet", () => openProject(project));
     const addConversation = smallButton("＋", "Nouvelle conversation dans ce sous-projet", () => createConversation(true, project.id));
-    projectActions.append(editProject, addConversation);
+    projectActions.append(collapse, editProject, addConversation);
     header.appendChild(projectActions);
+    header.ondragover = allowDrop;
+    header.ondrop = event => dropOnProject(event, project.id);
     group.appendChild(header);
-    const conversations = state.conversations.filter(item => item.project_id === project.id);
+    const conversations = state.conversations
+      .filter(item => item.project_id === project.id)
+      .sort((left, right) => Number(right.pinned) - Number(left.pinned));
     for (const conversation of conversations) {
-    const row = document.createElement("div");
-    row.className = `conversation-item ${conversation.id === state.activeConversationId ? "active" : ""}`;
-    const button = document.createElement("button");
-    button.className = "history-item";
-    button.innerHTML = `<strong>${escapeHtml(conversation.title)}</strong><span>${state.runs.has(conversation.id) ? "● En cours" : `${conversation.messages.length} messages`}</span>`;
-    button.onclick = () => selectConversation(conversation.id);
-    const pin = document.createElement("button");
-    pin.className = `pin-button ${conversation.pinned ? "pinned" : ""}`;
-    pin.title = conversation.pinned ? "Désépingler" : "Épingler";
-    pin.textContent = conversation.pinned ? "★" : "☆";
-    pin.onclick = () => togglePin(conversation);
-    const rename = document.createElement("button");
-    rename.className = "pin-button";
-    rename.title = "Renommer";
-    rename.textContent = "✎";
-    rename.onclick = () => renameConversation(conversation);
-    const remove = document.createElement("button");
-    remove.className = "pin-button delete-button";
-    remove.title = "Supprimer";
-    remove.textContent = "×";
-    remove.onclick = () => confirmDeleteConversation(conversation);
-    row.append(button, rename, pin, remove);
-    group.appendChild(row);
+      const row = document.createElement("div");
+      row.className = `conversation-item ${conversation.id === state.activeConversationId ? "active" : ""}`;
+      row.dataset.conversationId = conversation.id;
+      row.ondragover = allowDrop;
+      row.ondrop = event => dropOnConversation(event, conversation);
+      const drag = document.createElement("button");
+      drag.className = "pin-button drag-handle";
+      drag.title = "Déplacer la conversation";
+      drag.textContent = "⋮";
+      drag.draggable = true;
+      drag.ondragstart = event => beginDrag(event, "conversation", conversation.id);
+      const button = document.createElement("button");
+      button.className = "history-item";
+      const date = formatLastCall(conversation.last_call_at);
+      button.innerHTML = `<strong>${escapeHtml(conversation.title)}</strong><span title="${escapeHtml(date.exact)}">${state.runs.has(conversation.id) ? "● En cours" : `${conversation.messages.length} messages`} · ${escapeHtml(date.short)}</span>`;
+      button.onclick = () => selectConversation(conversation.id);
+      const pin = document.createElement("button");
+      pin.className = `pin-button ${conversation.pinned ? "pinned" : ""}`;
+      pin.title = conversation.pinned ? "Désépingler" : "Épingler";
+      pin.textContent = conversation.pinned ? "★" : "☆";
+      pin.onclick = () => togglePin(conversation);
+      const rename = document.createElement("button");
+      rename.className = "pin-button";
+      rename.title = "Renommer";
+      rename.textContent = "✎";
+      rename.onclick = () => renameConversation(conversation);
+      const remove = document.createElement("button");
+      remove.className = "pin-button delete-button";
+      remove.title = "Supprimer";
+      remove.textContent = "×";
+      remove.onclick = () => confirmDeleteConversation(conversation);
+      row.append(drag, button, rename, pin, remove);
+      group.appendChild(row);
     }
     target.appendChild(group);
   }
+}
+
+let draggedItem = null;
+
+function beginDrag(event, type, id) {
+  draggedItem = { type, id };
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", `${type}:${id}`);
+  event.stopPropagation();
+}
+
+function allowDrop(event) {
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "move";
+}
+
+async function dropOnProject(event, projectId) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (!draggedItem) return;
+  if (draggedItem.type === "project") {
+    await moveProjectBefore(draggedItem.id, projectId);
+  } else {
+    await moveConversation(draggedItem.id, projectId);
+  }
+  draggedItem = null;
+}
+
+async function dropOnConversation(event, targetConversation) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (draggedItem?.type !== "conversation") return;
+  await moveConversation(
+    draggedItem.id,
+    targetConversation.project_id,
+    targetConversation.id
+  );
+  draggedItem = null;
+}
+
+async function moveProjectBefore(sourceId, targetId) {
+  if (sourceId === targetId) return;
+  const source = state.projects.find(item => item.id === sourceId);
+  if (!source || !state.projects.some(item => item.id === targetId)) return;
+  state.projects = state.projects.filter(item => item.id !== sourceId);
+  const targetIndex = state.projects.findIndex(item => item.id === targetId);
+  state.projects.splice(targetIndex, 0, source);
+  renderConversations();
+  await Promise.all(state.projects.map((project, position) =>
+    patchProject(project.id, { position })
+  ));
+}
+
+async function moveConversation(sourceId, projectId, beforeId = null) {
+  const source = state.conversations.find(item => item.id === sourceId);
+  if (!source) return;
+  source.project_id = projectId;
+  const others = state.conversations.filter(
+    item => item.project_id === projectId && item.id !== sourceId
+  );
+  const index = beforeId
+    ? Math.max(0, others.findIndex(item => item.id === beforeId))
+    : others.length;
+  others.splice(index, 0, source);
+  const outside = state.conversations.filter(
+    item => item.project_id !== projectId && item.id !== sourceId
+  );
+  state.conversations = [...outside, ...others];
+  renderConversations();
+  await Promise.all(others.map((conversation, position) =>
+    fetch(`/api/conversations/${conversation.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: conversation.project_id,
+        position
+      })
+    })
+  ));
+}
+
+async function toggleProjectCollapsed(project) {
+  project.collapsed = !project.collapsed;
+  renderConversations();
+  await patchProject(project.id, { collapsed: project.collapsed });
+}
+
+function patchProject(projectId, changes) {
+  return fetch(`/api/projects/${projectId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(changes)
+  });
+}
+
+function formatLastCall(timestamp) {
+  const date = new Date(Number(timestamp || 0) * 1000);
+  if (!Number.isFinite(date.getTime()) || date.getTime() === 0) {
+    return { short: "jamais", exact: "Aucun appel" };
+  }
+  return {
+    short: new Intl.DateTimeFormat("fr-FR", {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit"
+    }).format(date),
+    exact: new Intl.DateTimeFormat("fr-FR", {
+      dateStyle: "full",
+      timeStyle: "short"
+    }).format(date)
+  };
 }
 
 function smallButton(label, title, action) {
@@ -689,10 +828,12 @@ function renderWorkflowUpdate(event, finalBubble, runId) {
     stages.appendChild(stage);
   }
   const complete = event.status === "complete";
+  const failed = event.status === "failed";
   stage.classList.toggle("complete", complete);
-  stage.classList.toggle("running", !complete);
-  stage.innerHTML = `<summary><span>${escapeHtml(event.label)}</span><b>${escapeHtml(capitalize(event.provider))} · ${complete ? "terminé" : "en cours"}</b></summary><div class="workflow-opinion"></div>`;
-  if (complete && event.content) {
+  stage.classList.toggle("failed", failed);
+  stage.classList.toggle("running", !complete && !failed);
+  stage.innerHTML = `<summary><span>${escapeHtml(event.label)}</span><b>${escapeHtml(capitalize(event.provider))} · ${complete ? "terminé" : failed ? "échec" : "en cours"}</b></summary><div class="workflow-opinion"></div>`;
+  if ((complete || failed) && event.content) {
     renderMarkdown(stage.querySelector(".workflow-opinion"), event.content);
     stage.querySelector("summary").appendChild(
       copyButton(() => event.content)
@@ -923,29 +1064,56 @@ async function startRun(
     return;
   }
   const { run_id } = await response.json();
-  const stream = new EventSource(`/api/events/${run_id}`);
-  state.runs.set(conversationId, {
-    runId: run_id,
-    stream,
-    bubble: finalBubble,
-    request,
-    workflow: new Map()
-  });
+  attachRun(conversationId, run_id, request, finalBubble);
   loadConversations(false);
+}
+
+function attachRun(conversationId, runId, request, finalBubble = null) {
+  const current = state.runs.get(conversationId) || {};
+  if (current.stream) return;
+  const stream = new EventSource(`/api/events/${runId}`);
+  const activeRun = {
+    ...current,
+    runId,
+    stream,
+    bubble: finalBubble || current.bubble || null,
+    request,
+    workflow: current.workflow || new Map()
+  };
+  state.runs.set(conversationId, activeRun);
   stream.onmessage = ({ data }) => {
     const event = JSON.parse(data);
-    handleEvent(conversationId, event, finalBubble);
+    handleEvent(conversationId, event, activeRun.bubble);
     if (event.type === "complete" || event.type === "error" || event.type === "cancelled") stream.close();
   };
   stream.onerror = () => {
     stream.close();
     if (state.runs.has(conversationId)) {
-      if (finalBubble) {
-        finalBubble.textContent = "Connexion au flux interrompue. Consulte le journal technique.";
+      if (activeRun.bubble) {
+        activeRun.bubble.textContent = "Connexion au flux interrompue. Le run reste disponible côté serveur.";
       }
-      finishRun(conversationId, false);
+      activeRun.stream = null;
     }
   };
+}
+
+async function loadActiveRuns() {
+  const runs = await fetch("/api/runs/active").then(response => response.json());
+  for (const run of runs) {
+    state.runs.set(run.conversation_id, {
+      runId: run.run_id,
+      stream: null,
+      bubble: null,
+      request: run.request,
+      workflow: new Map()
+    });
+  }
+}
+
+function connectActiveRuns() {
+  for (const [conversationId, run] of state.runs) {
+    attachRun(conversationId, run.runId, run.request, run.bubble);
+  }
 }
 
 async function cancelActiveRun() {
@@ -1134,9 +1302,43 @@ function inlineMarkdown(value) {
   return text.replace(/\u0000CODE(\d+)\u0000/g, (_, position) => `<code>${code[Number(position)]}</code>`);
 }
 
+function setupPanelResizers() {
+  const layout = document.querySelector(".layout");
+  for (const handle of document.querySelectorAll(".panel-resizer")) {
+    handle.onpointerdown = event => {
+      if (window.innerWidth <= 720) return;
+      event.preventDefault();
+      handle.setPointerCapture(event.pointerId);
+      handle.classList.add("dragging");
+      document.body.style.userSelect = "none";
+      handle.onpointermove = moveEvent => {
+        if (handle.dataset.resizer === "left") {
+          const width = Math.max(180, Math.min(430, moveEvent.clientX));
+          layout.style.setProperty("--left-panel", `${width}px`);
+        } else {
+          const width = Math.max(
+            240,
+            Math.min(540, window.innerWidth - moveEvent.clientX)
+          );
+          layout.style.setProperty("--right-panel", `${width}px`);
+        }
+      };
+      handle.onpointerup = () => {
+        handle.classList.remove("dragging");
+        document.body.style.userSelect = "";
+        handle.onpointermove = null;
+      };
+    };
+  }
+}
+
 setInterval(updateCountdowns, 1000);
 setInterval(() => loadUsage().catch(() => {}), 60000);
+setupPanelResizers();
 
-Promise.all([loadStatus(), loadCapabilities(), loadUsage()]).then(() => loadConversations()).catch(error => {
+Promise.all([loadStatus(), loadCapabilities(), loadUsage(), loadActiveRuns()])
+  .then(() => loadConversations())
+  .then(connectActiveRuns)
+  .catch(error => {
   $("project").textContent = `Erreur : ${error.message}`;
 });

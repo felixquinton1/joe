@@ -30,7 +30,8 @@ executable are named Joe.
   most one justified correction pass.
 - CONSENSUS runs two independent read-only proposals in parallel, then the two
   cross-reviews in parallel, and finally one synthesis. It never edits the
-  repository.
+  repository. Codex and Claude are mandatory for the four opinion stages; a
+  primary failure aborts explicitly instead of being silently replaced.
 - Full stdout/stderr live under `.agentflow/runs/`; active memory is rewritten
   with bounded content.
 
@@ -99,7 +100,9 @@ stops immediately instead of waiting through CLI backoff retries, and the test
 does not silently fall back to another provider.
 Claude routing uses the official local cache refreshed by `/usage`. Clicking
 the quota refresh button opens a short-lived Claude terminal session and runs
-`/usage` automatically; normal page loading continues to use the cache.
+`/usage` automatically. Joe reconstructs the interactive screen through tmux,
+including values rendered with cursor updates; normal page loading continues
+to use the cache.
 For requests that are moderately complex, Joe dynamically selects the first
 current Codex/Claude model exposed by the installed CLI and uses `high`
 reasoning effort. Explicit model and effort choices always take precedence.
@@ -144,6 +147,8 @@ provider. Active runs are recorded in `.agentflow/pending_runs.json`; after a
 server crash they are restarted from their saved request and conversation
 context. A dead subprocess cannot resume at an instruction boundary, so Joe
 truthfully relaunches the task from the beginning with the same run identifier.
+After a browser refresh, the interface reattaches to active server-side event
+streams instead of losing their run identifiers.
 
 Conversations are persistent per project. Each conversation keeps its full
 message history and independent agent, workflow, model, effort, and permission
@@ -158,6 +163,10 @@ history is retained; only the prompt representation is summarized. This policy
 is configurable under `semantic_compaction` in `.agentflow/config.yaml`.
 Conversations can be pinned and several can run concurrently; avoid
 launching concurrent write tasks against the same files.
+Projects and conversations can be reordered by drag and drop. Favorites remain
+above non-favorites, each conversation shows its last-call date, and project
+groups can be collapsed. The left and right panels have resize handles; their
+widths intentionally reset to the ergonomic defaults after a page refresh.
 While a conversation is running, additional prompts can be queued with their
 current agent/model settings. They start in order after the active response and
 can be copied or removed before execution. Copy controls are also available on

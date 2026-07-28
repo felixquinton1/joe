@@ -4,9 +4,11 @@ import json
 import os
 import re
 import selectors
+import shutil
 import subprocess
 import threading
 import time
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -337,6 +339,9 @@ def _claude_status(path: Path | None = None) -> dict[str, Any]:
 
 
 def _refresh_claude_status(timeout: int = 18) -> dict[str, Any]:
+    tmux_status = _refresh_claude_via_tmux(timeout)
+    if tmux_status:
+        return tmux_status
     output = ""
     child = None
     try:
@@ -350,8 +355,13 @@ def _refresh_claude_status(timeout: int = 18) -> dict[str, Any]:
             timeout=timeout,
         )
         child.expect("/effort")
+        time.sleep(0.8)
         child.send("/usage\r")
-        child.expect("Current session")
+        try:
+            child.expect("Current session", timeout=6)
+        except pexpect.TIMEOUT:
+            child.send("/usage\r")
+            child.expect("Current session", timeout=max(6, timeout - 6))
         output = child.before + child.after
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
@@ -379,6 +389,55 @@ def _refresh_claude_status(timeout: int = 18) -> dict[str, Any]:
     )
     fallback["stale"] = True
     return fallback
+
+
+def _refresh_claude_via_tmux(timeout: int) -> dict[str, Any] | None:
+    if not shutil.which("tmux") or not shutil.which("claude"):
+        return None
+    session = f"joe-claude-usage-{uuid.uuid4().hex[:10]}"
+    try:
+        started = subprocess.run(
+            [
+                "tmux", "new-session", "-d", "-x", "120", "-y", "50",
+                "-s", session,
+                "claude", "--ax-screen-reader", "--permission-mode", "plan",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if started.returncode:
+            return None
+        deadline = time.monotonic() + timeout
+        sent = False
+        while time.monotonic() < deadline:
+            screen = subprocess.run(
+                ["tmux", "capture-pane", "-p", "-J", "-t", session],
+                text=True,
+                capture_output=True,
+                check=False,
+            ).stdout
+            if not sent and "/effort" in screen:
+                subprocess.run(
+                    ["tmux", "send-keys", "-t", session, "/usage", "Enter"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+                sent = True
+            if sent and "Current week (all models)" in screen and "used" in screen:
+                parsed = _parse_claude_usage_screen(screen)
+                if parsed:
+                    return parsed
+            time.sleep(0.4)
+    finally:
+        subprocess.run(
+            ["tmux", "kill-session", "-t", session],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    return None
 
 
 def _parse_claude_usage_screen(
@@ -430,12 +489,17 @@ def _strip_terminal_codes(value: str) -> str:
 
 def _claude_reset_timestamp(value: str, now: datetime) -> float | None:
     cleaned = re.sub(r"\s*\([^)]*\)\s*$", "", value).strip().replace(" ", "")
-    for pattern in ("%I:%M%p", "%b%d,%I:%M%p"):
+    for pattern in (
+        "%I:%M%p",
+        "%I%p",
+        "%b%d,%I:%M%p",
+        "%b%d,%I%p",
+    ):
         try:
             parsed = datetime.strptime(cleaned, pattern)
         except ValueError:
             continue
-        if pattern == "%I:%M%p":
+        if pattern in {"%I:%M%p", "%I%p"}:
             target = now.replace(
                 hour=parsed.hour,
                 minute=parsed.minute,
@@ -475,7 +539,7 @@ def _codex_status() -> dict[str, Any]:
         "id": 1,
         "method": "initialize",
         "params": {
-            "clientInfo": {"name": "joe", "version": "0.18.1"},
+            "clientInfo": {"name": "joe", "version": "0.19.0"},
             "capabilities": {"experimentalApi": True},
         },
     }

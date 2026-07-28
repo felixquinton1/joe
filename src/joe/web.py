@@ -641,6 +641,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(usage_status(force=force))
         if path == "/api/conversations":
             return self._json(self.server.manager.conversations.list())
+        if path == "/api/runs/active":
+            return self._json(
+                [
+                    {
+                        "run_id": run.run_id,
+                        "conversation_id": run.conversation_id,
+                        "request": run.request,
+                    }
+                    for run in self.server.manager.live.values()
+                    if not run.done
+                ]
+            )
         if path == "/api/projects":
             return self._json(self.server.manager.conversations.list_projects())
         if path.startswith("/api/projects/"):

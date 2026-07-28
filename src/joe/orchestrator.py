@@ -303,7 +303,7 @@ class Orchestrator:
                     {other},
                     model if selected_provider == provider else None,
                     effort if selected_provider == provider else None,
-                    execution_mode if selected_provider == provider else None,
+                    None,
                     cancel_event,
                     on_event,
                 ): provider
@@ -316,7 +316,19 @@ class Orchestrator:
             proposal_results = {}
             for future in as_completed(futures):
                 provider = futures[future]
-                proposal, local_results = future.result()
+                try:
+                    proposal, local_results = future.result()
+                except OrchestrationError as error:
+                    self._workflow_event(
+                        on_event,
+                        "consensus",
+                        f"proposal_{provider}",
+                        provider,
+                        "Proposition indépendante",
+                        "failed",
+                        str(error),
+                    )
+                    raise
                 proposals[provider] = proposal
                 proposal_results[provider] = local_results
                 self._workflow_event(
@@ -368,7 +380,23 @@ class Orchestrator:
             review_results = {}
             for future in as_completed(futures):
                 provider = futures[future]
-                review, local_results = future.result()
+                try:
+                    review, local_results = future.result()
+                except OrchestrationError as error:
+                    self._workflow_event(
+                        on_event,
+                        "consensus",
+                        f"review_{provider}",
+                        provider,
+                        (
+                            "Examen de la proposition de Claude"
+                            if provider == "codex"
+                            else "Examen de la proposition de Codex"
+                        ),
+                        "failed",
+                        str(error),
+                    )
+                    raise
                 reviews[provider] = review
                 review_results[provider] = local_results
                 self._workflow_event(
@@ -445,6 +473,7 @@ class Orchestrator:
             execution_mode=execution_mode,
             cancel_event=cancel_event,
             on_event=on_event,
+            allow_fallback=False,
         )
         return result, local_results
 

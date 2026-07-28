@@ -94,6 +94,12 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
 
         live = LiveRun("cancel-test", "long request", conversation["id"])
         server.manager.live[live.run_id] = live
+        connection.request("GET", "/api/runs/active")
+        response = connection.getresponse()
+        active = json.loads(response.read())
+        assert active[0]["run_id"] == "cancel-test"
+        assert active[0]["conversation_id"] == conversation["id"]
+
         connection.request("POST", "/api/runs/cancel-test/cancel", body="{}")
         response = connection.getresponse()
         assert response.status == 202
@@ -119,6 +125,8 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert "L’IA à la mode chez les jeunes".encode() in page
         assert b'id="cancel-project"' in page
         assert b'id="prompt-queue"' in page
+        assert b'data-resizer="left"' in page
+        assert b'data-resizer="right"' in page
 
         connection.request("GET", "/app.js")
         response = connection.getresponse()
@@ -128,6 +136,9 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b"isTableSeparator" in script
         assert b"launchNextQueued" in script
         assert b"copyButton" in script
+        assert b"moveConversation" in script
+        assert b"setupPanelResizers" in script
+        assert b"loadActiveRuns" in script
     finally:
         server.shutdown()
         thread.join(timeout=2)

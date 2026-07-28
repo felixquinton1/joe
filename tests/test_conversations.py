@@ -32,6 +32,52 @@ def test_conversation_messages_settings_and_pin_persist(tmp_path):
     assert "Analyse ce dépôt" in store.context(conversation["id"])
 
 
+def test_conversations_default_to_pinned_then_most_recent(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+    older = store.create()
+    newer = store.create()
+    store.update(older["id"], {"pinned": True})
+
+    listed = store.list()
+
+    assert listed[0]["id"] == older["id"]
+    assert listed[1]["id"] == newer["id"]
+    assert listed[0]["last_call_at"] == older["created_at"]
+
+
+def test_manual_positions_and_project_collapse_persist(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+    first_project = store.create_project("First")
+    second_project = store.create_project("Second")
+    store.update_project("main", {"position": 2})
+    store.update_project(first_project["id"], {"position": 1})
+    store.update_project(
+        second_project["id"],
+        {"position": 0, "collapsed": True},
+    )
+    first = store.create(first_project["id"])
+    second = store.create(first_project["id"])
+    store.update(first["id"], {"position": 1})
+    store.update(second["id"], {"position": 0})
+
+    assert store.list_projects()[0]["id"] == second_project["id"]
+    assert store.list_projects()[0]["collapsed"] is True
+    within_project = [
+        item for item in store.list()
+        if item["project_id"] == first_project["id"]
+    ]
+    assert [item["id"] for item in within_project] == [
+        second["id"],
+        first["id"],
+    ]
+
+
 def test_subproject_context_is_shared_by_its_conversations(tmp_path):
     root = tmp_path / ".agentflow"
     runs = root / "runs"

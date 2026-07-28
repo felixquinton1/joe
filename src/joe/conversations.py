@@ -60,13 +60,20 @@ class ConversationStore:
 
     def list_projects(self) -> list[dict[str, Any]]:
         with self.lock:
-            return self._read()["projects"]
+            return sorted(
+                self._read()["projects"],
+                key=lambda item: (
+                    int(item.get("position", 1_000_000)),
+                    float(item.get("created_at", 0)),
+                ),
+            )
 
     def get_project(self, project_id: str) -> dict[str, Any] | None:
         with self.lock:
             return self._find_project(self._read(), project_id)
 
     def create_project(self, name: str = "Nouveau sous-projet") -> dict[str, Any]:
+        existing = self.list_projects()
         project = {
             "id": uuid.uuid4().hex,
             "name": name.strip()[:64] or "Nouveau sous-projet",
@@ -74,6 +81,8 @@ class ConversationStore:
             "workspace_root": "",
             "additional_roots": [],
             "remote_access": False,
+            "collapsed": False,
+            "position": len(existing),
             "created_at": time.time(),
         }
         with self.lock:
@@ -104,6 +113,10 @@ class ConversationStore:
                 ][:8]
             if "remote_access" in changes:
                 project["remote_access"] = bool(changes["remote_access"])
+            if "collapsed" in changes:
+                project["collapsed"] = bool(changes["collapsed"])
+            if "position" in changes:
+                project["position"] = max(0, int(changes["position"]))
             self._write(payload)
             return project
 
@@ -112,7 +125,15 @@ class ConversationStore:
             conversations = self._read()["conversations"]
             return sorted(
                 conversations,
-                key=lambda item: (not item["pinned"], -item["updated_at"]),
+                key=lambda item: (
+                    not item["pinned"],
+                    item.get("position") is not None,
+                    (
+                        int(item["position"])
+                        if item.get("position") is not None
+                        else -float(item.get("last_call_at", item["updated_at"]))
+                    ),
+                ),
             )
 
     def get(self, conversation_id: str) -> dict[str, Any] | None:
@@ -128,6 +149,8 @@ class ConversationStore:
             "project_id": project_id or DEFAULT_PROJECT_ID,
             "created_at": now,
             "updated_at": now,
+            "last_call_at": now,
+            "position": None,
             "settings": dict(DEFAULT_SETTINGS),
             "messages": [],
         }
@@ -153,6 +176,11 @@ class ConversationStore:
                 payload, str(changes["project_id"])
             ):
                 conversation["project_id"] = str(changes["project_id"])
+            if "position" in changes:
+                value = changes["position"]
+                conversation["position"] = (
+                    max(0, int(value)) if value is not None else None
+                )
             if isinstance(changes.get("settings"), dict):
                 allowed = {
                     key: str(value or "")
@@ -202,6 +230,7 @@ class ConversationStore:
             if git_report:
                 message["git_report"] = git_report
             conversation["messages"].append(message)
+            conversation["last_call_at"] = message["at"]
             if role == "user" and conversation["title"] == "Nouvelle conversation":
                 conversation["title"] = content.strip().splitlines()[0][:64]
             conversation["updated_at"] = time.time()
@@ -387,12 +416,19 @@ class ConversationStore:
         )
         for conversation in payload.setdefault("conversations", []):
             conversation.setdefault("project_id", DEFAULT_PROJECT_ID)
+            conversation.setdefault(
+                "last_call_at",
+                conversation.get("updated_at", conversation.get("created_at", 0)),
+            )
+            conversation.setdefault("position", None)
             conversation.setdefault("context_summary", "")
             conversation.setdefault("summarized_message_count", 0)
         for project in payload["projects"]:
             project.setdefault("workspace_root", "")
             project.setdefault("additional_roots", [])
             project.setdefault("remote_access", False)
+            project.setdefault("collapsed", False)
+            project.setdefault("position", payload["projects"].index(project))
         payload["version"] = 2
         return payload
 

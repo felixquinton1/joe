@@ -161,6 +161,25 @@ def test_parse_claude_usage_screen_returns_live_windows():
     assert all(window["resets_at"] for window in status["windows"])
 
 
+def test_parse_current_claude_usage_format_with_duplicate_percentages():
+    status = _parse_claude_usage_screen(
+        """
+        Current session
+        66% 66% used
+        Resets 2:20pm (Europe/Paris)
+        Current week (all models)
+        21% 21% used
+        Resets Aug 2, 3pm (Europe/Paris)
+        """,
+        now=datetime.fromisoformat("2026-07-28T12:00:00+02:00"),
+    )
+
+    assert status is not None
+    assert status["windows"][0]["remaining_percent"] == 34
+    assert status["windows"][1]["remaining_percent"] == 79
+    assert all(window["resets_at"] for window in status["windows"])
+
+
 def test_gemini_status_explains_api_key_quota(tmp_path):
     usage_path = tmp_path / "usage.json"
     settings_path = tmp_path / "settings.json"
