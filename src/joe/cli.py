@@ -13,10 +13,11 @@ from pathlib import Path
 from . import __version__
 from .models import Mode
 from .orchestrator import OrchestrationError, Orchestrator
+from .provider_registry import get_provider_names
 from .routing import resolve_route
 from .usage import usage_status
 
-PROVIDERS = ("codex", "claude", "gemini", "copilot")
+PROVIDERS = get_provider_names()
 
 
 def parser() -> argparse.ArgumentParser:

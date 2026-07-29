@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from .models import Intent, Mode, Route
+from .provider_registry import get_provider_names
 
 MODIFY_WORDS = {
     "ajoute", "ajouter", "change", "changer", "corrige", "corriger", "crée",
@@ -68,7 +69,7 @@ CAPABILITY_QUESTION_PHRASES = {
     "est il possible", "puis-je", "puis je", "dois-je", "dois je",
     "est-ce que ça", "est ce que ça", "que se passe-t-il",
 }
-PROVIDER_NAMES = {"codex", "claude", "gemini", "copilot"}
+PROVIDER_NAMES = set(get_provider_names())
 HEALTH_CHECK_PHRASES = {
     "petit test", "teste ", "test de ", "test du ", "fonctionne",
     "est disponible", "marche",
