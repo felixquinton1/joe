@@ -338,6 +338,40 @@ button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-v
   white-space: nowrap;
 }
 .controls select:hover { border-color: var(--line-strong); }
+.select-menu { position: relative; width: 100%; margin-top: 4px; }
+.select-menu .native-select { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
+.select-menu-trigger {
+  width: 100%; height: 36px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 10px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  color: var(--ink); background: var(--surface);
+  cursor: pointer; font-size: 11px; font-weight: 550;
+  text-align: left;
+}
+.select-menu-trigger::after { content: "⌄"; margin-left: 8px; color: var(--muted); transition: transform .12s ease; }
+.select-menu.open .select-menu-trigger { border-color: #9bbcaf; }
+.select-menu.open .select-menu-trigger::after { transform: rotate(180deg); }
+.select-menu-options {
+  position: absolute; z-index: 40;
+  top: calc(100% + 6px); left: 0;
+  width: 100%; min-width: 150px;
+  display: none; padding: 4px;
+  border: 1px solid rgba(203, 199, 188, .75);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 7px 20px rgba(30, 40, 36, .07);
+  animation: dropdown-in .12s ease-out;
+}
+.select-menu.open .select-menu-options { display: grid; gap: 1px; }
+.select-menu-option {
+  width: 100%; padding: 7px 8px;
+  border: 0; border-radius: 7px;
+  color: var(--ink); background: transparent;
+  cursor: pointer; font-size: 10px; text-align: left;
+}
+.select-menu-option:hover { background: #f0eee8; }
+.select-menu-option[aria-selected="true"] { color: var(--green); background: var(--green-soft); }
 .conversation { min-height: 0; overflow: auto; padding: 24px clamp(22px, 4vw, 56px); }
 .conversation-head {
   max-width: 900px;

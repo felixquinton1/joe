@@ -1,4 +1,4 @@
-const APP_VERSION = "0.23.17";
+const APP_VERSION = "0.23.18";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -14,6 +14,7 @@ const state = {
 const $ = id => document.getElementById(id);
 const renderMarkdown = window.JoeMarkdown.renderMarkdown;
 const joeFetch = window.JoeAuth.authenticatedFetch;
+const selectMenus = new Map();
 let language = window.JoeI18n.initialLanguage(
   window.localStorage,
   window.navigator.language
@@ -63,6 +64,82 @@ function updateProviderMenu(providers) {
   if ([...$("agent").options].some(option => option.value === selected)) {
     $("agent").value = selected;
   }
+}
+
+function setupSelectMenu(select) {
+  if (selectMenus.has(select)) return;
+  const wrapper = document.createElement("div");
+  wrapper.className = "select-menu";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "select-menu-trigger";
+  button.setAttribute("aria-haspopup", "listbox");
+  button.setAttribute("aria-expanded", "false");
+  const menu = document.createElement("div");
+  menu.className = "select-menu-options";
+  menu.setAttribute("role", "listbox");
+  select.before(wrapper);
+  wrapper.append(select, button, menu);
+  select.classList.add("native-select");
+
+  const close = () => {
+    wrapper.classList.remove("open");
+    button.setAttribute("aria-expanded", "false");
+  };
+  button.onclick = event => {
+    event.preventDefault();
+    event.stopPropagation();
+    const opening = !wrapper.classList.contains("open");
+    closeSelectMenus();
+    if (opening) {
+      wrapper.classList.add("open");
+      button.setAttribute("aria-expanded", "true");
+    }
+  };
+  button.onkeydown = event => {
+    if (!["ArrowDown", "ArrowUp", "Escape"].includes(event.key)) return;
+    event.preventDefault();
+    if (event.key === "Escape") return close();
+    const options = [...select.options];
+    const direction = event.key === "ArrowDown" ? 1 : -1;
+    const index = Math.max(0, options.findIndex(option => option.value === select.value));
+    const next = options[(index + direction + options.length) % options.length];
+    select.value = next.value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    refreshSelectMenu(select);
+  };
+  selectMenus.set(select, { wrapper, button, menu, close });
+  refreshSelectMenu(select);
+}
+
+function refreshSelectMenu(select) {
+  const control = selectMenus.get(select);
+  if (!control) return;
+  const selected = select.selectedOptions[0] || select.options[0];
+  control.button.textContent = selected?.textContent || "";
+  control.menu.replaceChildren();
+  for (const option of select.options) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "select-menu-option";
+    item.setAttribute("role", "option");
+    item.setAttribute("aria-selected", String(option.value === select.value));
+    item.textContent = option.textContent;
+    item.onclick = event => {
+      event.preventDefault();
+      event.stopPropagation();
+      select.value = option.value;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      refreshSelectMenu(select);
+      control.close();
+      control.button.focus();
+    };
+    control.menu.appendChild(item);
+  }
+}
+
+function closeSelectMenus() {
+  for (const control of selectMenus.values()) control.close();
 }
 
 async function loadCapabilities() {
@@ -234,6 +311,8 @@ function applySettings(settings) {
   $("mode").value = settings.mode || "";
   $("effort").value = settings.effort || "";
   $("execution-mode").value = settings.execution_mode || "";
+  refreshSelectMenu($("agent"));
+  refreshSelectMenu($("mode"));
 }
 
 async function saveSettings() {
@@ -275,6 +354,7 @@ async function savePreferences(event) {
 function setOptions(select, items) {
   select.replaceChildren();
   addOptions(select, items);
+  refreshSelectMenu(select);
 }
 
 function addOptions(select, items) {
@@ -1026,6 +1106,7 @@ $("model").addEventListener("change", () => {
 $("mode").addEventListener("change", saveSettings);
 $("effort").addEventListener("change", saveSettings);
 $("execution-mode").addEventListener("change", saveSettings);
+document.addEventListener("click", closeSelectMenus);
 $("new-project").onclick = createProject;
 $("cancel-project").onclick = () => {
   state.editingProjectId = null;
@@ -1126,6 +1207,8 @@ setInterval(updateCountdowns, 1000);
 setInterval(() => loadUsage().catch(() => {}), 60000);
 setupPanelResizers();
 resizeComposer();
+setupSelectMenu($("agent"));
+setupSelectMenu($("mode"));
 applyLanguage(language);
 $("toggle-history").onclick = () => toggleMobilePanel(
   ".history-panel",

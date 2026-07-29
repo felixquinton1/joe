@@ -199,6 +199,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b"fallback_from" in script
         assert b"updateProviderMenu" in script
         assert b"lastEventId" in script
+        assert b"setupSelectMenu" in script
 
         connection.request("GET", "/style.css")
         response = connection.getresponse()
@@ -220,6 +221,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b"top: calc(100% + 8px)" in style
         assert b"@keyframes dropdown-in" in style
         assert b"grid-template-rows: 0fr" in style
+        assert b".select-menu-options" in style
         assert b"animation: dialog-in" in style
     finally:
         server.shutdown()
