@@ -1,4 +1,4 @@
-const APP_VERSION = "0.21.9";
+const APP_VERSION = "0.21.10";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -754,6 +754,36 @@ async function reconcileRun(conversationId, previousRunId, attempt = 0) {
     return;
   }
   const local = state.runs.get(conversationId);
+  try {
+    const response = await fetch(`/api/conversations/${conversationId}`);
+    if (response.ok) {
+      const conversation = await response.json();
+      const completed = [...(conversation.messages || [])].reverse().find(
+        message => (
+          message.role === "assistant"
+          && message.run_id === previousRunId
+        )
+      );
+      if (completed) {
+        if (local?.bubble) {
+          renderMarkdown(local.bubble, completed.content);
+          if (completed.git_report) {
+            renderGitReport(completed.git_report, completed.run_id);
+          }
+        }
+        if (conversationId === state.activeConversationId) {
+          finishRun(conversationId, true);
+        } else {
+          state.runs.delete(conversationId);
+        }
+        loadConversations(false);
+        launchNextQueued(conversationId);
+        return;
+      }
+    }
+  } catch {
+    // Fall through to the genuine interruption state.
+  }
   if (local?.bubble) {
     local.bubble.textContent = previousRunId
       ? "La tâche a été interrompue par le redémarrage de Joe."

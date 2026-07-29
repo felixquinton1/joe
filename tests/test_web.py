@@ -53,6 +53,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         app = response.read().decode()
         assert response.status == 200
         assert "reconcileRun(conversationId, runId)" in app
+        assert "message.run_id === previousRunId" in app
         assert "window.location.reload()" in app
 
         connection.request("GET", "/markdown.js")
