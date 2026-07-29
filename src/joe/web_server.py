@@ -186,8 +186,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(
                 {
                     "error": (
-                        "Cette tâche demande un accès complet au projet et aux "
-                        "commandes. Confirme l’autorisation pour ce run."
+                        "Cette tâche demande un accès complet aux seules racines "
+                        "déclarées pour ce projet. Confirme l’autorisation pour "
+                        "ce run."
                     ),
                     "approval": "full-access",
                 },

@@ -87,6 +87,11 @@ Seuls `request` et `conversation_id` sont obligatoires. Les valeurs absentes
 utilisent le routage et les réglages de conversation. Le succès renvoie
 `{"run_id": "…"}` avec HTTP 202.
 
+Le mode historique `danger-full-access` demande une confirmation HTTP 428, mais
+ne désactive pas le sandbox du fournisseur. Une fois confirmé, il donne un
+accès complet limité à la racine du projet de la conversation et aux racines
+additionnelles explicitement configurées pour ce même projet.
+
 Deux lancements simultanés pour une même conversation produisent exactement un
 HTTP 202 et un HTTP 409. Le rejet ne persiste aucun second message utilisateur.
 

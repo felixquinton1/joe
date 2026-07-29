@@ -108,11 +108,14 @@ Infobulles courtes, guide intégré et commandes de zoom natif sont livrés. Les
 demandes VS Code imposent la lecture seule et les actions de maintenance sont
 masquées par défaut. Workspace Trust bloque les mutations de l’extension.
 
-Un run nécessitant `danger-full-access` est refusé par l’API avec HTTP 428 tant
-que l’utilisateur n’a pas choisi « Autoriser une fois ». Le Web et VS Code
-relaient ce gate de façon accessible ; après confirmation seulement, le wrapper
-active le mode complet réel du fournisseur. L’approbation granulaire d’une
-commande au milieu d’un processus fournisseur reste hors de cette phase.
+Un run nécessitant historiquement `danger-full-access` est refusé par l’API
+avec HTTP 428 tant que l’utilisateur n’a pas choisi « Autoriser une fois ». Le
+Web et VS Code relaient ce gate de façon accessible. Après confirmation, Joe
+autorise les modifications dans la racine du sous-projet concerné et ses seules
+racines additionnelles déclarées. Il ne transmet jamais aux
+fournisseurs les modes globaux `danger-full-access`, `bypassPermissions` ou
+`yolo`, qui permettraient de sortir de ce périmètre. Le nom historique reste
+accepté dans les réglages pour compatibilité.
 
 Après pilote seulement : décider si un panneau de chat riche apporte assez de
 valeur pour justifier sa CSP, son protocole de messages et sa maintenance.

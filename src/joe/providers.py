@@ -26,7 +26,7 @@ WORKSPACE_WRITE_MODES = {
     "auto_edit",
     "modify",
 }
-FULL_ACCESS_MODES = {"danger-full-access"}
+PROJECT_FULL_ACCESS_MODES = {"danger-full-access"}
 RESTRICTED_MODES = {"dontAsk"}
 
 
@@ -35,8 +35,8 @@ def _access_level(execution_mode: str | None, modifying: bool) -> str:
         return "read"
     if execution_mode in WORKSPACE_WRITE_MODES:
         return "write"
-    if execution_mode in FULL_ACCESS_MODES:
-        return "full"
+    if execution_mode in PROJECT_FULL_ACCESS_MODES:
+        return "project-full"
     if execution_mode in RESTRICTED_MODES:
         return "restricted"
     return "write" if modifying else "read"
@@ -69,7 +69,7 @@ class Provider:
             sandbox = {
                 "read": "read-only",
                 "write": "workspace-write",
-                "full": "danger-full-access",
+                "project-full": "workspace-write",
                 "restricted": "read-only",
             }[access]
             command = [
@@ -95,7 +95,7 @@ class Provider:
             permission = {
                 "read": "plan",
                 "write": "acceptEdits",
-                "full": "bypassPermissions",
+                "project-full": "acceptEdits",
                 "restricted": "dontAsk",
             }[access]
             command = [
@@ -103,8 +103,6 @@ class Provider:
                 "--verbose",
                 "--permission-mode", permission, "--no-session-persistence",
             ]
-            if access == "full":
-                command.append("--allow-dangerously-skip-permissions")
             for root in self.additional_roots:
                 command.extend(["--add-dir", str(root)])
             if effort:
@@ -116,7 +114,7 @@ class Provider:
             approval = {
                 "read": "plan",
                 "write": "auto_edit",
-                "full": "yolo",
+                "project-full": "auto_edit",
                 "restricted": "plan",
             }[access]
             command = [
@@ -129,7 +127,10 @@ class Provider:
                 command.extend(["--model", model])
             return [*command, "--prompt", prompt]
         if self.name == "copilot":
-            allow_modify = access in {"write", "full"}
+            allow_modify = access in {"write", "project-full"}
+            # Copilot has no project-scoped shell sandbox: keep it disabled
+            # for confirmed project access instead of widening to the host.
+            allow_shell = access == "write"
             args = [
                 self.executable, "--silent", "--no-color",
                 "--no-remote", "--no-remote-export", "--no-ask-user",
@@ -143,9 +144,11 @@ class Provider:
             if not allow_modify:
                 args.append("--plan")
             if allow_modify:
-                args.extend(["--allow-tool=write", "--allow-tool=shell"])
+                args.append("--allow-tool=write")
             else:
-                args.extend(["--available-tools=read,search"])
+                args.append("--available-tools=read,search")
+            if allow_shell:
+                args.append("--allow-tool=shell")
             return [*args, "--prompt", prompt]
         raise ValueError(f"Unknown provider: {self.name}")
 

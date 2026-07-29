@@ -201,20 +201,42 @@ def test_generic_write_modes_are_translated_for_non_codex_clis():
         "p", cwd, Intent.ANALYZE, execution_mode="workspace-write"
     )
 
-    assert claude[claude.index("--permission-mode") + 1] == "bypassPermissions"
-    assert "--allow-dangerously-skip-permissions" in claude
+    assert claude[claude.index("--permission-mode") + 1] == "acceptEdits"
+    assert "--allow-dangerously-skip-permissions" not in claude
     assert gemini[gemini.index("--approval-mode") + 1] == "auto_edit"
     assert "--allow-tool=write" in copilot
     assert "--allow-tool=shell" in copilot
 
 
-def test_full_access_uses_each_provider_explicit_full_mode():
+def test_full_access_remains_scoped_to_declared_project_roots():
     cwd = Path("/tmp/project")
-    gemini = Provider("gemini", "gemini").command(
+    extra = (Path("/tmp/vision"),)
+    codex = Provider("codex", "codex", extra).command(
+        "p", cwd, Intent.MODIFY, execution_mode="danger-full-access"
+    )
+    claude = Provider("claude", "claude", extra).command(
+        "p", cwd, Intent.MODIFY, execution_mode="danger-full-access"
+    )
+    gemini = Provider("gemini", "gemini", extra).command(
+        "p", cwd, Intent.MODIFY, execution_mode="danger-full-access"
+    )
+    copilot = Provider("copilot", "copilot", extra).command(
         "p", cwd, Intent.MODIFY, execution_mode="danger-full-access"
     )
 
-    assert gemini[gemini.index("--approval-mode") + 1] == "yolo"
+    assert codex[codex.index("--sandbox") + 1] == "workspace-write"
+    assert claude[claude.index("--permission-mode") + 1] == "acceptEdits"
+    assert "--allow-dangerously-skip-permissions" not in claude
+    assert gemini[gemini.index("--approval-mode") + 1] == "auto_edit"
+    assert "--allow-tool=write" in copilot
+    assert "--allow-tool=shell" not in copilot
+    for command, flag in (
+        (codex, "--add-dir"),
+        (claude, "--add-dir"),
+        (gemini, "--include-directories"),
+        (copilot, "--add-dir"),
+    ):
+        assert command[command.index(flag) + 1] == "/tmp/vision"
 
 
 def test_additional_project_roots_are_forwarded_to_each_cli():
