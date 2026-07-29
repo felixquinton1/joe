@@ -103,6 +103,29 @@ def test_consensus_replaces_low_claude_with_gemini():
     assert "claude->gemini" in notice["message"]
 
 
+def test_consensus_keeps_healthy_claude_ahead_of_unknown_gemini():
+    route = Route(Intent.ANALYZE, Mode.CONSENSUS, "codex")
+
+    admitted, notice = admit_route(
+        route,
+        [
+            status("codex", 91, 200_000),
+            status("claude", 69, 200_000),
+            {
+                "provider": "gemini",
+                "available": True,
+                "windows": [],
+            },
+        ],
+        now=10_000,
+    )
+
+    assert admitted.mode is Mode.CONSENSUS
+    assert admitted.primary == "codex"
+    assert admitted.reviewer == "claude"
+    assert notice is None
+
+
 def test_consensus_becomes_fast_when_only_one_provider_has_capacity():
     route = Route(Intent.ANALYZE, Mode.CONSENSUS, "codex")
     unavailable_gemini = {

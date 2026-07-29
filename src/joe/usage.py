@@ -335,7 +335,13 @@ def admit_route(
         )
     primary = route.primary if route.primary in eligible else eligible[0]
     others = [provider for provider in eligible if provider != primary]
-    reviewer = others[0] if needed == 2 else route.reviewer
+    reviewer = (
+        original_reviewer
+        if needed == 2
+        and original_reviewer in eligible
+        and original_reviewer != primary
+        else (others[0] if needed == 2 else route.reviewer)
+    )
     adjusted = Route(
         route.intent,
         route.mode,
