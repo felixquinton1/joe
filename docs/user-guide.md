@@ -70,6 +70,22 @@ saisie directement ne reçoit jamais le secret : relance `joe` pour appairer un
 nouveau navigateur. Le secret reste hors du projet et ne doit pas être copié
 dans un dépôt.
 
+Pour réappairer un navigateur après suppression des cookies :
+
+```bash
+joe url
+```
+
+`joe url --print` affiche le lien sensible uniquement lorsqu’il faut le
+transmettre manuellement à un navigateur sur la même machine. En cas de doute
+sur une fuite locale, `joe auth rotate` renouvelle immédiatement le secret,
+révoque les anciennes sessions et ouvre un nouvel appairage.
+
+Le profil limite les actions acceptées par une instance donnée. Les instances
+du même compte système partagent toutefois le même secret : `--profile viewer`
+réduit les risques de fausse manœuvre, mais ne constitue pas une délégation à
+un autre utilisateur.
+
 Depuis le projet à traiter :
 
 ```bash

@@ -10,14 +10,15 @@ window.createJoeConversations = function createJoeConversations({
   renderHistoricalRunSummary,
   applySettings,
   renderWorkflowUpdate,
-  renderPromptQueue
+  renderPromptQueue,
+  fetcher
 }) {
   let draggedItem = null;
 
   async function loadConversations(selectFirst = true) {
     [state.conversations, state.projects] = await Promise.all([
-      fetch("/api/conversations").then(response => response.json()),
-      fetch("/api/projects").then(response => response.json())
+      fetcher("/api/conversations").then(response => response.json()),
+      fetcher("/api/projects").then(response => response.json())
     ]);
     if (!state.conversations.length) {
       const created = await createConversation(false);
@@ -167,7 +168,7 @@ window.createJoeConversations = function createJoeConversations({
     state.conversations = [...outside, ...others];
     renderConversations();
     await Promise.all(others.map((conversation, position) =>
-      fetch(`/api/conversations/${conversation.id}`, {
+      fetcher(`/api/conversations/${conversation.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -185,7 +186,7 @@ window.createJoeConversations = function createJoeConversations({
   }
 
   function patchProject(projectId, changes) {
-    return fetch(`/api/projects/${projectId}`, {
+    return fetcher(`/api/projects/${projectId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(changes)
@@ -223,7 +224,7 @@ window.createJoeConversations = function createJoeConversations({
   async function selectConversation(conversationId) {
     preserveActivePanel();
     closeMobilePanels();
-    const conversation = await fetch(`/api/conversations/${conversationId}`).then(response => response.json());
+    const conversation = await fetcher(`/api/conversations/${conversationId}`).then(response => response.json());
     state.activeConversationId = conversationId;
     state.activeProjectId = conversation.project_id || "main";
     renderConversations();
@@ -293,7 +294,7 @@ window.createJoeConversations = function createJoeConversations({
   }
 
   async function createConversation(select = true, projectId = state.activeProjectId) {
-    const conversation = await fetch("/api/conversations", {
+    const conversation = await fetcher("/api/conversations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ project_id: projectId })
@@ -308,7 +309,7 @@ window.createJoeConversations = function createJoeConversations({
   async function renameConversation(conversation) {
     const title = window.prompt("Nouveau nom de la conversation :", conversation.title);
     if (!title?.trim()) return;
-    await fetch(`/api/conversations/${conversation.id}`, {
+    await fetcher(`/api/conversations/${conversation.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: title.trim() })
@@ -329,7 +330,7 @@ window.createJoeConversations = function createJoeConversations({
     event.preventDefault();
     const conversation = state.deletingConversation;
     if (!conversation) return;
-    const response = await fetch(`/api/conversations/${conversation.id}`, {
+    const response = await fetcher(`/api/conversations/${conversation.id}`, {
       method: "DELETE"
     });
     if (!response.ok) {
@@ -381,7 +382,7 @@ window.createJoeConversations = function createJoeConversations({
     event.preventDefault();
     if (!$("project-name").reportValidity()) return;
     const creating = !state.editingProjectId;
-    const response = await fetch(
+    const response = await fetcher(
       creating ? "/api/projects" : `/api/projects/${state.editingProjectId}`,
       {
         method: creating ? "POST" : "PATCH",
@@ -399,7 +400,7 @@ window.createJoeConversations = function createJoeConversations({
     );
     const project = await response.json();
     if (creating && $("project-context").value) {
-      await fetch(`/api/projects/${project.id}`, {
+      await fetcher(`/api/projects/${project.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ context: $("project-context").value })
@@ -415,7 +416,7 @@ window.createJoeConversations = function createJoeConversations({
   }
 
   async function togglePin(conversation) {
-    await fetch(`/api/conversations/${conversation.id}`, {
+    await fetcher(`/api/conversations/${conversation.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pinned: !conversation.pinned })

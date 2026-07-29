@@ -1,4 +1,4 @@
-const APP_VERSION = "0.23.1";
+const APP_VERSION = "0.23.2";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -13,18 +13,7 @@ const state = {
 };
 const $ = id => document.getElementById(id);
 const renderMarkdown = window.JoeMarkdown.renderMarkdown;
-
-async function pairBrowser() {
-  const fragment = new URLSearchParams(window.location.hash.slice(1));
-  const token = fragment.get("token");
-  if (!token) return;
-  const response = await fetch("/api/pair", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-  if (!response.ok) throw new Error("Appairage local Joe refusé");
-}
+const joeFetch = window.JoeAuth.authenticatedFetch;
 
 async function loadStatus() {
   const status = await fetch("/api/status").then(response => response.json());
@@ -55,7 +44,7 @@ function updateProviderMenu(providers) {
 }
 
 async function loadCapabilities() {
-  state.capabilities = await fetch("/api/capabilities").then(response => response.json());
+  state.capabilities = await joeFetch("/api/capabilities").then(response => response.json());
   updateCapabilityMenus();
 }
 
@@ -146,7 +135,7 @@ function renderGitReport(report, runId) {
       return;
     }
     if (!window.confirm(`Rejeter ${files.length} fichier${files.length > 1 ? "s" : ""} sélectionné${files.length > 1 ? "s" : ""} ?`)) return;
-    const response = await fetch(`/api/runs/${runId}/reject`, {
+    const response = await joeFetch(`/api/runs/${runId}/reject`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ files }),
@@ -226,7 +215,7 @@ function applySettings(settings) {
 
 async function saveSettings() {
   if (!state.activeConversationId) return;
-  await fetch(`/api/conversations/${state.activeConversationId}`, {
+  await joeFetch(`/api/conversations/${state.activeConversationId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ settings: currentSettings() })
@@ -428,7 +417,8 @@ function updateWorkflowFallback(provider, fallback) {
   $,
   escapeHtml,
   capitalize,
-  addMessage
+  addMessage,
+  fetcher: joeFetch
 }));
 
 ({
@@ -455,7 +445,8 @@ function updateWorkflowFallback(provider, fallback) {
   renderHistoricalRunSummary,
   applySettings,
   renderWorkflowUpdate,
-  renderPromptQueue
+  renderPromptQueue,
+  fetcher: joeFetch
 }));
 
 function handleEvent(conversationId, event, finalBubble) {
@@ -714,7 +705,7 @@ async function startRun(
     conversation_id: conversationId,
     ...settings
   };
-  let response = await fetch("/api/runs", {
+  let response = await joeFetch("/api/runs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
@@ -722,7 +713,7 @@ async function startRun(
   if (response.status === 428) {
     const approved = await confirmFullAccess();
     if (!approved) return;
-    response = await fetch("/api/runs", {
+    response = await joeFetch("/api/runs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...payload, full_access_approved: true })
@@ -802,7 +793,7 @@ async function reconcileRun(conversationId, previousRunId, attempt = 0) {
   if (!state.runs.has(conversationId)) return;
   let runs;
   try {
-    const response = await fetch("/api/runs/active");
+    const response = await joeFetch("/api/runs/active");
     if (!response.ok) throw new Error("server unavailable");
     runs = await response.json();
   } catch {
@@ -830,7 +821,7 @@ async function reconcileRun(conversationId, previousRunId, attempt = 0) {
   }
   const local = state.runs.get(conversationId);
   try {
-    const response = await fetch(`/api/conversations/${conversationId}`);
+    const response = await joeFetch(`/api/conversations/${conversationId}`);
     if (response.ok) {
       const conversation = await response.json();
       const completed = [...(conversation.messages || [])].reverse().find(
@@ -874,7 +865,7 @@ async function reconcileRun(conversationId, previousRunId, attempt = 0) {
 }
 
 async function loadActiveRuns() {
-  const runs = await fetch("/api/runs/active").then(response => response.json());
+  const runs = await joeFetch("/api/runs/active").then(response => response.json());
   for (const run of runs) {
     state.runs.set(run.conversation_id, {
       runId: run.run_id,
@@ -899,7 +890,7 @@ async function cancelActiveRun() {
   if (!run) return;
   $("stop").disabled = true;
   $("stop").querySelector("span").textContent = "Arrêt…";
-  const response = await fetch(`/api/runs/${run.runId}/cancel`, { method: "POST" });
+  const response = await joeFetch(`/api/runs/${run.runId}/cancel`, { method: "POST" });
   if (!response.ok) {
     $("stop").disabled = false;
     $("stop").querySelector("span").textContent = "Interrompre";
@@ -1035,7 +1026,7 @@ $("toggle-activity").onclick = () => toggleMobilePanel(
   "toggle-activity"
 );
 
-pairBrowser()
+window.JoeAuth.pairBrowser()
   .then(() => {
     Promise.all([loadStatus(), loadActiveRuns()])
       .then(() => loadConversations())

@@ -25,6 +25,8 @@ local reste refusé sans option explicite.
 | Méthode | Endpoint | Succès | Erreurs utiles | Usage client |
 |---|---|---:|---:|---|
 | GET | `/api/status` | 200 | — | identité, compatibilité, projet, fournisseurs |
+| POST | `/api/pair` | 200 | 401 | échange du fragment contre un cookie |
+| POST | `/api/auth/rotate` | 200 | 401, 403 | révocation et rotation du secret |
 | GET | `/api/capabilities` | 200 | — | modèles, efforts et modes d’exécution |
 | GET | `/api/usage` | 200 | — | quotas mis en cache |
 | GET | `/api/usage?force=1` | 200 | — | actualisation explicite des quotas |
@@ -71,8 +73,8 @@ Le client vérifie la version majeure de `api_version` avant toute mutation.
 `GET /api/status` et les fichiers statiques restent publics pour le diagnostic
 et l’ouverture de Joe Web, mais ne distribuent aucun secret. La CLI ouvre une
 URL dont le fragment contient le jeton; la page l’échange une fois via
-`POST /api/pair` contre un cookie `HttpOnly`, `SameSite=Strict`, puis efface le
-fragment de l’historique. Les autres endpoints exigent ce cookie ou
+`POST /api/pair` contre un cookie `HttpOnly`, `SameSite=Strict` valable 30
+jours, puis efface le fragment de l’historique. Les autres endpoints exigent ce cookie ou
 `Authorization: Bearer <jeton>`.
 
 Le jeton est généré dans le répertoire de données utilisateur avec des
@@ -90,6 +92,9 @@ pour un `maintainer`.
 
 L’actualisation active des quotas (`GET /api/usage?force=1`) et la lecture des
 configurations de projets exigent également `maintainer`.
+
+`POST /api/auth/rotate`, réservé à `maintainer`, remplace atomiquement le secret
+du serveur et révoque immédiatement cookies et Bearers antérieurs.
 
 ### Lancement
 

@@ -1,4 +1,6 @@
-window.createJoeUsage = function createJoeUsage({ state, $, escapeHtml, capitalize, addMessage }) {
+window.createJoeUsage = function createJoeUsage({
+  state, $, escapeHtml, capitalize, addMessage, fetcher
+}) {
   async function loadUsage(force = false) {
     const button = $("refresh-usage");
     if (force) {
@@ -6,7 +8,7 @@ window.createJoeUsage = function createJoeUsage({ state, $, escapeHtml, capitali
       button.classList.add("refreshing");
     }
     try {
-      const response = await fetch(`/api/usage${force ? "?force=1" : ""}`);
+      const response = await fetcher(`/api/usage${force ? "?force=1" : ""}`);
       if (!response.ok) throw new Error("Quotas indisponibles");
       state.usage = await response.json();
       renderUsage();

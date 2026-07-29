@@ -3,7 +3,7 @@ import json
 import stat
 import threading
 
-from joe.auth import LocalAuth, load_or_create_token, required_role
+from joe.auth import LocalAuth, load_or_create_token, required_role, rotate_token
 from joe.web import Handler, JoeServer, RunManager
 
 
@@ -11,6 +11,7 @@ def start_server(tmp_path, role):
     server = JoeServer(("127.0.0.1", 0), Handler)
     server.manager = RunManager(tmp_path)
     server.auth = LocalAuth("test-token", role, True)
+    server.auth_path = tmp_path / "auth-token"
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, thread
@@ -41,12 +42,18 @@ def test_local_token_is_stable_and_private(tmp_path):
     assert len(first) >= 32
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
+    rotated = rotate_token(path)
+    assert rotated != first
+    assert load_or_create_token(path) == rotated
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
 
 def test_capability_matrix_is_centralized():
     assert required_role("GET", "/api/conversations") == "viewer"
     assert required_role("POST", "/api/runs") == "operator"
     assert required_role("POST", "/api/projects") == "maintainer"
     assert required_role("POST", "/api/runs/id/reject") == "maintainer"
+    assert required_role("POST", "/api/auth/rotate") == "maintainer"
     assert required_role("GET", "/api/projects") == "maintainer"
 
 
@@ -107,6 +114,7 @@ def test_pairing_requires_possession_and_returns_an_http_only_cookie(tmp_path):
         assert "joe_token=test-token" in cookie
         assert "HttpOnly" in cookie
         assert "SameSite=Strict" in cookie
+        assert "Max-Age=2592000" in cookie
     finally:
         server.shutdown()
         thread.join(timeout=2)
@@ -157,6 +165,34 @@ def test_viewer_cannot_force_a_quota_refresh(tmp_path):
         )
         assert status == 403
         assert "maintainer" in payload["error"]
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_maintainer_can_rotate_and_revoke_the_previous_token(tmp_path):
+    server, thread = start_server(tmp_path, "maintainer")
+    try:
+        status, payload, _ = request(
+            server,
+            "POST",
+            "/api/auth/rotate",
+            {},
+            token="test-token",
+        )
+        assert status == 200
+        assert payload["rotated"] is True
+        replacement = server.auth_path.read_text().strip()
+        assert replacement != "test-token"
+
+        status, _, _ = request(
+            server, "GET", "/api/conversations", token="test-token"
+        )
+        assert status == 401
+        status, _, _ = request(
+            server, "GET", "/api/conversations", token=replacement
+        )
+        assert status == 200
     finally:
         server.shutdown()
         thread.join(timeout=2)

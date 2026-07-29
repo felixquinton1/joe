@@ -563,6 +563,7 @@ def test_run_summary_preserves_completed_workflow_and_fallback():
             "mode": "consensus",
             "primary": "codex",
             "reviewer": "gemini",
+            "profile": "operator",
         }
     )
     run.emit(
@@ -605,6 +606,7 @@ def test_run_summary_preserves_completed_workflow_and_fallback():
     summary = _run_summary(run)
 
     assert summary["route"]["mode"] == "consensus"
+    assert summary["route"]["profile"] == "operator"
     assert summary["workflow"][0]["provider"] == "claude"
     assert summary["workflow"][0]["fallback_from"] == "gemini"
     assert summary["workflow"][0]["model"] == "sonnet"

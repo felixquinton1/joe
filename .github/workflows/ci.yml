@@ -45,9 +45,11 @@ jobs:
       - run: python -m pip install -e . pytest
       - run: pytest -q
       - run: node --check src/joe/web_assets/app_usage.js
+      - run: node --check src/joe/web_assets/app_auth.js
       - run: node --check src/joe/web_assets/app_conversations.js
       - run: node --check src/joe/web_assets/app.js
       - run: node --check src/joe/web_assets/markdown.js
+      - run: node --test tests/test_web_assets.mjs
       - run: npm ci
         working-directory: vscode-extension
       - run: npm run check

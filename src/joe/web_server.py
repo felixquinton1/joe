@@ -9,7 +9,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 from . import __version__
-from .auth import LocalAuth, required_role
+from .auth import LocalAuth, auth_token_path, required_role, rotate_token
 from .http_utils import RequestBodyError, read_json_body, validate_bind
 from .provider_registry import get_provider_catalog, get_provider_names
 from .web_runs import ActiveConversationError, RunManager
@@ -18,6 +18,7 @@ _ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/style.css": ("style.css", "text/css; charset=utf-8"),
     "/markdown.js": ("markdown.js", "text/javascript; charset=utf-8"),
+    "/app_auth.js": ("app_auth.js", "text/javascript; charset=utf-8"),
     "/app_usage.js": ("app_usage.js", "text/javascript; charset=utf-8"),
     "/app_conversations.js": ("app_conversations.js", "text/javascript; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
@@ -28,6 +29,7 @@ API_VERSION = "1.1"
 class JoeServer(ThreadingHTTPServer):
     manager: RunManager
     auth = LocalAuth("", "viewer", True)
+    auth_path = auth_token_path()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -116,6 +118,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._pair()
         if not self._authorize(required_role("POST", path)):
             return
+        if path == "/api/auth/rotate":
+            token = rotate_token(self.server.auth_path)
+            self.server.auth = LocalAuth(token, self.server.auth.role, True)
+            return self._json({"rotated": True})
         if path.startswith("/api/runs/") and path.endswith("/reject"):
             run_id = unquote(path.split("/")[-2])
             payload = self._read_payload(allow_empty=True)
@@ -317,7 +323,7 @@ class Handler(BaseHTTPRequestHandler):
             headers={
                 "Set-Cookie": (
                     f"joe_token={self.server.auth.token}; "
-                    "HttpOnly; SameSite=Strict; Path=/"
+                    "HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000"
                 )
             },
         )
@@ -340,7 +346,13 @@ class Handler(BaseHTTPRequestHandler):
             return False
         if not self.server.auth.allows(required):
             self._json(
-                {"error": f"Le profil {required} est requis."},
+                {
+                    "error": (
+                        f"Le profil {required} est requis. "
+                        "Relance Joe avec --profile maintainer ou réduis les "
+                        "permissions du projet."
+                    )
+                },
                 HTTPStatus.FORBIDDEN,
             )
             return False
@@ -389,7 +401,7 @@ def serve(
     validate_bind(host, allow_remote=allow_remote)
     server = JoeServer((host, port), Handler)
     server.auth = LocalAuth.enabled_for(profile)
-    server.manager = RunManager(project)
+    server.manager = RunManager(project, profile=profile)
     server.serve_forever()
 
 

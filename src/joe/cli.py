@@ -47,18 +47,18 @@ def main(argv: list[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     if not arguments and sys.stdin.isatty():
         return _web([])
-    if arguments and arguments[0] == "web":
-        return _web(arguments[1:])
-    if arguments and arguments[0] == "sync":
-        return _sync(arguments[1:])
-    if arguments and arguments[0] == "kill":
-        return _kill(arguments[1:])
-    if arguments and arguments[0] == "stop":
-        return _stop(arguments[1:])
-    if arguments and arguments[0] == "restart":
-        return _restart(arguments[1:])
-    if arguments and arguments[0] == "doctor":
-        return _doctor(arguments[1:])
+    commands = {
+        "auth": _auth,
+        "doctor": _doctor,
+        "kill": _kill,
+        "restart": _restart,
+        "stop": _stop,
+        "sync": _sync,
+        "url": _url,
+        "web": _web,
+    }
+    if arguments and arguments[0] in commands:
+        return commands[arguments[0]](arguments[1:])
     if arguments and arguments[0] in {"chat", "cli"}:
         arguments = arguments[1:]
     args = parser().parse_args(arguments)
@@ -411,6 +411,67 @@ def _pairing_url(url: str) -> str:
     from .auth import load_or_create_token
 
     return f"{url}#token={load_or_create_token()}"
+
+
+def _url(argv: list[str]) -> int:
+    url_parser = argparse.ArgumentParser(
+        prog="joe url",
+        description="Pair a browser with the local Joe server.",
+    )
+    url_parser.add_argument("--host", default="127.0.0.1")
+    url_parser.add_argument("--port", type=int, default=8765)
+    url_parser.add_argument(
+        "--print",
+        action="store_true",
+        help="print the sensitive pairing URL instead of opening it",
+    )
+    args = url_parser.parse_args(argv)
+    pairing_url = _pairing_url(f"http://{args.host}:{args.port}")
+    if args.print:
+        print("Attention : cette URL contient le secret local Joe.", file=sys.stderr)
+        print(pairing_url)
+    else:
+        webbrowser.open(pairing_url)
+        print("Joe : URL d’appairage ouverte dans le navigateur.")
+    return 0
+
+
+def _auth(argv: list[str]) -> int:
+    auth_parser = argparse.ArgumentParser(
+        prog="joe auth",
+        description="Manage the local Joe authentication secret.",
+    )
+    auth_parser.add_argument("action", choices=("rotate",))
+    auth_parser.add_argument("--host", default="127.0.0.1")
+    auth_parser.add_argument("--port", type=int, default=8765)
+    auth_parser.add_argument("--no-browser", action="store_true")
+    args = auth_parser.parse_args(argv)
+    url = f"http://{args.host}:{args.port}"
+    from .auth import auth_token_path
+
+    try:
+        current = auth_token_path().read_text().strip()
+        request = urllib.request.Request(
+            f"{url}/api/auth/rotate",
+            data=b"{}",
+            headers={
+                "Authorization": f"Bearer {current}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=5) as response:
+            payload = json.loads(response.read())
+    except (OSError, ValueError, json.JSONDecodeError, urllib.error.URLError) as exc:
+        print(f"joe auth: rotation impossible : {exc}", file=sys.stderr)
+        return 1
+    if not payload.get("rotated"):
+        print("joe auth: rotation refusée.", file=sys.stderr)
+        return 1
+    print("Joe : secret local renouvelé ; les anciennes sessions sont révoquées.")
+    if not args.no_browser:
+        webbrowser.open(_pairing_url(url))
+    return 0
 
 
 def _doctor(argv: list[str]) -> int:

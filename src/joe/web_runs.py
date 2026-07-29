@@ -62,8 +62,9 @@ class RunManager:
     LIVE_RUN_TTL_SECONDS = 300
     MAX_COMPLETED_RUNS = 50
 
-    def __init__(self, project: Path):
+    def __init__(self, project: Path, *, profile: str = "maintainer"):
         self.project = project.resolve()
+        self.profile = profile
         self.orchestrator = Orchestrator(self.project)
         self.orchestrator.memory.ensure()
         self.conversations = ConversationStore(
@@ -253,6 +254,7 @@ class RunManager:
                         (time.monotonic() - routing_started) * 1000
                     ),
                     "health_check": "health-check" in route.reason,
+                    "profile": self.profile,
                 }
             )
             if quota_admission:
@@ -764,7 +766,7 @@ def _run_summary(run: LiveRun) -> dict[str, Any]:
                 key: event.get(key)
                 for key in (
                     "mode", "intent", "primary", "reviewer", "reason",
-                    "model", "effort", "execution_mode",
+                    "model", "effort", "execution_mode", "profile",
                 )
             }
         elif event_type == "quota_admission":

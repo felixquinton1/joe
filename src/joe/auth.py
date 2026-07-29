@@ -24,6 +24,11 @@ def load_or_create_token(path: Path | None = None) -> str:
     if token:
         target.chmod(0o600)
         return token
+    return rotate_token(target)
+
+
+def rotate_token(path: Path | None = None) -> str:
+    target = path or auth_token_path()
     target.parent.mkdir(parents=True, exist_ok=True)
     token = secrets.token_urlsafe(32)
     temporary = target.with_suffix(".tmp")
@@ -63,6 +68,8 @@ class LocalAuth:
 
 
 def required_role(method: str, path: str) -> str:
+    if path == "/api/auth/rotate":
+        return "maintainer"
     if path == "/api/projects" or path.startswith("/api/projects/"):
         return "maintainer"
     if path.endswith("/reject"):
