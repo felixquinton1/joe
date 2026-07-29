@@ -15,6 +15,8 @@ MODIFY_WORDS = {
 MODIFY_PHRASES = {
     "vas-y",
     "vas y",
+    "fais le nécessaire",
+    "fais le necessaire",
     "fais cela",
     "fais ça",
     "mets en œuvre",

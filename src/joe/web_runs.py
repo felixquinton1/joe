@@ -283,7 +283,10 @@ class RunManager:
                 "Never claim that a file, command, remote state, or URL was checked "
                 "unless the corresponding tool completed successfully. In reports, "
                 "separate material claims as Vérifié, Inféré, or Refusé. A blocked "
-                "sandbox or permission check is Refusé, never Vérifié."
+                "sandbox or permission check is Refusé, never Vérifié.\n"
+                f"The active workspace is {workspace}. Use only instructions and "
+                "skills whose repository scope matches this workspace. Never apply "
+                "a skill belonging to another project."
             )
             response, log = orchestrator.execute(
                 run.request,
