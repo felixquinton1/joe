@@ -327,6 +327,17 @@ def test_claude_json_stream_exposes_file_tool_and_result():
     assert _final_output("claude", f"{tool}\n{result}\n") == "Analyse terminée."
 
 
+def test_final_output_keeps_only_the_structured_result():
+    result = (
+        '{"type":"result","result":"Ce que je vais faire :\\nAnalyser.\\n\\n'
+        'Résultat :\\nLes tests passent."}'
+    )
+
+    assert _final_output("claude", result) == (
+        "## Résultat\n\nLes tests passent."
+    )
+
+
 def test_gemini_stream_fragments_are_reassembled_without_broken_words():
     first = '{"type":"message","role":"assistant","content":"Voici la syn"}'
     second = '{"type":"message","role":"assistant","content":"thèse.\\n\\n## Résultat"}'

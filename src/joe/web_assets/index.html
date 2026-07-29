@@ -67,8 +67,8 @@
       <div class="panel-title"><div><span class="eyebrow">Temps réel</span><h2>Agents</h2></div><span id="run-state" class="run-state idle">Prêt</span></div>
       <div id="agents" class="agent-stack"></div>
       <details class="raw-panel">
-        <summary>Journal de preuves <span>vérifié · inféré · refusé</span></summary>
-        <p>Joe distingue les opérations réussies, les décisions déduites par son routeur et les accès bloqués. Les événements bruts restent disponibles pour diagnostiquer un problème.</p>
+        <summary>Preuves et diagnostic <span>vérifié · inféré · refusé</span></summary>
+        <p>À ouvrir seulement pour contrôler qu’une affirmation repose sur une opération réellement réussie ou diagnostiquer un blocage.</p>
         <div id="evidence-log" class="evidence-log"></div>
         <pre id="raw-log"></pre>
       </details>
@@ -82,6 +82,7 @@
       <label>Racine de travail<input id="project-root" placeholder="/chemin/du/projet"></label>
       <label>Autres racines autorisées<textarea id="project-extra-roots" rows="3" placeholder="Un chemin explicite par ligne"></textarea></label>
       <label class="check-label"><input id="project-remote-access" type="checkbox"> Autoriser les commandes réseau de ce projet (SSH/Jean Zay)</label>
+      <label class="check-label"><input id="project-auto-delivery" type="checkbox"> Commit et push automatiques après une modification validée</label>
       <label>Permission des validations opérationnelles<select id="project-execution-mode"><option value="">Automatique (lecture seule)</option><option value="workspace-write">Écriture dans le projet</option><option value="danger-full-access">Accès complet</option></select></label>
       <label>Contexte transmis à toutes ses conversations<textarea id="project-context" rows="10" placeholder="Objectif, conventions, décisions stables…"></textarea></label>
       <div class="dialog-actions"><button id="cancel-project" type="button">Annuler</button><button id="save-project" value="default">Enregistrer</button></div>

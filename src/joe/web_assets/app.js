@@ -1,4 +1,4 @@
-const APP_VERSION = "0.23.3";
+const APP_VERSION = "0.23.4";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -74,7 +74,7 @@ function renderGitReport(report, runId) {
   card.innerHTML = `
     <header>
       <div><span class="eyebrow">Modifications du dépôt</span><div class="diff-summary"><strong>${report.files.length} fichier${report.files.length > 1 ? "s" : ""}</strong><span class="insertions">+${report.insertions}</span><span class="deletions">−${report.deletions}</span></div></div>
-      <span class="change-status">Conservées</span>
+      <span class="change-status">${report.delivery?.status === "pushed" ? "Commit et push effectués" : report.delivery?.status === "committed" ? "Commit effectué" : "Conservées"}</span>
     </header>`;
   const details = document.createElement("details");
   details.className = "git-details";
@@ -85,6 +85,7 @@ function renderGitReport(report, runId) {
       <span>HEAD <b>${shortCommit(report.head_before)} → ${shortCommit(report.head_after)}</b>${headChanged ? " · modifié" : " · inchangé"}</span>
       <span>origin/dev <b>${shortCommit(report.origin_dev_before)} → ${shortCommit(report.origin_dev_after)}</b>${devChanged ? " · référence actualisée" : " · inchangé"} · ${report.fetch_observed ? "fetch observé" : "aucun fetch observé"}</span>
       <span>${integration}</span>
+      ${report.delivery ? `<span>Livraison <b>${escapeHtml(report.delivery.message || report.delivery.status)}</b>${report.delivery.commit ? ` · ${shortCommit(report.delivery.commit)}` : ""}</span>` : ""}
     </div>`;
   if (report.files.length) {
     const hint = document.createElement("p");
@@ -332,7 +333,8 @@ function renderWorkflowUpdate(event, finalBubble, runId) {
     progress = document.createElement("section");
     progress.className = "workflow-progress";
     progress.dataset.run = runId;
-    progress.innerHTML = `<header><span class="eyebrow">${event.mode === "consensus" ? "Consensus en cours" : "Implémentation contrôlée"}</span><strong>${event.mode === "consensus" ? "Avis et examens croisés" : "Réalisation, revue et correction"}</strong></header><div class="workflow-stages"></div>`;
+    const labels = workflowLabels(event.mode);
+    progress.innerHTML = `<header><span class="eyebrow">${labels.running}</span><strong>${labels.detail}</strong></header><div class="workflow-stages"></div>`;
     message.before(progress);
   }
   const stages = progress.querySelector(".workflow-stages");
@@ -363,6 +365,45 @@ function renderWorkflowUpdate(event, finalBubble, runId) {
   }
 }
 
+function workflowLabels(mode) {
+  if (mode === "consensus") {
+    return {
+      running: "Consensus en cours",
+      complete: "Consensus terminé",
+      detail: "Avis et examens croisés"
+    };
+  }
+  if (mode === "review") {
+    return {
+      running: "Implémentation contrôlée",
+      complete: "Implémentation contrôlée terminée",
+      detail: "Réalisation, revue et correction"
+    };
+  }
+  return {
+    running: "Exécution en cours",
+    complete: "Exécution terminée",
+    detail: "Traitement par un agent"
+  };
+}
+
+function finishWorkflowProgress(runId, mode) {
+  const progress = document.querySelector(
+    `.workflow-progress[data-run="${runId || ""}"]`
+  );
+  const eyebrow = progress?.querySelector("header .eyebrow");
+  if (eyebrow) eyebrow.textContent = workflowLabels(mode).complete;
+}
+
+function failRunningWorkflow() {
+  for (const stage of document.querySelectorAll(".workflow-stage.running")) {
+    stage.classList.remove("running");
+    stage.classList.add("failed");
+    const status = stage.querySelector("summary b");
+    if (status) status.textContent = "Échec";
+  }
+}
+
 function setSummaryPending(finalBubble, pending) {
   finalBubble?.closest(".message")?.classList.toggle(
     "workflow-summary-pending",
@@ -381,9 +422,7 @@ function renderHistoricalRunSummary(message, finalBubble) {
   );
   const eyebrow = progress?.querySelector("header .eyebrow");
   if (eyebrow) {
-    eyebrow.textContent = summary.route?.mode === "consensus"
-      ? "Consensus terminé"
-      : "Implémentation contrôlée terminée";
+    eyebrow.textContent = workflowLabels(summary.route?.mode).complete;
   }
 }
 
@@ -451,7 +490,10 @@ function updateWorkflowFallback(provider, fallback) {
 
 function handleEvent(conversationId, event, finalBubble) {
   const activeRun = state.runs.get(conversationId);
-  if (event.type === "route" && activeRun) activeRun.mode = event.mode;
+  if (event.type === "route" && activeRun) {
+    activeRun.mode = event.mode;
+    activeRun.intent = event.intent;
+  }
   if (event.type === "workflow_update" && activeRun) {
     event = {
       ...(activeRun.workflow.get(event.stage) || {}),
@@ -520,20 +562,24 @@ function handleEvent(conversationId, event, finalBubble) {
     showRoute(event.mode, event.primary, event.reviewer);
     ensureAgent(event.primary);
     if (event.reviewer) ensureAgent(event.reviewer);
-    setSummaryPending(
-      finalBubble,
-      ["consensus", "review"].includes(event.mode)
-    );
-    const quotaSwitch = event.reason?.includes("quota-switch=");
-    const quotaDetail = quotaSwitch ? event.reason.split("; ").at(-1) : "";
-    const execution = [event.model, event.effort ? `effort ${event.effort}` : "", event.execution_mode ? `permission ${event.execution_mode}` : ""].filter(Boolean).join(" · ");
-    finalBubble.textContent = ["consensus", "review"].includes(event.mode)
-      ? "Synthèse finale en attente…"
-      : `Routage local terminé${Number.isFinite(event.routing_ms) ? ` en ${event.routing_ms} ms` : ""}.\n${event.mode.toUpperCase()} · ${capitalize(event.primary)} ${event.health_check ? "effectue un test minimal" : "répond"}${event.reviewer ? ` · revue par ${capitalize(event.reviewer)}` : ""}${execution ? ` · ${execution}` : ""}${quotaSwitch ? `\nBascule automatique : ${quotaDetail}.` : ""}`;
+    setSummaryPending(finalBubble, true);
+    finalBubble.textContent = "Synthèse finale en attente…";
+    if (event.mode === "fast") {
+      const label = event.intent === "modify"
+        ? "Implémentation"
+        : event.intent === "analyze" ? "Analyse" : "Réponse";
+      renderWorkflowUpdate({
+        mode: event.mode,
+        stage: "primary",
+        provider: event.primary,
+        label,
+        status: "running"
+      }, finalBubble, activeRun?.runId || "");
+    }
   } else if (event.type === "provider_start") {
     const agent = ensureAgent(event.provider);
     agent.card.classList.add("active");
-    agent.status.textContent = "Démarrage";
+    agent.status.textContent = "En cours";
     const metadata = [
       event.model || "modèle par défaut",
       `effort ${event.effort || "défaut"}`
@@ -543,12 +589,8 @@ function handleEvent(conversationId, event, finalBubble) {
     row.innerHTML = `<i></i><div><strong>${escapeHtml(capitalize(event.provider))}</strong><span>${escapeHtml(metadata)}</span></div>`;
     agent.activity.appendChild(row);
     updateWorkflowProviderMetadata(event.provider, metadata);
-    if (!structuredWorkflow) {
-      finalBubble.textContent = `${capitalize(event.provider)} · ${metadata}\nDémarrage…`;
-    }
   } else if (event.type === "activity") {
     const agent = ensureAgent(event.provider);
-    agent.status.textContent = event.label;
     const signature = `${event.label}\n${event.detail || ""}`;
     const previous = agent.activity.lastElementChild;
     if (previous?.dataset.signature === signature) return;
@@ -560,7 +602,6 @@ function handleEvent(conversationId, event, finalBubble) {
     agent.activity.appendChild(row);
     while (agent.activity.children.length > 12) agent.activity.firstElementChild.remove();
     scrollIfFollowing(agent.activity, followActivity);
-    if (!structuredWorkflow) finalBubble.textContent = `${capitalize(event.provider)} · ${event.label}`;
   } else if (event.type === "stream") {
     const agent = ensureAgent(event.provider);
     const followOutput = shouldFollow(agent.output);
@@ -572,6 +613,15 @@ function handleEvent(conversationId, event, finalBubble) {
     const agent = ensureAgent(event.provider);
     agent.card.classList.remove("active");
     agent.status.textContent = event.ok ? "Terminé" : `Échec · ${event.error || "inconnu"}`;
+    if (!structuredWorkflow && event.ok) {
+      renderWorkflowUpdate({
+        mode: activeRun?.mode || "fast",
+        stage: "primary",
+        provider: event.provider,
+        label: activeRun?.intent === "modify" ? "Implémentation" : "Traitement",
+        status: "complete"
+      }, finalBubble, activeRun?.runId || "");
+    }
   } else if (event.type === "provider_fallback") {
     const agent = ensureAgent(event.provider);
     agent.card.classList.remove("active");
@@ -595,17 +645,20 @@ function handleEvent(conversationId, event, finalBubble) {
     renderGitReport(event, event.run_id);
   } else if (event.type === "complete") {
     setSummaryPending(finalBubble, false);
+    finishWorkflowProgress(activeRun?.runId, activeRun?.mode);
     renderMarkdown(finalBubble, event.response);
     finishRun(conversationId, true);
     loadConversations(false);
     launchNextQueued(conversationId);
   } else if (event.type === "error") {
     setSummaryPending(finalBubble, false);
+    failRunningWorkflow();
     finalBubble.textContent = `Erreur : ${event.message}`;
     finishRun(conversationId, false);
     loadConversations(false).then(() => selectConversation(conversationId));
   } else if (event.type === "cancelled") {
     setSummaryPending(finalBubble, false);
+    failRunningWorkflow();
     const prompt = state.runs.get(conversationId)?.request || "";
     finishRun(conversationId, false);
     $("request").value = prompt;

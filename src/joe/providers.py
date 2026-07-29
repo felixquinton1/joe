@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import json
 import queue
+import re
 import signal
 import shutil
 import subprocess
@@ -545,7 +546,20 @@ def _final_output(provider: str, stdout: str) -> str:
             elif event.get("type") == "result" and event.get("response"):
                 result_text = str(event["response"])
     separator = "" if provider == "gemini" else "\n"
-    return result_text or separator.join(text_parts)
+    return _final_section(result_text or separator.join(text_parts))
+
+
+def _final_section(text: str) -> str:
+    matches = list(
+        re.finditer(
+            r"(?im)^(?:#{1,3}\s*)?Résultat\s*:\s*",
+            text,
+        )
+    )
+    if not matches:
+        return text
+    content = text[matches[-1].end():].strip()
+    return f"## Résultat\n\n{content}" if content else "## Résultat"
 
 
 def _secret_values(env: dict[str, str]) -> tuple[str, ...]:

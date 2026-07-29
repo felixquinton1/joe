@@ -1,6 +1,6 @@
 import subprocess
 
-from joe.git_review import build_report, reject, snapshot
+from joe.git_review import build_report, deliver, reject, snapshot
 
 
 def git(project, *args):
@@ -134,3 +134,27 @@ def test_fetch_head_change_is_reported_even_when_remote_ref_is_unchanged(tmp_pat
 
     assert report["fetch_observed"] is True
     assert report["origin_dev_before"] == report["origin_dev_after"]
+
+
+def test_deliver_commits_and_pushes_only_attributed_changes(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    tracked = repository(project)
+    remote = tmp_path / "remote.git"
+    git(tmp_path, "init", "--bare", str(remote))
+    git(project, "remote", "add", "origin", str(remote))
+    branch = git(project, "branch", "--show-current").stdout.strip()
+    git(project, "push", "-u", "origin", branch)
+    before = snapshot(project)
+    tracked.write_text("one\ntwo\n")
+    report, _ = build_report(
+        project, before, "run-delivery", concurrent_run=False
+    )
+
+    delivery = deliver(project, report, "test: deliver")
+
+    assert delivery["status"] == "pushed"
+    assert git(project, "diff", "--exit-code").stdout == ""
+    assert git(
+        project, "ls-remote", "origin", f"refs/heads/{branch}"
+    ).stdout.startswith(delivery["commit"])

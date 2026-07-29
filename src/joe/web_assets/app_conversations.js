@@ -359,6 +359,7 @@ window.createJoeConversations = function createJoeConversations({
     $("project-root").value = "";
     $("project-extra-roots").value = "";
     $("project-remote-access").checked = false;
+    $("project-auto-delivery").checked = false;
     $("project-execution-mode").value = "";
     $("project-context").value = "";
     $("project-dialog").showModal();
@@ -373,6 +374,7 @@ window.createJoeConversations = function createJoeConversations({
     $("project-root").value = project.workspace_root || "";
     $("project-extra-roots").value = (project.additional_roots || []).join("\n");
     $("project-remote-access").checked = Boolean(project.remote_access);
+    $("project-auto-delivery").checked = Boolean(project.auto_commit_push);
     $("project-execution-mode").value = project.default_execution_mode || "";
     $("project-context").value = project.context || "";
     $("project-dialog").showModal();
@@ -393,6 +395,7 @@ window.createJoeConversations = function createJoeConversations({
           additional_roots: $("project-extra-roots").value
             .split("\n").map(value => value.trim()).filter(Boolean),
           remote_access: $("project-remote-access").checked,
+          auto_commit_push: $("project-auto-delivery").checked,
           default_execution_mode: $("project-execution-mode").value,
           context: $("project-context").value
         })

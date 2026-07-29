@@ -215,6 +215,87 @@ def test_contract_missing_run_resources_return_404(tmp_path):
         thread.join(timeout=2)
 
 
+def test_contract_cancels_an_active_run(tmp_path):
+    server, thread = start_server(tmp_path)
+    conversation = server.manager.conversations.create()
+    run = LiveRun("active-run", "continue", conversation["id"])
+    server.manager.live[run.run_id] = run
+    try:
+        connection = http.client.HTTPConnection(
+            "127.0.0.1", server.server_port, timeout=5
+        )
+        status, cancelled = json_request(
+            connection, "POST", f"/api/runs/{run.run_id}/cancel", {}
+        )
+
+        assert status == 202
+        assert cancelled == {"cancelled": True}
+        assert run.cancel_event.is_set()
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_contract_exposes_persisted_run_history(tmp_path):
+    server, thread = start_server(tmp_path)
+    run_payload = {
+        "request": "Stabilise le contrat",
+        "route": {"provider": "codex", "mode": "fast"},
+        "final": "Contrat stabilisé",
+        "workflow": [{"provider": "codex", "status": "complete"}],
+    }
+    history_path = server.manager.orchestrator.memory.runs / "contractrun.json"
+    history_path.write_text(json.dumps(run_payload))
+    try:
+        connection = http.client.HTTPConnection(
+            "127.0.0.1", server.server_port, timeout=5
+        )
+        status, history = json_request(connection, "GET", "/api/history")
+        assert status == 200
+        assert history == [
+            {
+                "id": "contractrun",
+                "request": run_payload["request"],
+                "route": run_payload["route"],
+                "final": run_payload["final"],
+            }
+        ]
+
+        status, detail = json_request(
+            connection, "GET", "/api/history/contractrun"
+        )
+        assert status == 200
+        assert detail == run_payload
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_contract_rejects_deleting_an_active_conversation(tmp_path):
+    server, thread = start_server(tmp_path)
+    conversation = server.manager.conversations.create()
+    run = LiveRun("active-run", "continue", conversation["id"])
+    server.manager.live[run.run_id] = run
+    try:
+        connection = http.client.HTTPConnection(
+            "127.0.0.1", server.server_port, timeout=5
+        )
+        status, conflict = json_request(
+            connection,
+            "DELETE",
+            f"/api/conversations/{conversation['id']}",
+        )
+
+        assert status == 409
+        assert conflict == {
+            "error": "Interromps la tâche avant de supprimer la conversation."
+        }
+        assert server.manager.conversations.get(conversation["id"]) is not None
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
 def test_contract_returns_bounded_json_errors(tmp_path):
     server, thread = start_server(tmp_path)
     try:

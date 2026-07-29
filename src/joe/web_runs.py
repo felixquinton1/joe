@@ -299,6 +299,7 @@ class RunManager:
                 on_event=lambda event: self._emit_run_event(run, event),
             )
             git_report = self._capture_git_report(run)
+            self._deliver_if_enabled(run, git_report)
             self.conversations.append_message(
                 run.conversation_id,
                 "assistant",
@@ -408,6 +409,41 @@ class RunManager:
             return report
         except (OSError, subprocess.SubprocessError):
             return {"available": False}
+
+    def _deliver_if_enabled(
+        self,
+        run: LiveRun,
+        report: dict[str, Any],
+    ) -> None:
+        conversation = self.conversations.get(run.conversation_id) or {}
+        project = self.conversations.get_project(
+            str(conversation.get("project_id", "main"))
+        ) or {}
+        if not project.get("auto_commit_push"):
+            return
+        workspace = run.workspace or self.project
+        delivery = _web_facade().deliver(
+            workspace,
+            report,
+            "chore: apply validated Joe changes",
+        )
+        report["delivery"] = delivery
+        if delivery.get("status") not in {"pushed", "committed"}:
+            return
+        report["rejectable"] = False
+        report["reject_reason"] = "Modifications déjà commitées automatiquement."
+        with self.lock:
+            rejection = self.git_rejections.pop(run.run_id, None)
+        if not rejection:
+            return
+        for path in (
+            rejection.get("patch"),
+            self.orchestrator.memory.runs / f"{run.run_id}.reject.json",
+        ):
+            try:
+                Path(path).unlink(missing_ok=True)
+            except (OSError, TypeError):
+                pass
 
     def cancel(self, run_id: str) -> bool:
         run = self.get_run(run_id)

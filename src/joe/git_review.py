@@ -237,6 +237,43 @@ def reject(
     )
 
 
+def deliver(
+    project: Path,
+    report: dict[str, Any],
+    message: str,
+) -> dict[str, Any]:
+    if not report.get("rejectable"):
+        return {
+            "status": "skipped",
+            "message": "Livraison ignorée : attribution Git insuffisante.",
+        }
+    files = [str(item["path"]) for item in report.get("files", [])]
+    if not files:
+        return {"status": "skipped", "message": "Aucune modification à livrer."}
+    branch = str(report.get("branch") or "")
+    if not branch:
+        return {"status": "failed", "message": "Branche Git introuvable."}
+    staged = _git(project, "add", "--", *files)
+    if staged.returncode:
+        return {"status": "failed", "message": staged.stderr.strip()}
+    committed = _git(project, "commit", "-m", message)
+    if committed.returncode:
+        _git(project, "reset", "--mixed", "HEAD", "--", *files)
+        return {"status": "failed", "message": committed.stderr.strip()}
+    commit = _value(project, "rev-parse", "HEAD")
+    pushed = _git(project, "push", "origin", branch)
+    return {
+        "status": "pushed" if pushed.returncode == 0 else "committed",
+        "commit": commit,
+        "branch": branch,
+        "message": (
+            "Commit et push effectués."
+            if pushed.returncode == 0
+            else pushed.stderr.strip() or "Commit créé, push refusé."
+        ),
+    }
+
+
 def _git(project: Path, *args: str) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(
