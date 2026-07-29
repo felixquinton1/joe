@@ -240,7 +240,18 @@ button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-v
 .delete-button:hover { color: var(--danger); background: #f8e5e1; }
 .drag-handle { cursor: grab; }
 .drag-handle:active { cursor: grabbing; }
-.project-group.collapsed .conversation-item { display: none; }
+.project-conversations {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition: grid-template-rows .18s ease, opacity .14s ease;
+}
+.project-conversations-inner { min-height: 0; overflow: hidden; }
+.project-group.collapsed .project-conversations {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
 
 /* Conversation workspace */
 .workspace {

@@ -17,7 +17,8 @@ DEFAULT_SETTINGS = {
 }
 DEFAULT_PREFERENCES = {"agent": "", "mode": ""}
 DEFAULT_PROJECT_ID = "main"
-CURRENT_SCHEMA_VERSION = 5
+FREE_PROJECT_ID = "free"
+CURRENT_SCHEMA_VERSION = 6
 
 
 class ConversationStore:
@@ -51,9 +52,18 @@ class ConversationStore:
                 "version": CURRENT_SCHEMA_VERSION,
                 "projects": [
                     {
+                        "id": FREE_PROJECT_ID,
+                        "name": "Conversation libre",
+                        "context": "",
+                        "collapsed": False,
+                        "position": 0,
+                        "created_at": time.time(),
+                    },
+                    {
                         "id": DEFAULT_PROJECT_ID,
                         "name": "Projet principal",
                         "context": "",
+                        "position": 1,
                         "created_at": time.time(),
                     }
                 ],
@@ -188,7 +198,7 @@ class ConversationStore:
                 "id": uuid.uuid4().hex,
                 "title": "Nouvelle conversation",
                 "pinned": False,
-                "project_id": project_id or DEFAULT_PROJECT_ID,
+                "project_id": project_id or FREE_PROJECT_ID,
                 "created_at": now,
                 "updated_at": now,
                 "last_call_at": now,
@@ -465,6 +475,24 @@ class ConversationStore:
                 }
             ],
         )
+        if not self._find_project(payload, FREE_PROJECT_ID):
+            for project in payload["projects"]:
+                project["position"] = int(project.get("position", 0)) + 1
+            payload["projects"].append(
+                {
+                    "id": FREE_PROJECT_ID,
+                    "name": "Conversation libre",
+                    "context": "",
+                    "workspace_root": "",
+                    "additional_roots": [],
+                    "remote_access": False,
+                    "auto_commit_push": False,
+                    "default_execution_mode": "",
+                    "collapsed": False,
+                    "position": 0,
+                    "created_at": time.time(),
+                }
+            )
         preferences = payload.setdefault("preferences", dict(DEFAULT_PREFERENCES))
         preferences["agent"] = (
             preferences.get("agent", "")

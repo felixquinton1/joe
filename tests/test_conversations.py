@@ -50,6 +50,18 @@ def test_conversations_default_to_pinned_then_most_recent(tmp_path):
     assert listed[0]["last_call_at"] == older["created_at"]
 
 
+def test_unscoped_conversations_use_the_free_project(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+
+    conversation = store.create()
+
+    assert conversation["project_id"] == "free"
+    assert store.get_project("free")["name"] == "Conversation libre"
+
+
 def test_global_preferences_apply_only_to_new_conversations(tmp_path):
     root = tmp_path / ".agentflow"
     runs = root / "runs"
@@ -99,8 +111,12 @@ def test_manual_positions_and_project_collapse_persist(tmp_path):
     store.update(first["id"], {"position": 1})
     store.update(second["id"], {"position": 0})
 
-    assert store.list_projects()[0]["id"] == second_project["id"]
-    assert store.list_projects()[0]["collapsed"] is True
+    custom_projects = [
+        project for project in store.list_projects()
+        if project["id"] != "free"
+    ]
+    assert custom_projects[0]["id"] == second_project["id"]
+    assert custom_projects[0]["collapsed"] is True
     within_project = [
         item for item in store.list()
         if item["project_id"] == first_project["id"]

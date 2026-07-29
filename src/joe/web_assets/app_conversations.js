@@ -51,7 +51,7 @@ window.createJoeConversations = function createJoeConversations({
       const collapse = smallButton(
         project.collapsed ? "▸" : "▾",
         project.collapsed ? "Déplier les conversations" : "Replier les conversations",
-        () => toggleProjectCollapsed(project)
+        () => toggleProjectCollapsed(project, group, collapse)
       );
       const editProject = smallButton("⚙", "Modifier le contexte du sous-projet", () => openProject(project));
       const addConversation = smallButton("＋", "Nouvelle conversation dans ce sous-projet", () => createConversation(true, project.id));
@@ -63,6 +63,10 @@ window.createJoeConversations = function createJoeConversations({
       const conversations = state.conversations
         .filter(item => item.project_id === project.id)
         .sort((left, right) => Number(right.pinned) - Number(left.pinned));
+      const conversationList = document.createElement("div");
+      conversationList.className = "project-conversations";
+      const conversationListInner = document.createElement("div");
+      conversationListInner.className = "project-conversations-inner";
       for (const conversation of conversations) {
         const row = document.createElement("div");
         row.className = `conversation-item ${conversation.id === state.activeConversationId ? "active" : ""}`;
@@ -96,8 +100,10 @@ window.createJoeConversations = function createJoeConversations({
         remove.textContent = "×";
         remove.onclick = () => confirmDeleteConversation(conversation);
         row.append(drag, button, rename, pin, remove);
-        group.appendChild(row);
+        conversationListInner.appendChild(row);
       }
+      conversationList.appendChild(conversationListInner);
+      group.appendChild(conversationList);
       target.appendChild(group);
     }
   }
@@ -179,9 +185,13 @@ window.createJoeConversations = function createJoeConversations({
     ));
   }
 
-  async function toggleProjectCollapsed(project) {
+  async function toggleProjectCollapsed(project, group, button) {
     project.collapsed = !project.collapsed;
-    renderConversations();
+    group.classList.toggle("collapsed", project.collapsed);
+    button.textContent = project.collapsed ? "▸" : "▾";
+    button.title = project.collapsed
+      ? "Déplier les conversations"
+      : "Replier les conversations";
     await patchProject(project.id, { collapsed: project.collapsed });
   }
 
@@ -226,7 +236,7 @@ window.createJoeConversations = function createJoeConversations({
     closeMobilePanels();
     const conversation = await fetcher(`/api/conversations/${conversationId}`).then(response => response.json());
     state.activeConversationId = conversationId;
-    state.activeProjectId = conversation.project_id || "main";
+    state.activeProjectId = conversation.project_id || "free";
     renderConversations();
     clearConversation();
     $("conversation-title").textContent = conversation.title;
