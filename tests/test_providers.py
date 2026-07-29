@@ -12,6 +12,7 @@ from joe.providers import (
     _redact_values,
     _secret_values,
     _terminal_gemini_quota,
+    _process_group_options,
     classify_error,
 )
 
@@ -112,6 +113,13 @@ def test_provider_can_be_cancelled_without_waiting_for_timeout(tmp_path):
     assert time.monotonic() - started < 3
 
 
+def test_provider_process_groups_are_portable():
+    assert _process_group_options("posix") == {"start_new_session": True}
+    windows = _process_group_options("nt")
+    assert "creationflags" in windows
+    assert "start_new_session" not in windows
+
+
 def test_commands_match_inspected_noninteractive_interfaces():
     cwd = Path("/tmp/project")
     codex = Provider("codex", "codex").command("p", cwd, Intent.ANALYZE)
@@ -193,10 +201,20 @@ def test_generic_write_modes_are_translated_for_non_codex_clis():
         "p", cwd, Intent.ANALYZE, execution_mode="workspace-write"
     )
 
-    assert claude[claude.index("--permission-mode") + 1] == "dontAsk"
+    assert claude[claude.index("--permission-mode") + 1] == "bypassPermissions"
+    assert "--allow-dangerously-skip-permissions" in claude
     assert gemini[gemini.index("--approval-mode") + 1] == "auto_edit"
     assert "--allow-tool=write" in copilot
     assert "--allow-tool=shell" in copilot
+
+
+def test_full_access_uses_each_provider_explicit_full_mode():
+    cwd = Path("/tmp/project")
+    gemini = Provider("gemini", "gemini").command(
+        "p", cwd, Intent.MODIFY, execution_mode="danger-full-access"
+    )
+
+    assert gemini[gemini.index("--approval-mode") + 1] == "yolo"
 
 
 def test_additional_project_roots_are_forwarded_to_each_cli():

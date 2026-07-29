@@ -95,6 +95,14 @@
       <div class="dialog-actions"><button value="cancel">Annuler</button><button id="confirm-delete-conversation" class="danger-button" value="default">Supprimer</button></div>
     </form>
   </dialog>
+  <dialog id="permission-dialog" class="project-dialog confirm-dialog">
+    <form method="dialog">
+      <span class="eyebrow">Autorisation ponctuelle</span>
+      <h2>Autoriser l’accès complet ?</h2>
+      <p>Cette tâche pourra modifier le projet, lancer ses tests et utiliser le réseau. L’autorisation vaut uniquement pour ce run.</p>
+      <div class="dialog-actions"><button value="cancel">Annuler</button><button id="confirm-full-access" value="default">Autoriser une fois</button></div>
+    </form>
+  </dialog>
   <script src="/markdown.js"></script>
   <script src="/app_usage.js"></script>
   <script src="/app_conversations.js"></script>

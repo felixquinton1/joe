@@ -23,6 +23,12 @@ def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="joe",
         description="Route natural-language project work across local AI CLIs.",
+        epilog=(
+            "Interfaces : `joe <demande>` pour une commande unique, "
+            "`joe cli` ou `joe chat` pour le terminal interactif, "
+            "`joe web` pour l’interface locale. Commandes utiles : "
+            "`doctor`, `sync`, `restart` et `kill`."
+        ),
     )
     result.add_argument("request", nargs="*", help="natural-language request")
     result.add_argument("-C", "--project", type=Path, default=Path.cwd())
@@ -51,7 +57,7 @@ def main(argv: list[str] | None = None) -> int:
         return _restart(arguments[1:])
     if arguments and arguments[0] == "doctor":
         return _doctor(arguments[1:])
-    if arguments and arguments[0] == "chat":
+    if arguments and arguments[0] in {"chat", "cli"}:
         arguments = arguments[1:]
     args = parser().parse_args(arguments)
     project = args.project.resolve()

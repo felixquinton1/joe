@@ -11,8 +11,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-import pexpect
-
 
 def claude_status(
     path: Path | None,
@@ -81,7 +79,7 @@ def refresh_claude_status(
     parse_screen: Callable[..., dict[str, Any] | None],
     fallback_reader: Callable[[], dict[str, Any]],
     subprocess_module=subprocess,
-    pexpect_module=pexpect,
+    pexpect_module=None,
     os_module=os,
     time_module=time,
 ) -> dict[str, Any]:
@@ -90,6 +88,16 @@ def refresh_claude_status(
         return tmux_status
     output = ""
     child = None
+    if pexpect_module is None:
+        try:
+            import pexpect as pexpect_module
+        except ImportError:
+            fallback = fallback_reader()
+            fallback["message"] = (
+                "Actualisation interactive Claude indisponible sur cette plateforme"
+            )
+            fallback["stale"] = True
+            return fallback
     try:
         env = os_module.environ.copy()
         env["DISABLE_AUTOUPDATER"] = "1"

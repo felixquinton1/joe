@@ -11,8 +11,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import pexpect
-
 from . import __version__
 from .models import Mode, Route
 from .provider_health import apply_cooldowns
@@ -477,7 +475,6 @@ def _refresh_claude_status(timeout: int = 18) -> dict[str, Any]:
         parse_screen=_parse_claude_usage_screen,
         fallback_reader=_claude_status,
         subprocess_module=subprocess,
-        pexpect_module=pexpect,
         os_module=os,
         time_module=time,
     )

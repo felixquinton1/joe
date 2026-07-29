@@ -166,12 +166,33 @@ class Handler(BaseHTTPRequestHandler):
             model = str(payload.get("model", "")).strip() or None
             effort = str(payload.get("effort", "")).strip() or None
             execution_mode = str(payload.get("execution_mode", "")).strip() or None
+            full_access_approved = payload.get("full_access_approved") is True
             if agent is not None and agent not in set(get_provider_names()):
                 raise ValueError("invalid agent")
             if mode not in {None, "fast", "review", "consensus"}:
                 raise ValueError("invalid mode")
         except ValueError as exc:
             return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+        if (
+            self.server.manager.requires_full_access_approval(
+                request,
+                conversation_id,
+                agent,
+                mode,
+                execution_mode,
+            )
+            and not full_access_approved
+        ):
+            return self._json(
+                {
+                    "error": (
+                        "Cette tâche demande un accès complet au projet et aux "
+                        "commandes. Confirme l’autorisation pour ce run."
+                    ),
+                    "approval": "full-access",
+                },
+                HTTPStatus.PRECONDITION_REQUIRED,
+            )
         try:
             run = self.server.manager.start(
                 request,

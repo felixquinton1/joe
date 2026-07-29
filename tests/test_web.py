@@ -517,6 +517,31 @@ def test_project_write_default_applies_to_modify_routes():
     ) == "read-only"
 
 
+def test_full_access_approval_is_required_before_start(tmp_path, monkeypatch):
+    monkeypatch.setattr(RunManager, "_recover_pending", lambda self: None)
+    manager = RunManager(tmp_path)
+    manager.conversations.update_project(
+        "main",
+        {"default_execution_mode": "danger-full-access"},
+    )
+    conversation = manager.conversations.create("main")
+
+    assert manager.requires_full_access_approval(
+        "Implémente et teste cette fonctionnalité",
+        conversation["id"],
+        "claude",
+        "fast",
+        None,
+    )
+    assert not manager.requires_full_access_approval(
+        "Explique cette fonctionnalité",
+        conversation["id"],
+        "claude",
+        "fast",
+        None,
+    )
+
+
 def test_consensus_remains_read_only_despite_project_default():
     route = Route(Intent.MODIFY, Mode.CONSENSUS, "codex")
 

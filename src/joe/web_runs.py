@@ -154,6 +154,32 @@ class RunManager:
             raise
         return run
 
+    def requires_full_access_approval(
+        self,
+        request: str,
+        conversation_id: str,
+        agent: str | None,
+        mode: str | None,
+        execution_mode: str | None,
+    ) -> bool:
+        _, _, _, project_execution_mode = self._project_scope(conversation_id)
+        forced_mode = Mode(mode) if mode else None
+        route = self.orchestrator.router.route(
+            request,
+            forced_agent=agent,
+            forced_mode=forced_mode,
+            previous_provider=self.conversations.previous_provider(
+                conversation_id
+            ),
+        )
+        resolved = _resolve_execution_mode(
+            execution_mode,
+            project_execution_mode,
+            route,
+            request,
+        )
+        return resolved == "danger-full-access"
+
     def _execute(
         self,
         run: LiveRun,

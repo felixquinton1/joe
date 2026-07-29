@@ -5,11 +5,29 @@ GitHub Copilot CLI. It routes a natural-language request without requiring
 workflow verbs, carries compact project context between providers, and stores
 full run logs outside the active prompt.
 
+## Install
+
+Joe supports Python 3.10+ on Linux, macOS, and Windows. The repository package
+can be installed in an isolated environment with:
+
+```bash
+pipx install git+https://github.com/felixquinton1/joe.git
+joe doctor
+```
+
+The provider CLIs remain separate prerequisites and must already be
+authenticated. See the [short user guide](docs/user-guide.md) for installation,
+VS Code/Remote-SSH, safe defaults, zoom, and troubleshooting.
+
+Full-access runs require a one-time confirmation in Joe Web or VS Code before
+the provider process starts.
+
 ## Usage
 
 ```bash
 joe "Ajoute une option pour désactiver la loss Gamma"
 joe
+joe cli
 joe chat
 joe --agent claude "Qu'en pense l'autre ?"
 joe --mode review "Vérifie puis corrige ce changement"
@@ -21,10 +39,10 @@ Run `joe --help` for all options. Joe creates `.agentflow/` in the target
 project for compatibility with the original memory layout. The product and
 executable are named Joe.
 
-## VS Code extension preview
+## VS Code extension
 
-The read-only preview lives in `vscode-extension/`. It runs in the workspace
-extension host, including Remote-SSH, and connects to Joe on the same host.
+The extension lives in `vscode-extension/`. It runs in the workspace extension
+host, including Remote-SSH, and connects to Joe on the same host.
 
 ```bash
 cd vscode-extension
@@ -34,10 +52,11 @@ npm run package
 ```
 
 Install the generated `.vsix` in the VS Code window connected to the target
-host. Start Joe normally, then open the Joe activity-bar view. This preview
-shows server identity and conversations; sending and cancelling runs remain
-intentionally disabled. Its restart button is limited to tmux-managed Joe
-servers and refuses to stop an active run.
+host. Start Joe normally, then open the Joe activity-bar view. The extension
+selects conversations, sends safe read-only requests by default, streams and
+cancels runs, and resumes a tracked run after reload. Workspace writes and
+tmux maintenance actions require separate opt-in settings. VS Code’s native
+zoom applies to the complete Joe view.
 
 ## Safety model
 

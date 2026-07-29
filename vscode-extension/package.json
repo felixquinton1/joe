@@ -2,7 +2,7 @@
   "name": "joe-control-room",
   "displayName": "Joe",
   "description": "VS Code control room for conversations and runs on a local Joe server.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "felixquinton",
   "license": "UNLICENSED",
   "repository": {
@@ -26,7 +26,8 @@
     "onCommand:joe.createConversation",
     "onCommand:joe.sendPrompt",
     "onCommand:joe.cancelRun",
-    "onCommand:joe.restart"
+    "onCommand:joe.restart",
+    "onCommand:joe.openGuide"
   ],
   "contributes": {
     "commands": [
@@ -53,6 +54,23 @@
         "command": "joe.cancelRun",
         "title": "Joe: Annuler la requête",
         "icon": "$(debug-stop)"
+      },
+      {
+        "command": "joe.openGuide",
+        "title": "Joe: Ouvrir le guide",
+        "icon": "$(question)"
+      },
+      {
+        "command": "joe.zoomIn",
+        "title": "Joe: Zoomer"
+      },
+      {
+        "command": "joe.zoomOut",
+        "title": "Joe: Dézoomer"
+      },
+      {
+        "command": "joe.zoomReset",
+        "title": "Joe: Réinitialiser le zoom"
       }
     ],
     "configuration": {
@@ -62,6 +80,16 @@
           "type": "string",
           "default": "http://127.0.0.1:8765",
           "description": "Adresse locale du serveur Joe sur l’hôte du workspace."
+        },
+        "joe.allowWorkspaceWrites": {
+          "type": "boolean",
+          "default": false,
+          "description": "Autorise les demandes VS Code à conserver le mode d’écriture de la conversation. Désactivé, l’extension impose le mode lecture seule."
+        },
+        "joe.enableMaintenanceActions": {
+          "type": "boolean",
+          "default": false,
+          "description": "Affiche et autorise les actions de maintenance sensibles, comme le redémarrage du serveur."
         }
       }
     },
@@ -91,7 +119,7 @@
         },
         {
           "command": "joe.restart",
-          "when": "view == joe.overview",
+          "when": "view == joe.overview && config.joe.enableMaintenanceActions",
           "group": "navigation@4"
         },
         {
@@ -108,6 +136,11 @@
           "command": "joe.cancelRun",
           "when": "view == joe.overview",
           "group": "navigation@3"
+        },
+        {
+          "command": "joe.openGuide",
+          "when": "view == joe.overview",
+          "group": "navigation@5"
         }
       ]
     }

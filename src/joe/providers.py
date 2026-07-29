@@ -95,7 +95,7 @@ class Provider:
             permission = {
                 "read": "plan",
                 "write": "acceptEdits",
-                "full": "dontAsk",
+                "full": "bypassPermissions",
                 "restricted": "dontAsk",
             }[access]
             command = [
@@ -103,6 +103,8 @@ class Provider:
                 "--verbose",
                 "--permission-mode", permission, "--no-session-persistence",
             ]
+            if access == "full":
+                command.append("--allow-dangerously-skip-permissions")
             for root in self.additional_roots:
                 command.extend(["--add-dir", str(root)])
             if effort:
@@ -111,9 +113,12 @@ class Provider:
                 command.extend(["--model", model])
             return [*command, prompt]
         if self.name == "gemini":
-            approval = (
-                "auto_edit" if access in {"write", "full"} else "plan"
-            )
+            approval = {
+                "read": "plan",
+                "write": "auto_edit",
+                "full": "yolo",
+                "restricted": "plan",
+            }[access]
             command = [
                 self.executable, "--output-format", "stream-json",
                 "--approval-mode", approval, "--skip-trust",
@@ -169,6 +174,7 @@ class Provider:
         secret_values = _secret_values(env)
         start = time.monotonic()
         try:
+            group_options = _process_group_options()
             process = subprocess.Popen(
                 command,
                 cwd=cwd,
@@ -177,7 +183,7 @@ class Provider:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 bufsize=1,
-                start_new_session=True,
+                **group_options,
             )
             stdout, stderr = _collect_streams(
                 process,
@@ -389,8 +395,36 @@ def _collect_streams(
     return "".join(output["stdout"]), "".join(output["stderr"])
 
 
-def _stop_process(process: subprocess.Popen[str], force: bool = False) -> None:
+def _process_group_options(
+    platform_name: str | None = None,
+) -> dict[str, int | bool]:
+    platform = os.name if platform_name is None else platform_name
+    if platform == "nt":
+        return {
+            "creationflags": getattr(
+                subprocess,
+                "CREATE_NEW_PROCESS_GROUP",
+                0,
+            )
+        }
+    return {"start_new_session": True}
+
+
+def _stop_process(
+    process: subprocess.Popen[str],
+    force: bool = False,
+    platform_name: str | None = None,
+) -> None:
     if process.poll() is not None:
+        return
+    platform = os.name if platform_name is None else platform_name
+    if platform == "nt":
+        try:
+            process.kill() if force else process.terminate()
+            process.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
         return
     try:
         os.killpg(process.pid, signal.SIGKILL if force else signal.SIGTERM)

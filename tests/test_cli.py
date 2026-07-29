@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from joe.cli import _kill, _restart
+from joe.cli import _kill, _restart, parser
 
 
 def test_kill_stops_only_numbered_joe_tmux_sessions(monkeypatch, capsys):
@@ -90,3 +90,11 @@ def test_forced_restart_recovers_an_unreachable_server(
 
     assert _restart(["-C", str(tmp_path), "--force"]) == 0
     assert calls[0] == ["tmux", "kill-session", "-t", "joe-8765"]
+
+
+def test_help_explains_the_full_cli_and_web_interfaces():
+    help_text = parser().format_help()
+
+    assert "joe cli" in help_text
+    assert "joe web" in help_text
+    assert "doctor" in help_text

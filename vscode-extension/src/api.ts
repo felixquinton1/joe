@@ -16,7 +16,12 @@ export interface JoeConversation {
 }
 
 export interface JoeConversationDetail extends JoeConversation {
-  messages?: Array<{ role: string; content: string }>;
+  messages?: Array<{
+    role: string;
+    content: string;
+    run_id?: string;
+    provider?: string;
+  }>;
   [key: string]: unknown;
 }
 
@@ -75,11 +80,27 @@ export class JoeClient {
     return this.request<JoeConversation>("POST", "/api/conversations", {});
   }
 
-  async startRun(conversationId: string, request: string): Promise<string> {
-    const result = await this.request<{ run_id: string }>("POST", "/api/runs", {
+  async startRun(
+    conversationId: string,
+    request: string,
+    executionMode?: "read-only",
+    fullAccessApproved = false
+  ): Promise<string> {
+    const payload: Record<string, string | boolean> = {
       conversation_id: conversationId,
       request,
-    });
+    };
+    if (executionMode) {
+      payload.execution_mode = executionMode;
+    }
+    if (fullAccessApproved) {
+      payload.full_access_approved = true;
+    }
+    const result = await this.request<{ run_id: string }>(
+      "POST",
+      "/api/runs",
+      payload
+    );
     return result.run_id;
   }
 

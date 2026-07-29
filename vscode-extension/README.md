@@ -24,6 +24,25 @@ et son éventuel port forwarding. Sans tmux, Joe demande un redémarrage manuel.
 Une seule demande peut être suivie à la fois par fenêtre VS Code. Joe refuse
 également côté serveur les doubles soumissions sur une même conversation.
 
+Après un rechargement de fenêtre ou une reconnexion Remote-SSH, l’extension
+retrouve le run mémorisé, réaffiche le texte déjà reçu et reprend le SSE après
+le dernier événement. Si le flux a expiré côté serveur, elle recherche la
+réponse finale dans l’historique de la conversation.
+
+## Sécurité et aide
+
+Les demandes partent en lecture seule par défaut. Le réglage
+`Joe: Allow Workspace Writes` doit être activé explicitement pour conserver les
+permissions d’écriture de la conversation. Le réglage
+`Joe: Enable Maintenance Actions` révèle le redémarrage tmux. Ces options
+réduisent les actions accidentelles, mais seule une future autorisation côté
+serveur pourra constituer une frontière de sécurité multi-utilisateur.
+
+Le survol des éléments fournit des explications courtes. La commande
+`Joe: Ouvrir le guide` ouvre ce document. Le zoom natif de VS Code fonctionne
+avec `Ctrl/Cmd + +`, `Ctrl/Cmd + -` et `Ctrl/Cmd + 0`, ou avec les commandes
+Joe équivalentes dans la palette.
+
 ## Développement
 
 ```bash

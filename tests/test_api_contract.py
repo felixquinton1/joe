@@ -2,6 +2,7 @@ import http.client
 import json
 import threading
 import time
+from types import SimpleNamespace
 
 from joe import __version__
 from joe.http_utils import MAX_JSON_BODY_BYTES
@@ -63,6 +64,58 @@ def test_contract_read_only_discovery_endpoints(tmp_path):
             status, payload = json_request(connection, "GET", path)
             assert status == 200
             assert payload is not None
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_contract_requires_confirmation_for_full_access(tmp_path):
+    server, thread = start_server(tmp_path)
+    try:
+        server.manager.conversations.update_project(
+            "main",
+            {"default_execution_mode": "danger-full-access"},
+        )
+        conversation = server.manager.conversations.create("main")
+        connection = http.client.HTTPConnection(
+            "127.0.0.1", server.server_port, timeout=5
+        )
+
+        status, payload = json_request(
+            connection,
+            "POST",
+            "/api/runs",
+            {
+                "conversation_id": conversation["id"],
+                "request": "Implémente et teste cette fonctionnalité",
+                "agent": "claude",
+                "mode": "fast",
+            },
+        )
+
+        assert status == 428
+        assert payload["approval"] == "full-access"
+        assert not server.manager.conversations.get(
+            conversation["id"]
+        )["messages"]
+
+        server.manager.start = lambda *args, **kwargs: SimpleNamespace(
+            run_id="approved"
+        )
+        status, payload = json_request(
+            connection,
+            "POST",
+            "/api/runs",
+            {
+                "conversation_id": conversation["id"],
+                "request": "Implémente et teste cette fonctionnalité",
+                "agent": "claude",
+                "mode": "fast",
+                "full_access_approved": True,
+            },
+        )
+        assert status == 202
+        assert payload["run_id"] == "approved"
     finally:
         server.shutdown()
         thread.join(timeout=2)

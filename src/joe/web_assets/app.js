@@ -1,4 +1,4 @@
-const APP_VERSION = "0.21.20";
+const APP_VERSION = "0.22.0";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -697,6 +697,30 @@ async function startRun(
     enqueueRequest(conversationId, request, settings);
     return;
   }
+  const payload = {
+    request,
+    conversation_id: conversationId,
+    ...settings
+  };
+  let response = await fetch("/api/runs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (response.status === 428) {
+    const approved = await confirmFullAccess();
+    if (!approved) return;
+    response = await fetch("/api/runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, full_access_approved: true })
+    });
+  }
+  if (!response.ok) {
+    const error = await response.json();
+    window.alert(error.error || response.statusText);
+    return;
+  }
   const visible = conversationId === state.activeConversationId;
   if (visible) {
     state.agents.clear();
@@ -712,26 +736,21 @@ async function startRun(
   const finalBubble = visible
     ? addMessage("Joe · synthèse", "Routage local en cours…", "assistant")
     : null;
-  const response = await fetch("/api/runs", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      request,
-      conversation_id: conversationId,
-      ...settings
-    })
-  });
-  if (!response.ok) {
-    const error = await response.json();
-    if (finalBubble) {
-      finalBubble.textContent = `Erreur : ${error.error || response.statusText}`;
-      finishRun(conversationId, false);
-    }
-    return;
-  }
   const { run_id } = await response.json();
   attachRun(conversationId, run_id, request, finalBubble);
   loadConversations(false);
+}
+
+function confirmFullAccess() {
+  const dialog = $("permission-dialog");
+  return new Promise(resolve => {
+    const onClose = () => {
+      dialog.removeEventListener("close", onClose);
+      resolve(dialog.returnValue === "default");
+    };
+    dialog.addEventListener("close", onClose);
+    dialog.showModal();
+  });
 }
 
 function attachRun(conversationId, runId, request, finalBubble = null) {

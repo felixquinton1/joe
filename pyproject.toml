@@ -4,10 +4,30 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "joe-orchestrator"
-version = "0.21.20"
+version = "0.22.0"
 description = "Lightweight local multi-AI CLI orchestrator"
+readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["pexpect>=4.8"]
+authors = [{name = "Felix Quinton"}]
+keywords = ["ai", "cli", "codex", "claude", "gemini", "orchestrator"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development",
+]
+dependencies = ["pexpect>=4.8; sys_platform != 'win32'"]
+
+[project.urls]
+Homepage = "https://github.com/felixquinton1/joe"
+Documentation = "https://github.com/felixquinton1/joe/blob/main/docs/user-guide.md"
+Repository = "https://github.com/felixquinton1/joe"
+Issues = "https://github.com/felixquinton1/joe/issues"
 
 [project.scripts]
 joe = "joe.cli:main"

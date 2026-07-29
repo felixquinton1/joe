@@ -124,7 +124,7 @@ test("rejects an incompatible API major", async t => {
   );
 });
 
-test("creates a conversation, starts a run, reads SSE and cancels", async t => {
+test("creates a conversation, starts a safe run, reads SSE and cancels", async t => {
   const fixtureServer = await fixture({
     version: "0.21.19",
     api_version: "1.0",
@@ -139,10 +139,14 @@ test("creates a conversation, starts a run, reads SSE and cancels", async t => {
 
   assert.equal((await client.conversation("one")).messages[0].content, "Bonjour");
   assert.equal((await client.createConversation()).id, "new");
-  assert.equal(await client.startRun("one", "Réponds"), "run-one");
+  assert.equal(
+    await client.startRun("one", "Réponds", "read-only"),
+    "run-one"
+  );
   assert.deepEqual(startedPayload(), {
     conversation_id: "one",
     request: "Réponds",
+    execution_mode: "read-only",
   });
   const events = [];
   for await (const event of client.events("run-one")) {
@@ -150,6 +154,26 @@ test("creates a conversation, starts a run, reads SSE and cancels", async t => {
   }
   assert.deepEqual(events.map(event => event.type), ["stream", "complete"]);
   assert.equal(await client.cancelRun("run-one"), true);
+});
+
+test("marks a full-access retry as explicitly approved", async t => {
+  const fixtureServer = await fixture({
+    version: "0.22.0",
+    api_version: "1.0",
+    project: "/tmp/project",
+    providers: ["claude"],
+    modes: ["fast"],
+  });
+  const { server, startedPayload } = fixtureServer;
+  t.after(() => server.close());
+  const address = server.address();
+  const client = new JoeClient(`http://127.0.0.1:${address.port}`);
+
+  assert.equal(
+    await client.startRun("one", "Teste le paquet", undefined, true),
+    "run-one"
+  );
+  assert.equal(startedPayload().full_access_approved, true);
 });
 
 test("keeps the HTTP status and server detail on an API conflict", async t => {
