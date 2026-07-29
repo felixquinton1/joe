@@ -144,14 +144,14 @@ button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-v
 .icon-button {
   flex: 0 0 auto;
   width: 32px; height: 32px;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   color: var(--muted);
-  background: var(--surface);
+  background: transparent;
   cursor: pointer;
   transition: border-color .15s, color .15s, background .15s, transform .15s;
 }
-.icon-button:hover { color: var(--green); border-color: #a9c7bc; background: var(--green-soft); }
+.icon-button:hover { color: var(--green); border-color: transparent; background: var(--green-soft); }
 .icon-button:active { transform: scale(.96); }
 
 /* Conversation navigation */
@@ -257,10 +257,9 @@ button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-v
   display: flex;
   align-items: end;
   gap: 10px;
-  padding: 12px 22px;
-  border-bottom: 1px solid var(--line);
-  background: rgba(243, 241, 235, .82);
-  backdrop-filter: blur(12px);
+  padding: 10px 22px 8px;
+  border-bottom: 0;
+  background: transparent;
 }
 .control-group { min-width: 0; display: grid; gap: 9px; }
 .routing-controls { width: min(380px, 60%); grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -292,11 +291,13 @@ button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-v
   right: 0;
   width: min(570px, 78vw);
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 13px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow-lg);
+  padding: 11px;
+  border: 1px solid rgba(203, 199, 188, .75);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .97);
+  box-shadow: 0 12px 34px rgba(30, 40, 36, .09);
+  transform-origin: top right;
+  animation: popover-in .14s ease-out;
 }
 .controls label {
   min-width: 0;
@@ -409,12 +410,12 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
   border: 1px solid var(--line-strong);
   border-radius: 20px;
   background: var(--surface-raised);
-  box-shadow: 0 14px 40px rgba(30, 40, 36, .11);
+  box-shadow: 0 7px 24px rgba(30, 40, 36, .07);
   transition: border-color .16s, box-shadow .16s, transform .16s;
 }
 .composer:focus-within {
   border-color: #82ad9e;
-  box-shadow: 0 0 0 3px rgba(33, 107, 87, .1), 0 18px 48px rgba(30, 40, 36, .13);
+  box-shadow: 0 0 0 2px rgba(33, 107, 87, .08), 0 9px 28px rgba(30, 40, 36, .08);
 }
 .composer textarea {
   width: 100%;
@@ -449,17 +450,17 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 }
 .composer button:active { transform: scale(.97); }
 .composer button:disabled { opacity: .45; cursor: wait; }
-.composer .send-button { color: #fff; background: var(--green); box-shadow: 0 7px 17px rgba(33, 107, 87, .22); }
-.composer .send-button:hover { background: var(--green-hover); box-shadow: 0 9px 21px rgba(33, 107, 87, .27); }
+.composer .send-button { color: var(--green); background: transparent; box-shadow: none; }
+.composer .send-button:hover { color: var(--green-hover); background: var(--green-soft); box-shadow: none; }
 .composer .send-button b {
   width: 20px; height: 20px;
   display: grid; place-items: center;
   border-radius: 7px;
-  background: rgba(255, 255, 255, .15);
+  background: transparent;
   font-size: 13px;
 }
-.composer .stop-button { color: #874633; background: var(--orange-soft); }
-.composer .stop-button:hover { color: var(--danger); background: #efd5c6; }
+.composer .stop-button { color: #874633; background: transparent; }
+.composer .stop-button:hover { color: var(--danger); background: var(--orange-soft); }
 .prompt-queue { max-height: 140px; display: grid; gap: 5px; overflow: auto; padding: 10px 12px; border-bottom: 1px solid var(--line); background: #f7f5ef; }
 .queue-heading, .queue-item { display: flex; align-items: center; gap: 7px; }
 .queue-heading { justify-content: space-between; color: var(--muted); font-size: 9px; }
@@ -519,11 +520,13 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
   max-height: min(72vh, 620px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow-lg);
+  padding: 12px;
+  border: 1px solid rgba(203, 199, 188, .75);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .97);
+  box-shadow: 0 12px 34px rgba(30, 40, 36, .09);
+  transform-origin: top right;
+  animation: popover-in .14s ease-out;
 }
 .usage-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
 .usage-heading strong { display: block; margin-top: 2px; font-size: 13px; }
@@ -646,12 +649,13 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 .project-dialog {
   width: min(560px, calc(100vw - 24px));
   padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface);
-  box-shadow: var(--shadow-lg);
+  border: 1px solid rgba(203, 199, 188, .72);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 18px 50px rgba(30, 40, 36, .12);
 }
-.project-dialog::backdrop { background: rgba(23, 33, 31, .34); backdrop-filter: blur(3px); }
+.project-dialog[open] { animation: dialog-in .16s ease-out; }
+.project-dialog::backdrop { background: rgba(23, 33, 31, .2); backdrop-filter: blur(2px); }
 .project-dialog form { display: grid; gap: 13px; padding: 22px; }
 .project-dialog h2 { margin: 0; }
 .project-dialog label { display: grid; gap: 5px; color: var(--muted); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
@@ -676,6 +680,14 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 .dialog-actions button { padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; cursor: pointer; }
 .dialog-actions button:last-child { border-color: var(--green); color: #fff; background: var(--green); }
 .dialog-actions .danger-button:last-child { border-color: var(--danger); background: var(--danger); }
+@keyframes popover-in {
+  from { opacity: 0; transform: translateY(-4px) scale(.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(5px) scale(.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 .restart-warning {
   position: fixed;
   z-index: 150;
