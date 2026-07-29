@@ -80,6 +80,28 @@ def test_manual_positions_and_project_collapse_persist(tmp_path):
     ]
 
 
+def test_run_summary_persists_with_assistant_message(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+    conversation = store.create()
+    summary = {
+        "route": {"mode": "review"},
+        "workflow": [{"stage": "review", "status": "complete"}],
+    }
+
+    store.append_message(
+        conversation["id"],
+        "assistant",
+        "Terminé",
+        "run-1",
+        run_summary=summary,
+    )
+
+    assert store.get(conversation["id"])["messages"][0]["run_summary"] == summary
+
+
 def test_subproject_context_is_shared_by_its_conversations(tmp_path):
     root = tmp_path / ".agentflow"
     runs = root / "runs"

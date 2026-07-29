@@ -241,6 +241,7 @@ class RunManager:
                 run.run_id,
                 provider=route.primary,
                 git_report=git_report,
+                run_summary=_run_summary(run),
             )
             run.emit({"type": "git_report", "run_id": run.run_id, **git_report})
             run.emit(
@@ -266,6 +267,7 @@ class RunManager:
                 f"Erreur : {exc}",
                 run.run_id,
                 git_report=git_report,
+                run_summary=_run_summary(run),
             )
             run.emit({"type": "git_report", "run_id": run.run_id, **git_report})
             run.emit({"type": "error", "message": str(exc)})
@@ -688,6 +690,82 @@ def _resolve_execution_mode(
     if route.intent is Intent.MODIFY or _operational_validation(request):
         return project_default or None
     return None
+
+
+def _run_summary(run: LiveRun) -> dict[str, Any]:
+    route = None
+    quota_admission = None
+    workflow: dict[str, dict[str, Any]] = {}
+    attempts: list[dict[str, Any]] = []
+    for event in run.events:
+        event_type = event.get("type")
+        if event_type == "route":
+            route = {
+                key: event.get(key)
+                for key in (
+                    "mode", "intent", "primary", "reviewer", "reason",
+                    "model", "effort", "execution_mode",
+                )
+            }
+        elif event_type == "quota_admission":
+            quota_admission = {
+                key: event.get(key)
+                for key in ("level", "message", "forced")
+            }
+        elif event_type == "workflow_update":
+            stage = str(event.get("stage", ""))
+            workflow[stage] = {
+                **workflow.get(stage, {}),
+                **{
+                    key: event.get(key)
+                    for key in (
+                        "type", "mode", "stage", "provider", "label",
+                        "status", "content",
+                    )
+                    if event.get(key) is not None
+                },
+            }
+        elif event_type == "provider_fallback":
+            for item in workflow.values():
+                if (
+                    item.get("status") == "running"
+                    and item.get("provider") == event.get("provider")
+                ):
+                    item["fallback_from"] = event.get("provider")
+                    item["provider"] = event.get("fallback")
+        elif event_type == "provider_start":
+            attempts.append(
+                {
+                    "provider": event.get("provider"),
+                    "model": event.get("model"),
+                    "effort": event.get("effort"),
+                    "status": "running",
+                }
+            )
+            for item in workflow.values():
+                if (
+                    item.get("status") == "running"
+                    and item.get("provider") == event.get("provider")
+                ):
+                    item["model"] = event.get("model")
+                    item["effort"] = event.get("effort")
+        elif event_type == "provider_end":
+            for attempt in reversed(attempts):
+                if (
+                    attempt["status"] == "running"
+                    and attempt["provider"] == event.get("provider")
+                ):
+                    attempt["status"] = (
+                        "complete" if event.get("ok") else "failed"
+                    )
+                    attempt["error"] = event.get("error")
+                    break
+    return {
+        "route": route,
+        "quota_admission": quota_admission,
+        "workflow": list(workflow.values()),
+        "attempts": attempts,
+    }
 
 
 def _operational_validation(request: str) -> bool:

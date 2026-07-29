@@ -1,4 +1,4 @@
-const APP_VERSION = "0.21.10";
+const APP_VERSION = "0.21.11";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -346,6 +346,23 @@ function setSummaryPending(finalBubble, pending) {
   );
 }
 
+function renderHistoricalRunSummary(message, finalBubble) {
+  const summary = message.run_summary;
+  if (!summary?.workflow?.length) return;
+  for (const event of summary.workflow) {
+    renderWorkflowUpdate(event, finalBubble, message.run_id || "");
+  }
+  const progress = document.querySelector(
+    `.workflow-progress[data-run="${message.run_id || ""}"]`
+  );
+  const eyebrow = progress?.querySelector("header .eyebrow");
+  if (eyebrow) {
+    eyebrow.textContent = summary.route?.mode === "consensus"
+      ? "Consensus terminé"
+      : "Implémentation contrôlée terminée";
+  }
+}
+
 function updateWorkflowProviderMetadata(provider, metadata) {
   for (const stage of document.querySelectorAll(".workflow-stage.running")) {
     const status = stage.querySelector("summary b");
@@ -400,6 +417,7 @@ function updateWorkflowFallback(provider, fallback) {
   addMessage,
   renderMarkdown,
   renderGitReport,
+  renderHistoricalRunSummary,
   applySettings,
   renderWorkflowUpdate,
   renderPromptQueue
@@ -766,6 +784,7 @@ async function reconcileRun(conversationId, previousRunId, attempt = 0) {
       );
       if (completed) {
         if (local?.bubble) {
+          renderHistoricalRunSummary(completed, local.bubble);
           renderMarkdown(local.bubble, completed.content);
           if (completed.git_report) {
             renderGitReport(completed.git_report, completed.run_id);

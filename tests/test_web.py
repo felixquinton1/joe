@@ -15,7 +15,7 @@ from joe.web import (
     build_quota_notice,
 )
 from joe.http_utils import MAX_JSON_BODY_BYTES, validate_bind
-from joe.web_runs import _resolve_execution_mode
+from joe.web_runs import _resolve_execution_mode, _run_summary
 
 
 def start_server(tmp_path):
@@ -54,6 +54,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert response.status == 200
         assert "reconcileRun(conversationId, runId)" in app
         assert "message.run_id === previousRunId" in app
+        assert "renderHistoricalRunSummary(completed" in app
         assert "window.location.reload()" in app
 
         connection.request("GET", "/markdown.js")
@@ -304,6 +305,61 @@ def test_consensus_remains_read_only_despite_project_default():
         route,
         "Décide de l’architecture",
     ) is None
+
+
+def test_run_summary_preserves_completed_workflow_and_fallback():
+    run = LiveRun("run-1", "request", "conversation")
+    run.emit(
+        {
+            "type": "route",
+            "mode": "consensus",
+            "primary": "codex",
+            "reviewer": "gemini",
+        }
+    )
+    run.emit(
+        {
+            "type": "workflow_update",
+            "mode": "consensus",
+            "stage": "proposal_gemini",
+            "provider": "gemini",
+            "label": "Proposition",
+            "status": "running",
+        }
+    )
+    run.emit(
+        {
+            "type": "provider_fallback",
+            "provider": "gemini",
+            "fallback": "claude",
+            "error": "timeout",
+        }
+    )
+    run.emit(
+        {
+            "type": "provider_start",
+            "provider": "claude",
+            "model": "sonnet",
+            "effort": "high",
+        }
+    )
+    run.emit(
+        {
+            "type": "workflow_update",
+            "mode": "consensus",
+            "stage": "proposal_gemini",
+            "provider": "claude",
+            "label": "Proposition",
+            "status": "complete",
+        }
+    )
+
+    summary = _run_summary(run)
+
+    assert summary["route"]["mode"] == "consensus"
+    assert summary["workflow"][0]["provider"] == "claude"
+    assert summary["workflow"][0]["fallback_from"] == "gemini"
+    assert summary["workflow"][0]["model"] == "sonnet"
 
 
 def test_pending_run_state_is_persisted_atomically(tmp_path, monkeypatch):

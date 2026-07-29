@@ -7,6 +7,7 @@ window.createJoeConversations = function createJoeConversations({
   addMessage,
   renderMarkdown,
   renderGitReport,
+  renderHistoricalRunSummary,
   applySettings,
   renderWorkflowUpdate,
   renderPromptQueue
@@ -233,6 +234,7 @@ window.createJoeConversations = function createJoeConversations({
         addMessage("Toi", message.content, "user");
       } else {
         const bubble = addMessage("Joe · synthèse", "", "assistant");
+        renderHistoricalRunSummary(message, bubble);
         renderMarkdown(bubble, message.content);
         if (message.git_report) renderGitReport(message.git_report, message.run_id);
       }

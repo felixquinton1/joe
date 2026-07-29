@@ -225,6 +225,7 @@ class ConversationStore:
         run_id: str | None = None,
         provider: str | None = None,
         git_report: dict[str, Any] | None = None,
+        run_summary: dict[str, Any] | None = None,
     ) -> None:
         with self.lock:
             payload = self._read()
@@ -240,6 +241,8 @@ class ConversationStore:
             }
             if git_report:
                 message["git_report"] = git_report
+            if run_summary:
+                message["run_summary"] = run_summary
             conversation["messages"].append(message)
             conversation["last_call_at"] = message["at"]
             if role == "user" and conversation["title"] == "Nouvelle conversation":
