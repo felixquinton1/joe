@@ -3,6 +3,7 @@ import time
 
 from joe.models import Intent, Mode, ProviderResult, Route
 from joe.orchestrator import OrchestrationError, Orchestrator
+from joe.provider_health import clear_cooldowns, record_result
 
 
 class FakeProvider:
@@ -143,6 +144,50 @@ def test_review_fallback_never_uses_implementation_provider(tmp_path):
     assert len(providers["codex"].calls) == 1
     assert len(providers["claude"].calls) == 1
     assert len(providers["gemini"].calls) == 1
+
+
+def test_review_skips_provider_in_recent_cooldown(tmp_path):
+    clear_cooldowns()
+    record_result(
+        ProviderResult(
+            "gemini", ["gemini"], "", "quota", 1, 0.01,
+            error_kind="quota",
+        )
+    )
+    providers = {
+        name: FakeProvider(name)
+        for name in ("codex", "claude", "gemini", "copilot")
+    }
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    response, _ = orchestrator.execute(
+        "change", Route(Intent.MODIFY, Mode.REVIEW, "codex", "gemini")
+    )
+
+    assert "Le détail de l’avis de Claude reste disponible" in response
+    assert providers["gemini"].calls == []
+    assert len(providers["claude"].calls) == 1
+    clear_cooldowns()
+
+
+def test_forced_fast_provider_can_run_during_cooldown(tmp_path):
+    clear_cooldowns()
+    record_result(
+        ProviderResult(
+            "gemini", ["gemini"], "", "timeout", 124, 0.01,
+            timed_out=True, error_kind="timeout",
+        )
+    )
+    providers = {"gemini": FakeProvider("gemini")}
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    response, _ = orchestrator.execute(
+        "force test", Route(Intent.ANALYZE, Mode.FAST, "gemini")
+    )
+
+    assert response == "gemini response"
+    assert len(providers["gemini"].calls) == 1
+    clear_cooldowns()
 
 
 def test_timed_out_implementation_is_not_retried_by_another_provider(tmp_path):

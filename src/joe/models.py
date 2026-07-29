@@ -39,7 +39,11 @@ class ProviderResult:
 
     @property
     def ok(self) -> bool:
-        return self.returncode == 0 and not self.timed_out
+        return (
+            self.returncode == 0
+            and not self.timed_out
+            and self.error_kind is None
+        )
 
     def metadata(self) -> dict[str, Any]:
         data = asdict(self)

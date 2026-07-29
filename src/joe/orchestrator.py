@@ -14,6 +14,7 @@ from .orchestrator_workflows import (
     run_consensus_workflow,
     run_review_workflow,
 )
+from .provider_health import recent_failure, record_result
 from .providers import Provider, default_providers
 from .router import Router
 
@@ -172,6 +173,7 @@ class Orchestrator:
         timeout_override: int | None = None,
         allow_fallback: bool = True,
         fallback_error_kinds: set[str] | None = None,
+        respect_cooldown: bool = False,
     ) -> ProviderResult:
         config = self.memory.config()
         candidates = [provider_name]
@@ -180,6 +182,28 @@ class Orchestrator:
         seen: set[str] = set()
         for name in candidates:
             if name in seen or name not in self.providers or name in (exclude or set()):
+                continue
+            failure = recent_failure(name) if respect_cooldown else None
+            alternatives = [
+                candidate
+                for candidate in candidates
+                if candidate not in seen
+                and candidate != name
+                and candidate in self.providers
+                and candidate not in (exclude or set())
+                and recent_failure(candidate) is None
+            ]
+            if failure and alternatives:
+                seen.add(name)
+                if on_event:
+                    on_event(
+                        {
+                            "type": "provider_fallback",
+                            "provider": name,
+                            "fallback": alternatives[0],
+                            "error": f"cooldown:{failure[0]}",
+                        }
+                    )
                 continue
             seen.add(name)
             selected_model, selected_effort = provider_defaults(
@@ -227,6 +251,7 @@ class Orchestrator:
                 ),
             )
             results.append(result)
+            record_result(result)
             if result.error_kind == "cancelled":
                 raise OrchestrationError("Exécution interrompue")
             if on_event:

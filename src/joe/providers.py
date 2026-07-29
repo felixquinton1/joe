@@ -221,8 +221,6 @@ class Provider:
 
 
 def classify_error(stderr: str, returncode: int) -> str | None:
-    if returncode == 0:
-        return None
     lower = stderr.lower()
     if any(word in lower for word in ("auth", "login", "unauthorized", "credential")):
         return "authentication"
@@ -242,6 +240,8 @@ def classify_error(stderr: str, returncode: int) -> str | None:
         )
     ):
         return "quota"
+    if returncode == 0:
+        return None
     return "process"
 
 

@@ -77,6 +77,7 @@ def run_review_workflow(
         exclude={primary.provider},
         on_event=on_event,
         cancel_event=cancel_event,
+        respect_cooldown=True,
     )
     workflow_event(
         on_event,
@@ -317,6 +318,7 @@ def run_consensus_workflow(
         results,
         on_event=on_event,
         cancel_event=cancel_event,
+        respect_cooldown=True,
     )
     workflow_event(
         on_event,
@@ -362,6 +364,7 @@ def isolated_run(
         cancel_event=cancel_event,
         on_event=on_event,
         allow_fallback=allow_quota_fallback,
+        respect_cooldown=True,
         fallback_error_kinds=(
             {"authentication", "quota", "timeout", "unavailable"}
             if allow_quota_fallback

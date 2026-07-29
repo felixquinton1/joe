@@ -15,6 +15,7 @@ import pexpect
 
 from . import __version__
 from .models import Mode, Route
+from .provider_health import apply_cooldowns
 from .usage_claude import (
     claude_reset_timestamp as _claude_reset_timestamp,
     claude_status as _claude_status_impl,
@@ -66,13 +67,13 @@ def usage_status(force: bool = False) -> list[dict[str, Any]]:
     with _lock:
         providers = [_with_last_available(item) for item in fresh]
         _cache = (time.monotonic(), providers)
-        return providers
+        return apply_cooldowns(providers)
 
 
 def cached_usage_status() -> list[dict[str, Any]]:
     """Return quota data immediately without probing provider CLIs."""
     with _lock:
-        return list(_cache[1]) if _cache else []
+        return apply_cooldowns(list(_cache[1])) if _cache else []
 
 
 def record_gemini_usage(

@@ -232,6 +232,7 @@ def test_error_classification():
     ) == "quota"
     assert classify_error("Please login", 1) == "authentication"
     assert classify_error("", 2) == "process"
+    assert classify_error("You exceeded your current quota", 0) == "quota"
     assert _terminal_gemini_quota(
         "429 RESOURCE_EXHAUSTED: exceeded your current quota"
     )
