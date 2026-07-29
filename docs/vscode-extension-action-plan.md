@@ -1,9 +1,8 @@
 # Joe VS Code — Plan d'action
 
-> Statut : validé, prérequis en cours. Le registre unique, la réservation
-> atomique par conversation et le curseur SSE sont livrés dans Joe 0.21.12.
-> La version d'API et la matrice de contrat restent à fermer avant le squelette
-> VS Code.
+> Statut : validé, phase 0 terminée. Le registre unique, la réservation
+> atomique par conversation, le curseur SSE et le contrat d’API 1.0 sont
+> livrés. Le prochain chantier est le squelette VS Code en lecture seule.
 
 ## 1. Objectif
 
@@ -97,7 +96,7 @@ incompatibles et tolérera les ajouts de champs.
 
 ## 5. Déroulé expérimental
 
-### Phase 0 — Figer le contrat et le banc de test
+### Phase 0 — Figer le contrat et le banc de test — terminée
 
 1. Documenter les requêtes, réponses, erreurs et événements SSE utilisés dans
    une matrice exhaustive pour le MVP.
@@ -183,7 +182,7 @@ d'usage. Un passage à `systemd --user` est une évolution indépendante.
 
 ## 7. Artefacts attendus
 
-- ce plan et un contrat versionné de l'API cliente ;
+- ce plan et le [contrat versionné de l’API cliente](api-contract.md) ;
 - `vscode-extension/` avec sources TypeScript, tests et README ;
 - tests de contrat Python ciblés dans `tests/` ;
 - fixture ou faux serveur pour les tests rapides de l'extension ;
@@ -235,9 +234,9 @@ Prérequis déjà livrés :
 3. reprise SSE après coupure, avec tests HTTP de rechargement, achèvement
    pendant la coupure et reconnexion après achèvement.
 
-Ordre de livraison restant :
+Ordre de livraison :
 
-1. PR/commit A : contrat API, version d'API et tests Python ;
+1. Livré : contrat API 1.0, version d'API et tests Python ;
 2. PR/commit B : squelette extension en lecture seule ;
 3. PR/commit C : envoi, flux et annulation ;
 4. PR/commit D : reconnexion et tests Remote-SSH ;

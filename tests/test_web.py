@@ -18,6 +18,7 @@ from joe.web import (
 )
 from joe.http_utils import MAX_JSON_BODY_BYTES, validate_bind
 from joe.web_runs import _resolve_execution_mode, _run_summary
+from joe.web_server import API_VERSION
 
 
 def start_server(tmp_path):
@@ -44,6 +45,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert response.status == 200
         assert payload["project"] == str(tmp_path.resolve())
         assert payload["version"]
+        assert payload["api_version"] == API_VERSION
         assert payload["conversation_store"].endswith(
             ".agentflow/conversations.json"
         )

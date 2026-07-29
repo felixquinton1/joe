@@ -21,6 +21,7 @@ _ASSETS = {
     "/app_conversations.js": ("app_conversations.js", "text/javascript; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
 }
+API_VERSION = "1.0"
 
 
 class JoeServer(ThreadingHTTPServer):
@@ -40,6 +41,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(
                 {
                     "version": __version__,
+                    "api_version": API_VERSION,
                     "project": str(self.server.manager.project),
                     "conversation_store": str(
                         self.server.manager.conversations.path
