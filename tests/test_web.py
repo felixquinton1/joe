@@ -4,7 +4,7 @@ import threading
 import time
 from types import SimpleNamespace
 
-from joe import provider_registry
+from joe import __version__, provider_registry
 from joe.models import Intent, Mode, Route
 from joe.provider_registry import ProviderSpec
 from joe.web import (
@@ -58,7 +58,8 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert "reconcileRun(conversationId, runId)" in app
         assert "message.run_id === previousRunId" in app
         assert "renderHistoricalRunSummary(completed" in app
-        assert "window.location.reload()" in app
+        assert f'const APP_VERSION = "{__version__}";' in app
+        assert "window.location.reload()" not in app
 
         connection.request("GET", "/markdown.js")
         response = connection.getresponse()

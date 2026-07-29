@@ -1,4 +1,4 @@
-const APP_VERSION = "0.21.12";
+const APP_VERSION = "0.21.13";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -993,14 +993,6 @@ function toggleMobilePanel(panelSelector, buttonId) {
 
 setInterval(updateCountdowns, 1000);
 setInterval(() => loadUsage().catch(() => {}), 60000);
-setInterval(async () => {
-  try {
-    const status = await fetch("/api/status").then(response => response.json());
-    if (status.version && status.version !== APP_VERSION) window.location.reload();
-  } catch {
-    // The server may be restarting; the next interval retries.
-  }
-}, 5000);
 setupPanelResizers();
 resizeComposer();
 $("toggle-history").onclick = () => toggleMobilePanel(
