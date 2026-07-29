@@ -89,22 +89,18 @@ Connexion côté workspace, statut, conversations, actualisation et redémarrage
 tmux confirmé sont livrés. Le smoke Remote-SSH a été validé par l’utilisateur ;
 le smoke local indépendant reste recommandé avant diffusion.
 
-### Phase 2 — Conversation et run — livrée en code
+### Phase 2 — Client de conversation — retirée après pilote
 
-Sélection/création, envoi, flux, erreurs, conflit 409 et annulation sont
-implémentés. Le gate manuel restant vérifie la parité exacte avec Joe Web et le
-comportement des permissions.
+La sélection, l’envoi et le suivi natifs VS Code fonctionnaient mais dupliquaient
+Joe Web et rendaient le parcours confus. L’extension devient volontairement un
+lanceur : démarrer, ouvrir, actualiser, redémarrer et arrêter. Le Web reste
+l’unique interface conversationnelle.
 
-### Phase 3 — Résilience — fondation implémentée
+### Phase 3 — Résilience — portée par Joe Web
 
-Le run et son curseur sont persistés. Au rechargement, l’extension se rattache
-au run actif, reprend après le dernier événement et recherche la réponse dans
-la conversation si le run a expiré.
-
-Reste à exécuter réellement : run long, fermeture VS Code, coupure SSH,
-réouverture, reprise sans doublon, puis redémarrage Joe sur une tâche en lecture
-seule. Une relance issue de `pending_runs.json` réexécute la demande complète ;
-elle ne reprend pas une instruction non idempotente.
+Les runs appartiennent au serveur et Joe Web reconstruit leur état après
+reconnexion. Fermer VS Code ne ferme ni tmux ni le navigateur déjà ouvert.
+L’extension n’a plus sa propre copie du flux ou de l’historique.
 
 ### Phase 4 — UX légère et capacités prudentes — implémentée
 

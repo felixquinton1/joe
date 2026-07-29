@@ -27,7 +27,7 @@ def parser() -> argparse.ArgumentParser:
             "Interfaces : `joe <demande>` pour une commande unique, "
             "`joe cli` ou `joe chat` pour le terminal interactif, "
             "`joe web` pour l’interface locale. Commandes utiles : "
-            "`doctor`, `sync`, `restart` et `kill`."
+            "`doctor`, `sync`, `restart`, `stop` et `kill`."
         ),
     )
     result.add_argument("request", nargs="*", help="natural-language request")
@@ -53,6 +53,8 @@ def main(argv: list[str] | None = None) -> int:
         return _sync(arguments[1:])
     if arguments and arguments[0] == "kill":
         return _kill(arguments[1:])
+    if arguments and arguments[0] == "stop":
+        return _stop(arguments[1:])
     if arguments and arguments[0] == "restart":
         return _restart(arguments[1:])
     if arguments and arguments[0] == "doctor":
@@ -255,6 +257,33 @@ def _kill(argv: list[str]) -> int:
     else:
         suffix = "s" if stopped > 1 else ""
         print(f"Joe : {stopped} session{suffix} tmux arrêtée{suffix}.")
+    return 0
+
+
+def _stop(argv: list[str]) -> int:
+    stop_parser = argparse.ArgumentParser(
+        prog="joe stop",
+        description="Stop the tmux-managed Joe server on one port.",
+    )
+    stop_parser.add_argument("--port", type=int, default=8765)
+    args = stop_parser.parse_args(argv)
+    if not shutil.which("tmux"):
+        print(
+            "Joe : arrêt automatique indisponible sans tmux ; "
+            "interromps le terminal qui exécute joe web."
+        )
+        return 1
+    session = f"joe-{args.port}"
+    result = subprocess.run(
+        ["tmux", "kill-session", "-t", session],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if result.returncode:
+        print(f"Joe : aucune instance tmux active sur le port {args.port}.")
+        return 1
+    print(f"Joe : instance du port {args.port} arrêtée.")
     return 0
 
 

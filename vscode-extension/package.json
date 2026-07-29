@@ -1,8 +1,8 @@
 {
   "name": "joe-control-room",
   "displayName": "Joe",
-  "description": "VS Code control room for conversations and runs on a local Joe server.",
-  "version": "0.3.0",
+  "description": "Start, open, restart and stop the local Joe Web interface.",
+  "version": "0.4.0",
   "publisher": "felixquinton",
   "license": "UNLICENSED",
   "repository": {
@@ -23,9 +23,9 @@
   "activationEvents": [
     "onView:joe.overview",
     "onCommand:joe.refresh",
-    "onCommand:joe.createConversation",
-    "onCommand:joe.sendPrompt",
-    "onCommand:joe.cancelRun",
+    "onCommand:joe.start",
+    "onCommand:joe.openWeb",
+    "onCommand:joe.stop",
     "onCommand:joe.restart",
     "onCommand:joe.openGuide"
   ],
@@ -33,7 +33,18 @@
     "commands": [
       {
         "command": "joe.refresh",
-        "title": "Joe: Actualiser"
+        "title": "Joe: Actualiser l’état",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "joe.start",
+        "title": "Joe: Démarrer",
+        "icon": "$(play)"
+      },
+      {
+        "command": "joe.openWeb",
+        "title": "Joe: Ouvrir l’interface Web",
+        "icon": "$(globe)"
       },
       {
         "command": "joe.restart",
@@ -41,18 +52,8 @@
         "icon": "$(debug-restart)"
       },
       {
-        "command": "joe.createConversation",
-        "title": "Joe: Nouvelle conversation",
-        "icon": "$(add)"
-      },
-      {
-        "command": "joe.sendPrompt",
-        "title": "Joe: Envoyer une demande",
-        "icon": "$(send)"
-      },
-      {
-        "command": "joe.cancelRun",
-        "title": "Joe: Annuler la requête",
+        "command": "joe.stop",
+        "title": "Joe: Arrêter le serveur",
         "icon": "$(debug-stop)"
       },
       {
@@ -81,15 +82,10 @@
           "default": "http://127.0.0.1:8765",
           "description": "Adresse locale du serveur Joe sur l’hôte du workspace."
         },
-        "joe.allowWorkspaceWrites": {
-          "type": "boolean",
-          "default": false,
-          "description": "Autorise les demandes VS Code à conserver le mode d’écriture de la conversation. Désactivé, l’extension impose le mode lecture seule."
-        },
         "joe.enableMaintenanceActions": {
           "type": "boolean",
           "default": false,
-          "description": "Affiche et autorise les actions de maintenance sensibles, comme le redémarrage du serveur."
+          "description": "Affiche les actions Redémarrer et Arrêter. Elles demandent toujours confirmation."
         }
       }
     },
@@ -106,7 +102,7 @@
       "joe": [
         {
           "id": "joe.overview",
-          "name": "État et conversations"
+          "name": "Joe Web"
         }
       ]
     },
@@ -118,29 +114,34 @@
           "group": "navigation"
         },
         {
-          "command": "joe.restart",
-          "when": "view == joe.overview && config.joe.enableMaintenanceActions",
-          "group": "navigation@4"
+          "command": "joe.start",
+          "when": "view == joe.overview",
+          "group": "navigation@1"
         },
         {
-          "command": "joe.createConversation",
+          "command": "joe.openWeb",
           "when": "view == joe.overview",
           "group": "navigation@2"
         },
         {
-          "command": "joe.sendPrompt",
-          "when": "view == joe.overview",
+          "command": "joe.restart",
+          "when": "view == joe.overview && config.joe.enableMaintenanceActions",
           "group": "navigation@3"
         },
         {
-          "command": "joe.cancelRun",
+          "command": "joe.stop",
+          "when": "view == joe.overview && config.joe.enableMaintenanceActions",
+          "group": "navigation@4"
+        },
+        {
+          "command": "joe.refresh",
           "when": "view == joe.overview",
-          "group": "navigation@3"
+          "group": "navigation@5"
         },
         {
           "command": "joe.openGuide",
           "when": "view == joe.overview",
-          "group": "navigation@5"
+          "group": "navigation@6"
         }
       ]
     }

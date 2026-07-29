@@ -82,10 +82,10 @@ Installer le fichier `.vsix` dans la fenêtre VS Code qui contient le workspace.
 Sous Remote-SSH, il faut choisir « Install in SSH » : l’extension et
 `127.0.0.1:8765` se trouvent alors sur l’hôte distant.
 
-La vue Joe permet de sélectionner ou créer une conversation, envoyer une
-demande, suivre le flux dans `Sortie → Joe`, annuler le run et reprendre une
-tâche après un rechargement. Survoler un élément affiche une explication
-courte. La commande `Joe: Ouvrir le guide` ouvre l’aide intégrée.
+La vue Joe sert de lanceur pour l’interface Web : démarrer, ouvrir, actualiser,
+redémarrer et arrêter l’instance du port courant. En Remote-SSH, « Ouvrir »
+utilise automatiquement le port forwarding de VS Code. Les conversations,
+prompts et résultats restent exclusivement dans Joe Web.
 
 Le zoom natif de VS Code s’applique à la vue Joe :
 
@@ -128,6 +128,7 @@ joe --help
 joe doctor [-C /projet]
 joe web --foreground [-C /projet]
 joe restart [-C /projet]
+joe stop [--port 8765]
 joe kill
 joe sync
 ```
@@ -141,8 +142,8 @@ Fermer une interface cliente n’efface pas les conversations.
   l’extension.
 - Remote-SSH affiche le mauvais projet : vérifier que l’extension est installée
   côté SSH et que Joe a été lancé sur cet hôte.
-- Une demande reste en lecture seule : activer explicitement
-  `Joe: Allow Workspace Writes` uniquement dans un workspace de confiance.
+- Les conversations ne sont pas listées dans VS Code : c’est volontaire,
+  utilise « Joe: Ouvrir l’interface Web ».
 - Port occupé : choisir un autre `--port` et reporter la même URL dans
   `Joe: Server Url`.
 - Agent absent : installer/authentifier sa CLI, puis relancer `joe doctor`.

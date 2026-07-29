@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from joe.cli import _kill, _restart, parser
+from joe.cli import _kill, _restart, _stop, parser
 
 
 def test_kill_stops_only_numbered_joe_tmux_sessions(monkeypatch, capsys):
@@ -98,3 +98,19 @@ def test_help_explains_the_full_cli_and_web_interfaces():
     assert "joe cli" in help_text
     assert "joe web" in help_text
     assert "doctor" in help_text
+
+
+def test_stop_targets_only_the_requested_joe_port(monkeypatch, capsys):
+    calls = []
+    monkeypatch.setattr("joe.cli.shutil.which", lambda command: "/usr/bin/tmux")
+    monkeypatch.setattr(
+        "joe.cli.subprocess.run",
+        lambda command, **kwargs: (
+            calls.append(command)
+            or SimpleNamespace(returncode=0)
+        ),
+    )
+
+    assert _stop(["--port", "9000"]) == 0
+    assert calls == [["tmux", "kill-session", "-t", "joe-9000"]]
+    assert "port 9000" in capsys.readouterr().out

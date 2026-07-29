@@ -52,11 +52,10 @@ npm run package
 ```
 
 Install the generated `.vsix` in the VS Code window connected to the target
-host. Start Joe normally, then open the Joe activity-bar view. The extension
-selects conversations, sends safe read-only requests by default, streams and
-cancels runs, and resumes a tracked run after reload. Workspace writes and
-tmux maintenance actions require separate opt-in settings. VS Code’s native
-zoom applies to the complete Joe view.
+host, then open the Joe activity-bar view. The extension deliberately remains
+a small launcher: start, open, refresh, restart or stop Joe Web. Conversations,
+prompts, models and results stay in the Web interface so there is only one chat
+experience to maintain.
 
 ## Safety model
 
