@@ -17,6 +17,7 @@ from .web_runs import ActiveConversationError, RunManager
 _ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/style.css": ("style.css", "text/css; charset=utf-8"),
+    "/i18n.js": ("i18n.js", "text/javascript; charset=utf-8"),
     "/markdown.js": ("markdown.js", "text/javascript; charset=utf-8"),
     "/app_auth.js": ("app_auth.js", "text/javascript; charset=utf-8"),
     "/app_usage.js": ("app_usage.js", "text/javascript; charset=utf-8"),

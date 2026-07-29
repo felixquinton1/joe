@@ -163,6 +163,12 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b'<span class="brand-mark">J</span>' in page
         assert b"<option>codex</option>" not in page
 
+        connection.request("GET", "/i18n.js")
+        response = connection.getresponse()
+        translations = response.read()
+        assert response.status == 200
+        assert b"initialLanguage" in translations
+
         connection.request("GET", "/app.js")
         response = connection.getresponse()
         script = response.read()
