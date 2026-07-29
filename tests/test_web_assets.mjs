@@ -65,4 +65,5 @@ test("selects a supported interface language and falls back to French", () => {
   assert.equal(initialLanguage({ getItem: () => null }, "de-DE"), "fr");
   assert.equal(translate("en", "send"), "Send");
   assert.equal(translate("fr", "send"), "Envoyer");
+  assert.match(translate("en", "slogan"), /cool kids/);
 });

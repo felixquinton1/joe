@@ -1,4 +1,4 @@
-const APP_VERSION = "0.23.6";
+const APP_VERSION = "0.23.7";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -37,7 +37,6 @@ function applyLanguage(value) {
 async function loadStatus() {
   const status = await fetch("/api/status").then(response => response.json());
   updateProviderMenu(status.provider_catalog || status.providers || []);
-  $("project").textContent = status.project;
   $("version").textContent = status.version || "ancienne version";
   if (status.version !== APP_VERSION) {
     const warning = $("restart-warning");
@@ -1106,7 +1105,7 @@ window.JoeAuth.pairBrowser()
       .then(() => loadConversations())
       .then(connectActiveRuns)
       .catch(error => {
-        $("project").textContent = `Erreur : ${error.message}`;
+        console.error("Joe initialization failed", error);
       });
 
     loadCapabilities().catch(() => {
@@ -1117,5 +1116,5 @@ window.JoeAuth.pairBrowser()
     });
   })
   .catch(error => {
-    $("project").textContent = `Erreur : ${error.message}`;
+    console.error("Joe pairing failed", error);
   });

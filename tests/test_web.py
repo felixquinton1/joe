@@ -160,6 +160,8 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b'src="/markdown.js"' in page
         assert b'src="/i18n.js"' in page
         assert b'id="language"' in page
+        assert b'data-i18n="slogan"' in page
+        assert b'id="project"' not in page
         assert b'<span class="brand-mark">J</span>' in page
         assert b"<option>codex</option>" not in page
 
@@ -168,6 +170,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         translations = response.read()
         assert response.status == 200
         assert b"initialLanguage" in translations
+        assert b"cool kids" in translations
 
         connection.request("GET", "/app.js")
         response = connection.getresponse()

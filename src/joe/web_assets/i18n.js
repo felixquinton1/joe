@@ -5,7 +5,8 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   const translations = {
     fr: {
-      language: "Langue", conversations: "Conversations", activity: "Activité",
+      language: "Langue", slogan: "L’IA à la mode chez les jeunes",
+      conversations: "Conversations", activity: "Activité",
       loading: "Chargement…", quotas: "Quotas", project: "Projet",
       agent: "Agent", workflow: "Workflow", automatic: "Automatique",
       configuration: "Configuration", model: "Modèle", effort: "Effort",
@@ -22,7 +23,8 @@
       evidence_text: "À ouvrir seulement pour contrôler une affirmation ou diagnostiquer un blocage."
     },
     en: {
-      language: "Language", conversations: "Conversations", activity: "Activity",
+      language: "Language", slogan: "AI, the way the cool kids do it",
+      conversations: "Conversations", activity: "Activity",
       loading: "Loading…", quotas: "Quotas", project: "Project",
       agent: "Agent", workflow: "Workflow", automatic: "Automatic",
       configuration: "Settings", model: "Model", effort: "Effort",
