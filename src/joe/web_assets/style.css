@@ -45,3 +45,13 @@
 .layout{height:100vh}.history-panel,.activity-panel{padding-top:78px}.controls{padding-top:70px}.provider-controls{top:107px}
 @media(max-width:720px){.topbar{padding:10px 12px 0}.layout{height:auto}.workspace{min-height:100vh}.controls{padding-top:64px}.usage-panel{top:58px}.provider-controls{top:118px}.history-panel.mobile-open,.activity-panel.mobile-open{top:60px}}
 @media(min-width:721px) and (max-width:1250px){.activity-panel.mobile-open{top:62px}}
+
+/* Headerless layout: product identity lives in the sidebar, controls in Agents. */
+.history-panel,.activity-panel{padding:16px}.controls{padding-top:8px}.provider-controls{top:45px}
+.sidebar-brand{padding:2px 4px 20px;margin-bottom:18px;border-bottom:1px solid var(--line)}
+.sidebar-brand .joe-tagline{position:static;transform:none;margin:12px 0 0 2px;white-space:normal;line-height:1.2}
+.sidebar-brand .joe-tagline strong{font-size:14px}.sidebar-brand .joe-tagline span{font-size:11px}
+.activity-tools{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:0 4px 18px}
+.activity-tools .usage-panel{top:34px}.diagnostic-store{display:none!important}
+@media(max-width:1250px){.mobile-panel-tools{position:fixed;z-index:120;top:10px;right:12px}.controls{padding-top:56px}}
+@media(max-width:720px){.controls{padding-top:56px}.history-panel.mobile-open,.activity-panel.mobile-open{top:0;padding-top:16px}.activity-tools{padding-right:118px}}

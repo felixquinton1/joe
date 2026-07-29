@@ -7,30 +7,17 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand"><span class="brand-mark">J</span><div><strong>Joe</strong><small>AI control room · <span id="version">…</span></small></div></div>
-    <div class="joe-tagline"><span>✦</span><strong data-i18n="slogan">L’IA à la mode chez les jeunes</strong></div>
-    <div class="topbar-tools">
-      <div class="mobile-panel-tools">
-        <button id="toggle-history" type="button" aria-expanded="false" data-i18n="conversations">Conversations</button>
-        <button id="toggle-activity" type="button" aria-expanded="false" data-i18n="activity">Activité</button>
-      </div>
-      <label class="language-picker" title="Langue / Language"><span aria-hidden="true">◎</span><span class="sr-only" data-i18n="language">Langue</span><select id="language" aria-label="Langue / Language"><option value="fr">FR</option><option value="en">EN</option></select></label>
-      <details class="usage-popover">
-        <summary title="Consommation personnelle"><span class="quota-dot"></span>Quotas</summary>
-        <div class="usage-panel">
-          <div class="usage-heading">
-            <div><span class="eyebrow">Consommation personnelle</span><strong>Quotas IA</strong></div>
-            <button id="refresh-usage" class="icon-button" title="Actualiser les quotas, dont /usage Claude">↻</button>
-          </div>
-          <div id="usage" class="usage-grid"><span class="usage-loading">Chargement…</span></div>
-        </div>
-      </details>
-    </div>
-  </header>
+  <div class="mobile-panel-tools">
+    <button id="toggle-history" type="button" aria-expanded="false" data-i18n="conversations">Conversations</button>
+    <button id="toggle-activity" type="button" aria-expanded="false" data-i18n="activity">Activité</button>
+  </div>
   <div id="restart-warning" class="restart-warning hidden"></div>
   <main class="layout">
     <aside class="history-panel">
+      <div class="sidebar-brand">
+        <div class="brand"><span class="brand-mark">J</span><div><strong>Joe</strong><small>AI control room · <span id="version">…</span></small></div></div>
+        <div class="joe-tagline"><span>✦</span><strong data-i18n="slogan">L’IA à la mode chez les jeunes</strong></div>
+      </div>
       <div class="panel-title"><div><span class="eyebrow" data-i18n="project">Projet</span><h2 data-i18n="conversations">Conversations</h2></div><button id="new-project" class="icon-button" title="Nouveau sous-projet">＋</button></div>
       <div id="conversations" class="history-list"></div>
     </aside>
@@ -64,14 +51,25 @@
     </section>
     <div class="panel-resizer resize-right" data-resizer="right" title="Redimensionner le suivi"></div>
     <aside class="activity-panel">
+      <div class="activity-tools">
+        <label class="language-picker" title="Langue / Language"><span aria-hidden="true">◎</span><span class="sr-only" data-i18n="language">Langue</span><select id="language" aria-label="Langue / Language"><option value="fr">FR</option><option value="en">EN</option></select></label>
+        <details class="usage-popover">
+          <summary title="Consommation personnelle"><span class="quota-dot"></span><span data-i18n="quotas">Quotas</span></summary>
+          <div class="usage-panel">
+            <div class="usage-heading">
+              <div><span class="eyebrow">Consommation personnelle</span><strong>Quotas IA</strong></div>
+              <button id="refresh-usage" class="icon-button" title="Actualiser les quotas, dont /usage Claude">↻</button>
+            </div>
+            <div id="usage" class="usage-grid"><span class="usage-loading">Chargement…</span></div>
+          </div>
+        </details>
+      </div>
       <div class="panel-title"><div><span class="eyebrow" data-i18n="live">Temps réel</span><h2 data-i18n="agents">Agents</h2></div><span id="run-state" class="run-state idle" data-i18n="ready">Prêt</span></div>
       <div id="agents" class="agent-stack"></div>
-      <details class="raw-panel">
-        <summary><span data-i18n="evidence">Preuves et diagnostic</span> <span>vérifié · inféré · refusé</span></summary>
-        <p data-i18n="evidence_text">À ouvrir seulement pour contrôler une affirmation ou diagnostiquer un blocage.</p>
+      <div class="diagnostic-store hidden" aria-hidden="true">
         <div id="evidence-log" class="evidence-log"></div>
         <pre id="raw-log"></pre>
-      </details>
+      </div>
     </aside>
   </main>
   <dialog id="project-dialog" class="project-dialog">

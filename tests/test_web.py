@@ -162,6 +162,9 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b'id="language"' in page
         assert b'class="sr-only"' in page
         assert b'data-i18n="slogan"' in page
+        assert b'class="topbar"' not in page
+        assert b'class="raw-panel"' not in page
+        assert b'class="activity-tools"' in page
         assert b'id="project"' not in page
         assert b'<span class="brand-mark">J</span>' in page
         assert b"<option>codex</option>" not in page
@@ -207,6 +210,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b".sr-only" in style
         assert b"Floating controls" in style
         assert b".layout{height:100vh}" in style
+        assert b"Headerless layout" in style
     finally:
         server.shutdown()
         thread.join(timeout=2)
