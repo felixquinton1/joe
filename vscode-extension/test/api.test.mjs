@@ -7,7 +7,7 @@ import {
   JoeCompatibilityError,
   JoeConnectionError,
 } from "../out/api.js";
-import { planRestart } from "../out/restart.js";
+import { planRestart, waitForJoe } from "../out/restart.js";
 
 function fixture(status) {
   const server = http.createServer((request, response) => {
@@ -87,4 +87,27 @@ test("only an unreachable server enables forced restart", async () => {
     await planRestart(client, "/tmp/workspace"),
     { mode: "force", project: "/tmp/workspace" }
   );
+});
+
+test("waits until the restarted server actually answers", async () => {
+  let attempts = 0;
+  const status = {
+    version: "0.21.19",
+    api_version: "1.0",
+    project: "/tmp/project",
+    providers: [],
+    modes: [],
+  };
+  const client = {
+    async status() {
+      attempts += 1;
+      if (attempts < 3) {
+        throw new JoeConnectionError("starting");
+      }
+      return status;
+    },
+  };
+
+  assert.deepEqual(await waitForJoe(client, 4, 0), status);
+  assert.equal(attempts, 3);
 });

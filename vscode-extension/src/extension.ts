@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 import { JoeClient, JoeConversation, JoeStatus } from "./api";
-import { planRestart } from "./restart";
+import { planRestart, waitForJoe } from "./restart";
 
 const executeFile = promisify(execFile);
 
@@ -148,8 +148,13 @@ export function activate(context: vscode.ExtensionContext): void {
           args.push("--force");
         }
         await executeFile("joe", args);
-        void vscode.window.showInformationMessage("Joe a été redémarré.");
+        await waitForJoe(new JoeClient(serverUrl()));
         provider.refresh();
+        void vscode.window.showInformationMessage("Joe a été redémarré.");
+        const externalUrl = await vscode.env.asExternalUri(
+          vscode.Uri.parse(serverUrl())
+        );
+        await vscode.env.openExternal(externalUrl);
       } catch (error) {
         const detail =
           typeof error === "object" && error && "stderr" in error

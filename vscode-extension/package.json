@@ -2,7 +2,7 @@
   "name": "joe-control-room",
   "displayName": "Joe",
   "description": "Read-only VS Code control room for a local Joe server.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "felixquinton",
   "license": "UNLICENSED",
   "repository": {

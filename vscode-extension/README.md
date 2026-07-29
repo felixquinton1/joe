@@ -11,8 +11,10 @@ Première interface VS Code de Joe, volontairement limitée à la lecture.
 
 La vue Joe affiche la version du serveur, le projet et les conversations. Le
 bouton de redémarrage relance uniquement le serveur tmux du port courant, après
-confirmation, et refuse l’opération lorsqu’un run est actif. Sans tmux, Joe
-demande un redémarrage manuel. L’extension ne peut encore ni créer une
+confirmation, attend que l’API réponde réellement, ouvre Joe Web et refuse
+l’opération lorsqu’un run est actif. En Remote-SSH, VS Code résout l’URL externe
+et son éventuel port forwarding. Sans tmux, Joe demande un redémarrage manuel.
+L’extension ne peut encore ni créer une
 conversation, ni envoyer ou annuler un run.
 
 ## Développement

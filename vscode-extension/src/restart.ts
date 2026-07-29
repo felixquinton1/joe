@@ -1,6 +1,7 @@
 import {
   JoeClient,
   JoeConnectionError,
+  JoeStatus,
 } from "./api";
 
 export type RestartPlan =
@@ -8,6 +9,10 @@ export type RestartPlan =
   | { mode: "force"; project: string }
   | { mode: "blocked"; message: string }
   | { mode: "error"; message: string };
+
+interface StatusReader {
+  status(): Promise<JoeStatus>;
+}
 
 export async function planRestart(
   client: JoeClient,
@@ -44,4 +49,26 @@ export async function planRestart(
     };
   }
   return { mode: "ready", project };
+}
+
+export async function waitForJoe(
+  client: StatusReader,
+  attempts = 20,
+  delayMs = 500
+): Promise<JoeStatus> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await client.status();
+    } catch (error) {
+      if (!(error instanceof JoeConnectionError)) {
+        throw error;
+      }
+      lastError = error;
+      if (attempt + 1 < attempts) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+  throw lastError;
 }
