@@ -31,6 +31,12 @@ jobs:
       - run: node --check src/joe/web_assets/app_conversations.js
       - run: node --check src/joe/web_assets/app.js
       - run: node --check src/joe/web_assets/markdown.js
+      - run: npm ci
+        working-directory: vscode-extension
+      - run: npm run check
+        working-directory: vscode-extension
+      - run: npm test
+        working-directory: vscode-extension
       - run: joe --version
       - run: joe --dry-run -C . "Ne modifie rien, analyse seulement Joe"
 

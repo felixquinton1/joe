@@ -43,6 +43,18 @@ def test_french_merge_then_implementation_is_writable():
     assert route.primary == "codex"
 
 
+def test_implementation_continuations_remain_writable():
+    for request in (
+        "Check si tout est bon et passe à la suite",
+        "Du coup passe à la suite pour notre objectif",
+        "Continue l’implémentation prévue",
+        "Reprends l'implémentation au point d'arrêt",
+    ):
+        route = Router().route(request)
+        assert route.intent is Intent.MODIFY
+        assert route.primary == "codex"
+
+
 def test_git_actions_are_modifications():
     for request in (
         "pull la branche dev",

@@ -1,8 +1,10 @@
 # Joe VS Code — Plan d'action
 
-> Statut : validé, phase 0 terminée. Le registre unique, la réservation
+> Statut : validé, phase 0 terminée et squelette de phase 1 implémenté.
+> Le registre unique, la réservation
 > atomique par conversation, le curseur SSE et le contrat d’API 1.0 sont
-> livrés. Le prochain chantier est le squelette VS Code en lecture seule.
+> livrés. Le prochain gate est le smoke test réel du squelette VS Code en
+> local puis sous Remote-SSH.
 
 ## 1. Objectif
 
@@ -114,7 +116,7 @@ Gate : aucune extension n'est développée tant que le contrat minimal et les ca
 de reconnexion ne sont pas testables. La livraison inclut la suite Python
 complète et les vérifications JavaScript du client web existant.
 
-### Phase 1 — Squelette VS Code en lecture seule
+### Phase 1 — Squelette VS Code en lecture seule — implémenté, smoke à faire
 
 1. Créer `vscode-extension/` avec TypeScript, lint, tests et packaging `.vsix`.
 2. Déclarer explicitement `extensionKind: ["workspace"]`.
@@ -237,7 +239,7 @@ Prérequis déjà livrés :
 Ordre de livraison :
 
 1. Livré : contrat API 1.0, version d'API et tests Python ;
-2. PR/commit B : squelette extension en lecture seule ;
+2. Livré : squelette extension en lecture seule ; smoke VS Code à valider ;
 3. PR/commit C : envoi, flux et annulation ;
 4. PR/commit D : reconnexion et tests Remote-SSH ;
 5. PR/commit E : documentation et packaging privé.

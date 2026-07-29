@@ -21,6 +21,23 @@ Run `joe --help` for all options. Joe creates `.agentflow/` in the target
 project for compatibility with the original memory layout. The product and
 executable are named Joe.
 
+## VS Code extension preview
+
+The read-only preview lives in `vscode-extension/`. It runs in the workspace
+extension host, including Remote-SSH, and connects to Joe on the same host.
+
+```bash
+cd vscode-extension
+npm ci
+npm test
+npm run package
+```
+
+Install the generated `.vsix` in the VS Code window connected to the target
+host. Start Joe normally, then open the Joe activity-bar view. This preview
+shows server identity and conversations; sending and cancelling runs remain
+intentionally disabled.
+
 ## Safety model
 
 - Analysis and review calls are read-only.

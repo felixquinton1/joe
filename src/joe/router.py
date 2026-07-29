@@ -18,6 +18,14 @@ MODIFY_PHRASES = {
     "mets en œuvre",
     "mets en oeuvre",
     "applique ces changements",
+    "passe à la suite",
+    "passe a la suite",
+    "poursuis l'implémentation",
+    "poursuis l’implémentation",
+    "continue l'implémentation",
+    "continue l’implémentation",
+    "reprends l'implémentation",
+    "reprends l’implémentation",
 }
 FEATURE_REQUEST_PATTERNS = (
     re.compile(

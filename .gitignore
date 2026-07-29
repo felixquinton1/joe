@@ -8,3 +8,6 @@ __pycache__/
 .venv/
 dist/
 build/
+vscode-extension/node_modules/
+vscode-extension/out/
+vscode-extension/*.vsix

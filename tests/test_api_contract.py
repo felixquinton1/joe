@@ -17,6 +17,15 @@ def start_server(tmp_path):
     return server, thread
 
 
+def json_request(connection, method, path, payload=None):
+    body = None if payload is None else json.dumps(payload)
+    headers = {} if body is None else {"Content-Type": "application/json"}
+    connection.request(method, path, body=body, headers=headers)
+    response = connection.getresponse()
+    raw = response.read()
+    return response.status, json.loads(raw) if raw else None
+
+
 def test_contract_exposes_independent_api_version(tmp_path):
     server, thread = start_server(tmp_path)
     try:
@@ -32,6 +41,120 @@ def test_contract_exposes_independent_api_version(tmp_path):
         assert payload["api_version"] == API_VERSION == "1.0"
         assert isinstance(payload["providers"], list)
         assert isinstance(payload["modes"], list)
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_contract_read_only_discovery_endpoints(tmp_path):
+    server, thread = start_server(tmp_path)
+    try:
+        connection = http.client.HTTPConnection(
+            "127.0.0.1", server.server_port, timeout=5
+        )
+        for path in (
+            "/api/capabilities",
+            "/api/usage",
+            "/api/projects",
+            "/api/conversations",
+            "/api/runs/active",
+            "/api/history",
+        ):
+            status, payload = json_request(connection, "GET", path)
+            assert status == 200
+            assert payload is not None
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_contract_project_and_conversation_lifecycle(tmp_path):
+    server, thread = start_server(tmp_path)
+    try:
+        connection = http.client.HTTPConnection(
+            "127.0.0.1", server.server_port, timeout=5
+        )
+        status, project = json_request(
+            connection, "POST", "/api/projects", {"name": "Extension"}
+        )
+        assert status == 201
+
+        status, project_detail = json_request(
+            connection, "GET", f"/api/projects/{project['id']}"
+        )
+        assert status == 200
+        assert project_detail["name"] == "Extension"
+
+        status, renamed_project = json_request(
+            connection,
+            "PATCH",
+            f"/api/projects/{project['id']}",
+            {"name": "Extension VS Code"},
+        )
+        assert status == 200
+        assert renamed_project["name"] == "Extension VS Code"
+
+        status, conversation = json_request(
+            connection,
+            "POST",
+            "/api/conversations",
+            {"project_id": project["id"]},
+        )
+        assert status == 201
+
+        status, renamed = json_request(
+            connection,
+            "PATCH",
+            f"/api/conversations/{conversation['id']}",
+            {"title": "Lecture seule"},
+        )
+        assert status == 200
+        assert renamed["title"] == "Lecture seule"
+
+        status, detail = json_request(
+            connection, "GET", f"/api/conversations/{conversation['id']}"
+        )
+        assert status == 200
+        assert detail["title"] == "Lecture seule"
+
+        status, deleted = json_request(
+            connection, "DELETE", f"/api/conversations/{conversation['id']}"
+        )
+        assert status == 200
+        assert deleted["deleted"] is True
+
+        status, missing = json_request(
+            connection, "GET", f"/api/conversations/{conversation['id']}"
+        )
+        assert status == 404
+        assert missing is None
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_contract_missing_run_resources_return_404(tmp_path):
+    server, thread = start_server(tmp_path)
+    try:
+        connection = http.client.HTTPConnection(
+            "127.0.0.1", server.server_port, timeout=5
+        )
+        status, history = json_request(
+            connection, "GET", "/api/history/missing-run"
+        )
+        assert status == 404
+        assert history is None
+
+        status, cancelled = json_request(
+            connection, "POST", "/api/runs/missing-run/cancel", {}
+        )
+        assert status == 404
+        assert cancelled == {"cancelled": False}
+
+        connection.request("GET", "/api/events/missing-run")
+        events = connection.getresponse()
+        assert events.status == 404
+        events.read()
     finally:
         server.shutdown()
         thread.join(timeout=2)
