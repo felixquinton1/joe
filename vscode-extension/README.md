@@ -9,8 +9,11 @@ Première interface VS Code de Joe, volontairement limitée à la lecture.
 - lancer Joe sur ce même hôte avec `joe` ;
 - conserver l’adresse par défaut `http://127.0.0.1:8765`.
 
-La vue Joe affiche la version du serveur, le projet et les conversations. Elle
-ne peut encore ni créer une conversation, ni envoyer ou annuler un run.
+La vue Joe affiche la version du serveur, le projet et les conversations. Le
+bouton de redémarrage relance uniquement le serveur tmux du port courant, après
+confirmation, et refuse l’opération lorsqu’un run est actif. Sans tmux, Joe
+demande un redémarrage manuel. L’extension ne peut encore ni créer une
+conversation, ni envoyer ou annuler un run.
 
 ## Développement
 

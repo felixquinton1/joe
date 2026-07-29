@@ -123,6 +123,8 @@ complète et les vérifications JavaScript du client web existant.
 3. Ajouter une commande de diagnostic et un indicateur de connexion.
 4. Afficher le projet, la version du serveur et les conversations.
 5. Vérifier que le navigateur et VS Code montrent les mêmes données.
+6. Permettre le redémarrage confirmé d’un serveur tmux, avec refus lorsqu’un
+   run est actif et forçage explicite seulement si l’API ne répond plus.
 
 Gate : aucune écriture Joe n'est encore autorisée depuis l'extension.
 

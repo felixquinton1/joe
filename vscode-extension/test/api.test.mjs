@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
 
-import { JoeApiError, JoeClient } from "../out/api.js";
+import {
+  JoeClient,
+  JoeCompatibilityError,
+  JoeConnectionError,
+} from "../out/api.js";
+import { planRestart } from "../out/restart.js";
 
 function fixture(status) {
   const server = http.createServer((request, response) => {
@@ -13,6 +18,10 @@ function fixture(status) {
     }
     if (request.url === "/api/conversations") {
       response.end(JSON.stringify([{ id: "one", title: "Test" }]));
+      return;
+    }
+    if (request.url === "/api/runs/active") {
+      response.end(JSON.stringify([]));
       return;
     }
     response.statusCode = 404;
@@ -37,6 +46,11 @@ test("reads status and conversations from API 1.x", async t => {
 
   assert.equal((await client.status()).api_version, "1.0");
   assert.equal((await client.conversations())[0].title, "Test");
+  assert.deepEqual(await client.activeRuns(), []);
+  assert.deepEqual(
+    await planRestart(client, "/tmp/fallback"),
+    { mode: "ready", project: "/tmp/project" }
+  );
 });
 
 test("rejects an incompatible API major", async t => {
@@ -51,5 +65,26 @@ test("rejects an incompatible API major", async t => {
   const address = server.address();
   const client = new JoeClient(`http://127.0.0.1:${address.port}`);
 
-  await assert.rejects(() => client.status(), JoeApiError);
+  await assert.rejects(() => client.status(), JoeCompatibilityError);
+  assert.deepEqual(
+    await planRestart(client, "/tmp/fallback"),
+    {
+      mode: "error",
+      message: "API Joe incompatible : 2.0",
+    }
+  );
+});
+
+test("only an unreachable server enables forced restart", async () => {
+  const temporary = http.createServer();
+  await new Promise(resolve => temporary.listen(0, "127.0.0.1", resolve));
+  const address = temporary.address();
+  await new Promise(resolve => temporary.close(resolve));
+  const client = new JoeClient(`http://127.0.0.1:${address.port}`);
+
+  await assert.rejects(() => client.status(), JoeConnectionError);
+  assert.deepEqual(
+    await planRestart(client, "/tmp/workspace"),
+    { mode: "force", project: "/tmp/workspace" }
+  );
 });

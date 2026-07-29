@@ -36,7 +36,8 @@ npm run package
 Install the generated `.vsix` in the VS Code window connected to the target
 host. Start Joe normally, then open the Joe activity-bar view. This preview
 shows server identity and conversations; sending and cancelling runs remain
-intentionally disabled.
+intentionally disabled. Its restart button is limited to tmux-managed Joe
+servers and refuses to stop an active run.
 
 ## Safety model
 

@@ -15,7 +15,15 @@ export interface JoeConversation {
   project_id?: string;
 }
 
+export interface JoeActiveRun {
+  run_id: string;
+  conversation_id: string;
+  request: string;
+}
+
 export class JoeApiError extends Error {}
+export class JoeConnectionError extends JoeApiError {}
+export class JoeCompatibilityError extends JoeApiError {}
 
 export class JoeClient {
   constructor(private readonly baseUrl: string) {}
@@ -24,7 +32,7 @@ export class JoeClient {
     const status = await this.get<JoeStatus>("/api/status");
     const major = Number.parseInt(status.api_version?.split(".")[0] || "", 10);
     if (major !== SUPPORTED_API_MAJOR) {
-      throw new JoeApiError(
+      throw new JoeCompatibilityError(
         `API Joe incompatible : ${status.api_version || "non versionnée"}`
       );
     }
@@ -35,12 +43,16 @@ export class JoeClient {
     return this.get<JoeConversation[]>("/api/conversations");
   }
 
+  async activeRuns(): Promise<JoeActiveRun[]> {
+    return this.get<JoeActiveRun[]>("/api/runs/active");
+  }
+
   private async get<T>(path: string): Promise<T> {
     let response: Response;
     try {
       response = await fetch(new URL(path, this.baseUrl));
     } catch (error) {
-      throw new JoeApiError(
+      throw new JoeConnectionError(
         `Serveur Joe inaccessible : ${error instanceof Error ? error.message : error}`
       );
     }

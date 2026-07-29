@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from joe.cli import _kill
+from joe.cli import _kill, _restart
 
 
 def test_kill_stops_only_numbered_joe_tmux_sessions(monkeypatch, capsys):
@@ -36,3 +36,57 @@ def test_kill_succeeds_when_no_joe_session_exists(monkeypatch, capsys):
 
     assert _kill([]) == 0
     assert "aucune session" in capsys.readouterr().out
+
+
+def test_restart_refuses_when_a_run_is_active(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("joe.cli.shutil.which", lambda name: "/usr/bin/tmux")
+    monkeypatch.setattr("joe.cli._active_runs", lambda url: [{"run_id": "one"}])
+
+    assert _restart(["-C", str(tmp_path)]) == 3
+    assert "tâche est encore active" in capsys.readouterr().err
+
+
+def test_restart_recreates_only_selected_tmux_session(
+    tmp_path, monkeypatch
+):
+    calls = []
+    monkeypatch.setattr("joe.cli.shutil.which", lambda name: "/usr/bin/tmux")
+    monkeypatch.setattr("joe.cli._active_runs", lambda url: [])
+    monkeypatch.setattr(
+        "joe.cli.subprocess.run",
+        lambda command, **kwargs: calls.append(command)
+        or SimpleNamespace(returncode=0, stdout=""),
+    )
+    monkeypatch.setattr("joe.cli._web", lambda args: calls.append(args) or 0)
+
+    assert _restart(["-C", str(tmp_path), "--port", "9000"]) == 0
+    assert calls[0] == ["tmux", "kill-session", "-t", "joe-9000"]
+    assert "--port" in calls[1]
+    assert "9000" in calls[1]
+
+
+def test_restart_requires_force_when_server_is_unreachable(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setattr("joe.cli.shutil.which", lambda name: "/usr/bin/tmux")
+    monkeypatch.setattr("joe.cli._active_runs", lambda url: None)
+
+    assert _restart(["-C", str(tmp_path)]) == 3
+    assert "utilise --force" in capsys.readouterr().err
+
+
+def test_forced_restart_recovers_an_unreachable_server(
+    tmp_path, monkeypatch
+):
+    calls = []
+    monkeypatch.setattr("joe.cli.shutil.which", lambda name: "/usr/bin/tmux")
+    monkeypatch.setattr("joe.cli._active_runs", lambda url: None)
+    monkeypatch.setattr(
+        "joe.cli.subprocess.run",
+        lambda command, **kwargs: calls.append(command)
+        or SimpleNamespace(returncode=0, stdout=""),
+    )
+    monkeypatch.setattr("joe.cli._web", lambda args: calls.append(args) or 0)
+
+    assert _restart(["-C", str(tmp_path), "--force"]) == 0
+    assert calls[0] == ["tmux", "kill-session", "-t", "joe-8765"]

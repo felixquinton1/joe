@@ -7,6 +7,8 @@ import shutil
 import subprocess
 import sys
 import threading
+import urllib.error
+import urllib.request
 import webbrowser
 from pathlib import Path
 
@@ -45,6 +47,8 @@ def main(argv: list[str] | None = None) -> int:
         return _sync(arguments[1:])
     if arguments and arguments[0] == "kill":
         return _kill(arguments[1:])
+    if arguments and arguments[0] == "restart":
+        return _restart(arguments[1:])
     if arguments and arguments[0] == "doctor":
         return _doctor(arguments[1:])
     if arguments and arguments[0] == "chat":
@@ -246,6 +250,85 @@ def _kill(argv: list[str]) -> int:
         suffix = "s" if stopped > 1 else ""
         print(f"Joe : {stopped} session{suffix} tmux arrêtée{suffix}.")
     return 0
+
+
+def _restart(argv: list[str]) -> int:
+    restart_parser = argparse.ArgumentParser(
+        prog="joe restart",
+        description="Restart one tmux-managed Joe web server.",
+    )
+    restart_parser.add_argument("-C", "--project", type=Path, default=Path.cwd())
+    restart_parser.add_argument("--host", default="127.0.0.1")
+    restart_parser.add_argument("--port", type=int, default=8765)
+    restart_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="restart even when the active-run check is unavailable",
+    )
+    args = restart_parser.parse_args(argv)
+    if not args.project.is_dir():
+        print(
+            f"joe restart: project directory does not exist: {args.project}",
+            file=sys.stderr,
+        )
+        return 2
+    if not shutil.which("tmux"):
+        print(
+            "joe restart: tmux est requis pour un redémarrage automatique.",
+            file=sys.stderr,
+        )
+        return 2
+
+    url = f"http://{args.host}:{args.port}"
+    active = _active_runs(url)
+    if active:
+        print(
+            "joe restart: redémarrage refusé, une tâche est encore active.",
+            file=sys.stderr,
+        )
+        return 3
+    if active is None and not args.force:
+        print(
+            "joe restart: état du serveur inaccessible ; utilise --force "
+            "pour redémarrer quand même.",
+            file=sys.stderr,
+        )
+        return 3
+
+    subprocess.run(
+        ["tmux", "kill-session", "-t", f"joe-{args.port}"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return _web(
+        [
+            "-C",
+            str(args.project.resolve()),
+            "--host",
+            args.host,
+            "--port",
+            str(args.port),
+            "--no-browser",
+        ]
+    )
+
+
+def _active_runs(url: str) -> list[dict] | None:
+    try:
+        with urllib.request.urlopen(
+            f"{url}/api/runs/active",
+            timeout=2,
+        ) as response:
+            payload = json.loads(response.read())
+    except (
+        OSError,
+        ValueError,
+        json.JSONDecodeError,
+        urllib.error.URLError,
+    ):
+        return None
+    return payload if isinstance(payload, list) else None
 
 
 def _doctor(argv: list[str]) -> int:

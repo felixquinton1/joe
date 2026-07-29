@@ -2,7 +2,7 @@
   "name": "joe-control-room",
   "displayName": "Joe",
   "description": "Read-only VS Code control room for a local Joe server.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "felixquinton",
   "license": "UNLICENSED",
   "repository": {
@@ -22,13 +22,19 @@
   "main": "./out/extension.js",
   "activationEvents": [
     "onView:joe.overview",
-    "onCommand:joe.refresh"
+    "onCommand:joe.refresh",
+    "onCommand:joe.restart"
   ],
   "contributes": {
     "commands": [
       {
         "command": "joe.refresh",
         "title": "Joe: Actualiser"
+      },
+      {
+        "command": "joe.restart",
+        "title": "Joe: Redémarrer le serveur",
+        "icon": "$(debug-restart)"
       }
     ],
     "configuration": {
@@ -64,6 +70,11 @@
           "command": "joe.refresh",
           "when": "view == joe.overview",
           "group": "navigation"
+        },
+        {
+          "command": "joe.restart",
+          "when": "view == joe.overview",
+          "group": "navigation@2"
         }
       ]
     }
