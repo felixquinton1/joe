@@ -35,6 +35,16 @@ def test_context_is_bounded_and_includes_project_instructions(tmp_path):
     assert "current request" in context
 
 
+def test_context_requires_a_clear_plan_and_result_separation(tmp_path):
+    memory = ProjectMemory(tmp_path)
+
+    context = memory.context("organise la réponse")
+
+    assert "`Ce que je vais faire :`" in context
+    assert "`Résultat :`" in context
+    assert "réponse finale autonome" in context
+
+
 def test_logs_redact_common_secret_shapes(tmp_path):
     memory = ProjectMemory(tmp_path)
     path = memory.save_run(

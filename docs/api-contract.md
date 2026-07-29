@@ -56,7 +56,7 @@ ne font pas partie du premier client VS Code en lecture seule.
 
 ```json
 {
-  "version": "0.21.15",
+  "version": "0.21.16",
   "api_version": "1.0",
   "project": "/chemin/du/projet",
   "providers": ["codex", "claude", "gemini", "copilot"],

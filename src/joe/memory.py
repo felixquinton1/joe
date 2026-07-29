@@ -37,6 +37,16 @@ SECRET_PATTERN = re.compile(
     r"""(?i)(api[_-]?key|token|secret|password)(\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s]+)"""
 )
 _MEMORY_LOCK = threading.RLock()
+RESPONSE_ORGANIZATION = """# Organisation de la réponse
+Sépare clairement les annonces de progression de la réponse finale.
+
+- Avant d'agir, indique brièvement ce que tu vas faire sous
+  `Ce que je vais faire :`.
+- Réserve les mises à jour intermédiaires aux informations de progression utiles.
+- Une fois le travail terminé, commence la réponse finale par `Résultat :`.
+- Rends la réponse finale autonome et centrée sur le résultat. Ne répète pas le
+  plan initial et ne mélange pas les intentions futures avec le travail terminé.
+"""
 
 
 def redact(text: str) -> str:
@@ -103,7 +113,10 @@ class ProjectMemory:
         with _MEMORY_LOCK:
             self.ensure()
             limit = int(self.config()["max_context_chars"])
-            sections = [f"# Current request\n{request.strip()}"]
+            sections = [
+                f"# Current request\n{request.strip()}",
+                RESPONSE_ORGANIZATION.strip(),
+            ]
             for filename in ("project.md", "session.md", "handoff.md"):
                 text = (self.root / filename).read_text(errors="replace")
                 sections.append(f"# {filename}\n{text.strip()}")
