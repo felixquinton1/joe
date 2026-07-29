@@ -212,6 +212,21 @@ def test_polite_interface_change_is_writable():
     assert route.mode is Mode.FAST
 
 
+def test_direct_bug_report_is_an_implicit_fix_request():
+    route = Router().route(
+        "Les quotas sont bugués, on ne peut pas les voir entièrement et "
+        "le panneau déborde."
+    )
+
+    assert route.intent is Intent.MODIFY
+
+
+def test_explicit_bug_explanation_remains_read_only():
+    route = Router().route("Pourquoi les quotas sont bugués ?")
+
+    assert route.intent is not Intent.MODIFY
+
+
 def test_capability_question_about_access_stays_read_only():
     route = Router().route(
         "Est-ce que tu peux modifier le code de Joe depuis cette session ?"

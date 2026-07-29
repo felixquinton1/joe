@@ -212,6 +212,8 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b".sr-only" in style
         assert b"height: 100dvh" in style
         assert b"grid-template-columns: var(--left-panel)" in style
+        assert b"overflow: visible" in style
+        assert b"overscroll-behavior: contain" in style
     finally:
         server.shutdown()
         thread.join(timeout=2)

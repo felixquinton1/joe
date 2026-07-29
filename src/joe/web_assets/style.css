@@ -68,7 +68,13 @@ button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-v
   padding: 18px 16px;
 }
 .history-panel { overflow: auto; }
-.activity-panel { overflow: hidden; display: flex; flex-direction: column; }
+.activity-panel {
+  position: relative;
+  z-index: 20;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+}
 .panel-resizer { position: relative; z-index: 4; cursor: col-resize; }
 .panel-resizer::after {
   content: "";
@@ -499,6 +505,9 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
   top: 39px;
   right: 0;
   width: min(330px, calc(100vw - 24px));
+  max-height: min(72vh, 620px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius);

@@ -50,6 +50,22 @@ FEATURE_REQUEST_PATTERNS = (
         re.IGNORECASE,
     ),
 )
+DEFECT_REPORT_PATTERNS = (
+    re.compile(
+        r"\b(?:est|sont|reste|restent|semble|semblent)\s+"
+        r"(?:bugu[ée]s?|cass[ée]s?|bloqu[ée]s?|illisible|inutilisable)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:ça|cela|ceci|il|elle)\s+ne\s+"
+        r"(?:fonctionne|marche|s['’]affiche)\s+pas\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\b(?:ça|cela|le panneau|la fenêtre)\s+d[ée]borde\b", re.IGNORECASE),
+)
+ANALYSIS_QUESTION_PREFIXES = (
+    "analyse", "diagnostique", "explique", "pourquoi", "comment",
+)
 READ_ONLY_AMBIGUOUS_MODIFY_WORDS = {"implementation", "implémentation"}
 REVIEW_WORDS = {
     "avis", "autre", "critique", "review", "relis", "relecture", "vérifie",
@@ -163,6 +179,10 @@ class Router:
         feature_request = any(
             pattern.search(intent_text) for pattern in FEATURE_REQUEST_PATTERNS
         )
+        defect_report = (
+            any(pattern.search(intent_text) for pattern in DEFECT_REPORT_PATTERNS)
+            and not intent_text.strip().lower().startswith(ANALYSIS_QUESTION_PREFIXES)
+        )
         intent = (
             Intent.MODIFY
             if (
@@ -170,6 +190,7 @@ class Router:
                 or any(phrase in intent_text.lower() for phrase in MODIFY_PHRASES)
                 or intent_text.strip().lower() == "go"
                 or feature_request
+                or defect_report
             )
             and (not capability_question or feature_request)
             else Intent.ANALYZE
