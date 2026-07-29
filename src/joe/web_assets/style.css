@@ -287,7 +287,7 @@ button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-v
 .provider-controls {
   position: absolute;
   z-index: 15;
-  top: 46px;
+  top: calc(100% + 8px);
   right: 0;
   width: min(570px, 78vw);
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -295,9 +295,9 @@ button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-v
   border: 1px solid rgba(203, 199, 188, .75);
   border-radius: 12px;
   background: rgba(255, 255, 255, .97);
-  box-shadow: 0 12px 34px rgba(30, 40, 36, .09);
+  box-shadow: 0 8px 24px rgba(30, 40, 36, .07);
   transform-origin: top right;
-  animation: popover-in .14s ease-out;
+  animation: dropdown-in .12s ease-out;
 }
 .controls label {
   min-width: 0;
@@ -514,7 +514,7 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 .usage-panel {
   position: absolute;
   z-index: 110;
-  top: 39px;
+  top: calc(100% + 8px);
   right: 0;
   width: min(330px, calc(100vw - 24px));
   max-height: min(72vh, 620px);
@@ -524,9 +524,9 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
   border: 1px solid rgba(203, 199, 188, .75);
   border-radius: 12px;
   background: rgba(255, 255, 255, .97);
-  box-shadow: 0 12px 34px rgba(30, 40, 36, .09);
+  box-shadow: 0 8px 24px rgba(30, 40, 36, .07);
   transform-origin: top right;
-  animation: popover-in .14s ease-out;
+  animation: dropdown-in .12s ease-out;
 }
 .usage-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
 .usage-heading strong { display: block; margin-top: 2px; font-size: 13px; }
@@ -680,9 +680,9 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 .dialog-actions button { padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; cursor: pointer; }
 .dialog-actions button:last-child { border-color: var(--green); color: #fff; background: var(--green); }
 .dialog-actions .danger-button:last-child { border-color: var(--danger); background: var(--danger); }
-@keyframes popover-in {
-  from { opacity: 0; transform: translateY(-4px) scale(.99); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+@keyframes dropdown-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 @keyframes dialog-in {
   from { opacity: 0; transform: translateY(5px) scale(.99); }
@@ -768,10 +768,12 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
   .advanced-config > summary::before { content: "⚙"; font-size: 13px; }
   .advanced-config > summary::after, .advanced-config > summary span { display: none; }
   .provider-controls {
-    position: fixed;
-    top: 52px;
-    right: 10px;
-    width: calc(100vw - 20px);
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: calc(100vw - 24px);
+    max-height: 62vh;
+    overflow-y: auto;
     grid-template-columns: 1fr;
   }
   .conversation { padding: 18px 14px 140px; }
@@ -811,7 +813,7 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
   .history-panel.mobile-open { overflow: auto; }
   .activity-panel.mobile-open { right: 0; left: auto; }
   .activity-tools { padding-right: 112px; }
-  .usage-panel { position: fixed; top: 54px; right: 10px; left: 10px; width: auto; }
+  .usage-panel { top: calc(100% + 8px); right: 0; left: auto; width: min(330px, calc(100vw - 24px)); }
   .project-dialog form { padding: 18px; }
 }
 

@@ -217,7 +217,8 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b"grid-template-columns: var(--left-panel)" in style
         assert b"overflow: visible" in style
         assert b"overscroll-behavior: contain" in style
-        assert b"@keyframes popover-in" in style
+        assert b"top: calc(100% + 8px)" in style
+        assert b"@keyframes dropdown-in" in style
         assert b"animation: dialog-in" in style
     finally:
         server.shutdown()
