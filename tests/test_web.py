@@ -160,6 +160,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b'src="/markdown.js"' in page
         assert b'src="/i18n.js"' in page
         assert b'id="language"' in page
+        assert b'class="sr-only"' in page
         assert b'data-i18n="slogan"' in page
         assert b'id="project"' not in page
         assert b'<span class="brand-mark">J</span>' in page
@@ -203,6 +204,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b".message.workflow-summary-pending" in style
         assert b".copy-button.copied" in style
         assert b".language-picker" in style
+        assert b".sr-only" in style
     finally:
         server.shutdown()
         thread.join(timeout=2)
