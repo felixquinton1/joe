@@ -17,9 +17,6 @@ from .provider_registry import get_provider_names
 from .routing import resolve_route
 from .usage import usage_status
 
-PROVIDERS = get_provider_names()
-
-
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="joe",
@@ -27,7 +24,11 @@ def parser() -> argparse.ArgumentParser:
     )
     result.add_argument("request", nargs="*", help="natural-language request")
     result.add_argument("-C", "--project", type=Path, default=Path.cwd())
-    result.add_argument("--agent", choices=PROVIDERS, help="force one provider")
+    result.add_argument(
+        "--agent",
+        choices=get_provider_names(),
+        help="force one provider",
+    )
     result.add_argument("--mode", choices=[mode.value for mode in Mode])
     result.add_argument("--dry-run", action="store_true", help="show routing only")
     result.add_argument("--version", action="version", version=__version__)

@@ -16,5 +16,16 @@ PROVIDERS = (
 )
 
 
+def get_provider_specs() -> tuple[ProviderSpec, ...]:
+    return PROVIDERS
+
+
 def get_provider_names() -> tuple[str, ...]:
-    return tuple(p.name for p in PROVIDERS)
+    return tuple(provider.name for provider in get_provider_specs())
+
+
+def get_provider_catalog() -> tuple[dict[str, str], ...]:
+    return tuple(
+        {"id": provider.name, "label": provider.label}
+        for provider in get_provider_specs()
+    )

@@ -69,7 +69,6 @@ CAPABILITY_QUESTION_PHRASES = {
     "est il possible", "puis-je", "puis je", "dois-je", "dois je",
     "est-ce que ça", "est ce que ça", "que se passe-t-il",
 }
-PROVIDER_NAMES = set(get_provider_names())
 HEALTH_CHECK_PHRASES = {
     "petit test", "teste ", "test de ", "test du ", "fonctionne",
     "est disponible", "marche",
@@ -132,7 +131,7 @@ class Router:
         intent_words = _tokens(intent_text)
         if read_only_directive:
             intent_words -= READ_ONLY_AMBIGUOUS_MODIFY_WORDS
-        named_providers = words & PROVIDER_NAMES
+        named_providers = words & set(get_provider_names())
         explicit_provider = (
             next(iter(named_providers)) if len(named_providers) == 1 else None
         )

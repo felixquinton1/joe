@@ -181,7 +181,10 @@ After a browser refresh, the interface reattaches to active server-side event
 streams instead of losing their run identifiers. If the server restarts while
 the page stays open, Joe reconciles the browser state with the active server
 runs: recovered tasks reconnect, while missing runs stop instead of leaving an
-infinite spinner. Open pages also reload when the backend version changes.
+infinite spinner. Each server-sent event has a monotonic identifier, so a
+transient stream reconnection resumes after the last received event without
+replaying earlier progress. Open pages also reload when the backend version
+changes.
 
 Conversations are persistent per project. Each conversation keeps its full
 message history and independent agent, workflow, model, effort, and permission
@@ -194,13 +197,20 @@ When unsummarized older messages exceed 30,000 characters, Joe starts a
 tool-free Gemini Flash compaction after returning the visible answer. The full
 history is retained; only the prompt representation is summarized. This policy
 is configurable under `semantic_compaction` in `.agentflow/config.yaml`.
-Conversations can be pinned and several can run concurrently; avoid
-launching concurrent write tasks against the same files.
+Conversations can be pinned and several can run concurrently. A conversation
+owns at most one active run: concurrent submissions race through one atomic
+reservation, and the rejected request receives HTTP 409 before its user message
+is persisted. Avoid launching concurrent write tasks from different
+conversations against the same files.
 Completed live runs remain reconnectable for five minutes, with at most 50
 completed runs retained in process memory. Project session/handoff updates,
 run-log pruning, and Gemini usage accumulation are serialized and written
 atomically so concurrent runs cannot lose an update or mix the two active
 memory files.
+Provider names and labels come from one static registry shared by the CLI,
+router, execution engine, HTTP API, capability response, and Web selector.
+Adding a provider remains an explicit source-code change; the registry is not a
+dynamic plugin loader.
 Projects and conversations can be reordered by drag and drop. Favorites remain
 above non-favorites, each conversation shows its last-call date, and project
 groups can be collapsed. The left and right panels have resize handles; their

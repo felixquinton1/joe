@@ -5,6 +5,7 @@ from .capabilities import cached_provider_capabilities, provider_capabilities
 from .git_review import GitSnapshot, build_report, reject, snapshot
 from .usage import cached_usage_status, usage_status
 from .web_runs import (
+    ActiveConversationError,
     LiveRun,
     RunManager,
     _atomic_json,
@@ -20,6 +21,7 @@ from .web_server import Handler, JoeServer, serve
 
 __all__ = [
     "GitSnapshot",
+    "ActiveConversationError",
     "Handler",
     "JoeServer",
     "LiveRun",

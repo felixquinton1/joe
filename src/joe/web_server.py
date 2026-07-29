@@ -10,7 +10,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from . import __version__
 from .http_utils import RequestBodyError, read_json_body, validate_bind
-from .web_runs import RunManager
+from .provider_registry import get_provider_catalog, get_provider_names
+from .web_runs import ActiveConversationError, RunManager
 
 _ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
@@ -46,7 +47,8 @@ class Handler(BaseHTTPRequestHandler):
                     "conversation_backup": str(
                         self.server.manager.conversations.backup_path
                     ),
-                    "providers": ["codex", "claude", "gemini", "copilot"],
+                    "providers": get_provider_names(),
+                    "provider_catalog": get_provider_catalog(),
                     "modes": ["fast", "review", "consensus"],
                 }
             )
@@ -87,7 +89,13 @@ class Handler(BaseHTTPRequestHandler):
             item = self.server.manager.history_item(unquote(path.rsplit("/", 1)[1]))
             return self._json(item, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
         if path.startswith("/api/events/"):
-            return self._events(unquote(path.rsplit("/", 1)[1]))
+            return self._events(
+                unquote(path.rsplit("/", 1)[1]),
+                _event_cursor(
+                    self.headers.get("Last-Event-ID"),
+                    parse_qs(parsed.query).get("after", ["0"])[0],
+                ),
+            )
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_POST(self) -> None:
@@ -156,21 +164,24 @@ class Handler(BaseHTTPRequestHandler):
             model = str(payload.get("model", "")).strip() or None
             effort = str(payload.get("effort", "")).strip() or None
             execution_mode = str(payload.get("execution_mode", "")).strip() or None
-            if agent not in {None, "codex", "claude", "gemini", "copilot"}:
+            if agent is not None and agent not in set(get_provider_names()):
                 raise ValueError("invalid agent")
             if mode not in {None, "fast", "review", "consensus"}:
                 raise ValueError("invalid mode")
         except ValueError as exc:
             return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-        run = self.server.manager.start(
-            request,
-            conversation_id,
-            agent,
-            mode,
-            model,
-            effort,
-            execution_mode,
-        )
+        try:
+            run = self.server.manager.start(
+                request,
+                conversation_id,
+                agent,
+                mode,
+                model,
+                effort,
+                execution_mode,
+            )
+        except ActiveConversationError as exc:
+            return self._json({"error": str(exc)}, HTTPStatus.CONFLICT)
         self._json({"run_id": run.run_id}, HTTPStatus.ACCEPTED)
 
     def do_PATCH(self) -> None:
@@ -206,7 +217,7 @@ class Handler(BaseHTTPRequestHandler):
             HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND,
         )
 
-    def _events(self, run_id: str) -> None:
+    def _events(self, run_id: str, after: int = 0) -> None:
         run = self.server.manager.get_run(run_id)
         if not run:
             return self.send_error(HTTPStatus.NOT_FOUND)
@@ -215,7 +226,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Connection", "close")
         self.end_headers()
-        index = 0
+        index = min(after, len(run.events))
         try:
             while True:
                 with run.condition:
@@ -229,7 +240,9 @@ class Handler(BaseHTTPRequestHandler):
                     self.wfile.flush()
                 for event in events:
                     data = json.dumps(event, ensure_ascii=False)
-                    self.wfile.write(f"data: {data}\n\n".encode())
+                    self.wfile.write(
+                        f"id: {event['event_id']}\ndata: {data}\n\n".encode()
+                    )
                     self.wfile.flush()
                 if done:
                     self.close_connection = True
@@ -287,3 +300,14 @@ def _web_facade():
     from . import web as facade
 
     return facade
+
+
+def _event_cursor(header: str | None, query: str | None) -> int:
+    for value in (header, query):
+        if value in {None, ""}:
+            continue
+        try:
+            return max(0, int(value))
+        except (TypeError, ValueError):
+            continue
+    return 0

@@ -4,7 +4,9 @@ import threading
 import time
 from types import SimpleNamespace
 
+from joe import provider_registry
 from joe.models import Intent, Mode, Route
+from joe.provider_registry import ProviderSpec
 from joe.web import (
     Handler,
     JoeServer,
@@ -47,6 +49,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         )
         assert "joe/backups" in payload["conversation_backup"]
         assert "codex" in payload["providers"]
+        assert {"id": "codex", "label": "Codex"} in payload["provider_catalog"]
 
         connection.request("GET", "/app.js")
         response = connection.getresponse()
@@ -151,6 +154,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b'id="toggle-activity"' in page
         assert b'src="/markdown.js"' in page
         assert b'<span class="brand-mark">J</span>' in page
+        assert b"<option>codex</option>" not in page
 
         connection.request("GET", "/app.js")
         response = connection.getresponse()
@@ -170,6 +174,8 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b"event.cli_version" not in script
         assert b"updateWorkflowFallback" in script
         assert b"fallback_from" in script
+        assert b"updateProviderMenu" in script
+        assert b"lastEventId" in script
 
         connection.request("GET", "/style.css")
         response = connection.getresponse()
@@ -204,6 +210,47 @@ def test_web_rejects_empty_requests(tmp_path):
         server.shutdown()
 
 
+def test_web_api_uses_the_provider_registry(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        provider_registry,
+        "PROVIDERS",
+        provider_registry.PROVIDERS + (ProviderSpec("fixture", "Fixture"),),
+    )
+    monkeypatch.setattr(RunManager, "_execute", lambda self, *args: None)
+    server, thread = start_server(tmp_path)
+    conversation = server.manager.conversations.create()
+    try:
+        connection = http.client.HTTPConnection(
+            "127.0.0.1",
+            server.server_port,
+        )
+        connection.request("GET", "/api/status")
+        response = connection.getresponse()
+        status = json.loads(response.read())
+
+        assert "fixture" in status["providers"]
+        assert {"id": "fixture", "label": "Fixture"} in status["provider_catalog"]
+
+        connection.request(
+            "POST",
+            "/api/runs",
+            body=json.dumps(
+                {
+                    "request": "test",
+                    "conversation_id": conversation["id"],
+                    "agent": "fixture",
+                }
+            ),
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        assert response.status == 202
+        response.read()
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
 def test_web_rejects_invalid_or_oversized_json_uniformly(tmp_path):
     server, thread = start_server(tmp_path)
     try:
@@ -228,6 +275,174 @@ def test_web_rejects_invalid_or_oversized_json_uniformly(tmp_path):
         assert response.status == 413
         assert "maximum" in json.loads(response.read())["error"]
     finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_two_concurrent_http_runs_reserve_one_conversation_atomically(
+    tmp_path,
+    monkeypatch,
+):
+    release = threading.Event()
+
+    def hold_run(self, run, *args):
+        release.wait(timeout=5)
+        with run.condition:
+            run.done = True
+            run.finished_at = time.time()
+            run.condition.notify_all()
+
+    monkeypatch.setattr(RunManager, "_execute", hold_run)
+    server, thread = start_server(tmp_path)
+    conversation = server.manager.conversations.create()
+    barrier = threading.Barrier(2)
+    responses = []
+
+    def launch(request):
+        connection = http.client.HTTPConnection(
+            "127.0.0.1",
+            server.server_port,
+            timeout=5,
+        )
+        barrier.wait()
+        connection.request(
+            "POST",
+            "/api/runs",
+            body=json.dumps(
+                {
+                    "request": request,
+                    "conversation_id": conversation["id"],
+                }
+            ),
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        responses.append((response.status, json.loads(response.read())))
+        connection.close()
+
+    workers = [
+        threading.Thread(target=launch, args=(request,))
+        for request in ("premier", "second")
+    ]
+    try:
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join(timeout=5)
+
+        assert sorted(status for status, _ in responses) == [202, 409]
+        conflict = next(payload for status, payload in responses if status == 409)
+        assert "déjà active" in conflict["error"]
+        messages = server.manager.conversations.get(conversation["id"])["messages"]
+        assert [message["role"] for message in messages] == ["user"]
+        assert messages[0]["content"] in {"premier", "second"}
+    finally:
+        release.set()
+        for worker in workers:
+            worker.join(timeout=2)
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_run_reservation_rolls_back_if_pending_persistence_fails(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(RunManager, "_recover_pending", lambda self: None)
+    manager = RunManager(tmp_path)
+    conversation = manager.conversations.create()
+    monkeypatch.setattr(
+        manager,
+        "_write_pending",
+        lambda *args: (_ for _ in ()).throw(OSError("disk full")),
+    )
+
+    try:
+        manager.start(
+            "test",
+            conversation["id"],
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+    except OSError as error:
+        assert str(error) == "disk full"
+    else:
+        raise AssertionError("The persistence failure must abort the run")
+
+    assert manager.active_runs() == []
+    assert manager.conversations.get(conversation["id"])["messages"] == []
+
+
+def test_sse_reconnect_resumes_after_last_received_event(tmp_path):
+    server, thread = start_server(tmp_path)
+    conversation = server.manager.conversations.create()
+    run = LiveRun("reconnect-run", "continue", conversation["id"])
+    run.emit({"type": "progress", "message": "étape 1"})
+    server.manager.live[run.run_id] = run
+
+    first = http.client.HTTPConnection(
+        "127.0.0.1",
+        server.server_port,
+        timeout=5,
+    )
+    reconnects = []
+    try:
+        first.request("GET", f"/api/events/{run.run_id}")
+        response = first.getresponse()
+        assert response.status == 200
+        assert response.readline() == b"id: 1\n"
+        first_payload = json.loads(
+            response.readline().removeprefix(b"data: ").decode()
+        )
+        assert first_payload["message"] == "étape 1"
+        assert response.readline() == b"\n"
+        first.close()
+
+        run.emit({"type": "complete", "response": "terminé"})
+        with run.condition:
+            run.done = True
+            run.finished_at = time.time()
+            run.condition.notify_all()
+
+        second = http.client.HTTPConnection(
+            "127.0.0.1",
+            server.server_port,
+            timeout=5,
+        )
+        reconnects.append(second)
+        second.request(
+            "GET",
+            f"/api/events/{run.run_id}",
+            headers={"Last-Event-ID": "1"},
+        )
+        resumed = second.getresponse()
+        body = resumed.read()
+
+        assert resumed.status == 200
+        assert b"id: 1\n" not in body
+        assert b"id: 2\n" in body
+        assert "terminé".encode() in body
+
+        query_reconnect = http.client.HTTPConnection(
+            "127.0.0.1",
+            server.server_port,
+            timeout=5,
+        )
+        reconnects.append(query_reconnect)
+        query_reconnect.request(
+            "GET",
+            f"/api/events/{run.run_id}?after=1",
+        )
+        query_body = query_reconnect.getresponse().read()
+        assert b"id: 1\n" not in query_body
+        assert b"id: 2\n" in query_body
+    finally:
+        first.close()
+        for connection in reconnects:
+            connection.close()
         server.shutdown()
         thread.join(timeout=2)
 

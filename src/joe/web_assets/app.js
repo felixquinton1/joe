@@ -1,4 +1,4 @@
-const APP_VERSION = "0.21.11";
+const APP_VERSION = "0.21.12";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -16,12 +16,29 @@ const renderMarkdown = window.JoeMarkdown.renderMarkdown;
 
 async function loadStatus() {
   const status = await fetch("/api/status").then(response => response.json());
+  updateProviderMenu(status.provider_catalog || status.providers || []);
   $("project").textContent = status.project;
   $("version").textContent = status.version || "ancienne version";
   if (status.version !== APP_VERSION) {
     const warning = $("restart-warning");
     warning.textContent = `Le serveur Joe ${status.version || "actuel"} utilise encore un ancien backend. Arrête-le avec Ctrl+C, relance joe, puis recharge cette page.`;
     warning.classList.remove("hidden");
+  }
+}
+
+function updateProviderMenu(providers) {
+  const selected = $("agent").value;
+  const items = providers.map(provider => (
+    typeof provider === "string"
+      ? { id: provider, label: capitalize(provider) }
+      : provider
+  ));
+  setOptions(
+    $("agent"),
+    [{ id: "", label: "Automatique" }, ...items]
+  );
+  if ([...$("agent").options].some(option => option.value === selected)) {
+    $("agent").value = selected;
   }
 }
 
@@ -720,17 +737,20 @@ async function startRun(
 function attachRun(conversationId, runId, request, finalBubble = null) {
   const current = state.runs.get(conversationId) || {};
   if (current.stream) return;
-  const stream = new EventSource(`/api/events/${runId}`);
+  const cursor = Number(current.lastEventId) || 0;
+  const stream = new EventSource(`/api/events/${runId}?after=${cursor}`);
   const activeRun = {
     ...current,
     runId,
     stream,
     bubble: finalBubble || current.bubble || null,
     request,
-    workflow: current.workflow || new Map()
+    workflow: current.workflow || new Map(),
+    lastEventId: cursor
   };
   state.runs.set(conversationId, activeRun);
-  stream.onmessage = ({ data }) => {
+  stream.onmessage = ({ data, lastEventId }) => {
+    if (lastEventId) activeRun.lastEventId = Number(lastEventId);
     const event = JSON.parse(data);
     handleEvent(conversationId, event, activeRun.bubble);
     if (event.type === "complete" || event.type === "error" || event.type === "cancelled") stream.close();
@@ -830,7 +850,8 @@ async function loadActiveRuns() {
       stream: null,
       bubble: null,
       request: run.request,
-      workflow: new Map()
+      workflow: new Map(),
+      lastEventId: 0
     });
   }
 }

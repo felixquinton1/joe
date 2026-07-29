@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Callable
 
 from .models import Intent, ProviderResult
+from .provider_registry import get_provider_names
 from .usage import record_gemini_usage
 
 StreamCallback = Callable[[str, str], None]
@@ -259,7 +260,7 @@ def default_providers(
 ) -> dict[str, Provider]:
     return {
         name: Provider(name, name, additional_roots, remote_access)
-        for name in ("codex", "claude", "gemini", "copilot")
+        for name in get_provider_names()
     }
 
 

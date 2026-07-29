@@ -1,8 +1,9 @@
 # Joe VS Code — Plan d'action
 
-> Statut : brouillon audité. Ce document est la source de vérité de la première
-> phase VS Code ; le moteur Python, l'interface web et les formats de stockage
-> existants restent inchangés tant que les gates de migration ne sont pas validés.
+> Statut : validé, prérequis en cours. Le registre unique, la réservation
+> atomique par conversation et le curseur SSE sont livrés dans Joe 0.21.12.
+> La version d'API et la matrice de contrat restent à fermer avant le squelette
+> VS Code.
 
 ## 1. Objectif
 
@@ -55,8 +56,9 @@ L'extension ne lit et n'écrit jamais directement
 Joe. Elle ne stocke localement que des préférences d'interface non sensibles,
 notamment la dernière conversation sélectionnée.
 
-Le développement utilise des conversations dédiées `VS Code dev` afin d'éviter
-de piloter une même conversation simultanément depuis le navigateur et VS Code.
+Le développement utilise des conversations dédiées `VS Code dev` pour isoler
+les essais. Le serveur refuse déjà avec HTTP 409 un second run simultané dans
+une même conversation, quel que soit le client.
 
 ## 4. Méthode
 
@@ -101,8 +103,8 @@ incompatibles et tolérera les ajouts de champs.
    une matrice exhaustive pour le MVP.
 2. Ajouter une version d'API et, si nécessaire, un identifiant stable du projet
    dans `/api/status`, de façon additive pour le client web existant.
-3. Faire évoluer le serveur SSE avec un identifiant monotone par événement et
-   la reprise via `Last-Event-ID`, tout en gardant le client web compatible.
+3. Contractualiser le curseur SSE déjà livré : identifiant monotone par
+   événement, `Last-Event-ID` et paramètre `after` utilisé par le client Web.
 4. Écrire des tests Python de contrat pour les endpoints, codes HTTP et types
    d'événements du MVP, dont la reprise SSE.
 5. Définir les trois chemins de réconciliation :
@@ -195,7 +197,7 @@ d'usage. Un passage à `systemd --user` est une évolution indépendante.
 | Risque | Garde-fou |
 |---|---|
 | VS Code coupe son extension host | Aucun run fournisseur enfant de l'extension |
-| Deux interfaces modifient la même conversation | Conversations distinctes pendant le pilote |
+| Deux interfaces lancent la même conversation | Réservation serveur atomique et HTTP 409 ; conversations distinctes pendant le pilote |
 | SSE duplique/perd des événements | Identifiants/curseur et réconciliation avec l'état serveur |
 | Serveur redémarré pendant une déconnexion | `pending_runs.json` reste autorité côté Joe |
 | Dérive entre API et extension | Version d'API + tests de contrat |
@@ -226,7 +228,14 @@ Ne bloquent que la phase indiquée :
 
 ## 10. Exécution
 
-Ordre de livraison proposé :
+Prérequis déjà livrés :
+
+1. registre statique unique, sélecteur Web alimenté par le serveur ;
+2. un seul run atomiquement réservé par conversation ;
+3. reprise SSE après coupure, avec tests HTTP de rechargement, achèvement
+   pendant la coupure et reconnexion après achèvement.
+
+Ordre de livraison restant :
 
 1. PR/commit A : contrat API, version d'API et tests Python ;
 2. PR/commit B : squelette extension en lecture seule ;

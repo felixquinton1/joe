@@ -6,6 +6,8 @@ import subprocess
 import time
 from typing import Any
 
+from .provider_registry import get_provider_specs
+
 _cache: tuple[float, dict[str, Any]] | None = None
 
 
@@ -13,8 +15,8 @@ def provider_capabilities(refresh: bool = False) -> dict[str, Any]:
     global _cache
     if not refresh and _cache and time.monotonic() - _cache[0] < 300:
         return _cache[1]
-    result = {
-        "codex": _codex(),
+    specialized = {
+        "codex": _codex,
         "claude": {
             "available": bool(shutil.which("claude")),
             "models": _models("sonnet", "opus", "fable"),
@@ -47,6 +49,20 @@ def provider_capabilities(refresh: bool = False) -> dict[str, Any]:
             ],
         },
     }
+    result = {}
+    for provider in get_provider_specs():
+        capabilities = specialized.get(provider.name)
+        result[provider.name] = (
+            capabilities()
+            if callable(capabilities)
+            else capabilities
+            or {
+                "available": bool(shutil.which(provider.name)),
+                "models": [],
+                "efforts": [],
+                "execution_modes": [],
+            }
+        )
     _cache = (time.monotonic(), result)
     return result
 

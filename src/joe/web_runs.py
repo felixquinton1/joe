@@ -20,6 +20,10 @@ from .routing import resolve_route
 from .usage import cached_usage_status, usage_status
 
 
+class ActiveConversationError(RuntimeError):
+    """Raised when a conversation already owns an active run."""
+
+
 def _conversation_backup_path(project: Path) -> Path:
     data_home = Path(
         os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")
@@ -44,7 +48,13 @@ class LiveRun:
 
     def emit(self, event: dict[str, Any]) -> None:
         with self.condition:
-            self.events.append({"at": time.time(), **event})
+            self.events.append(
+                {
+                    "at": time.time(),
+                    **event,
+                    "event_id": len(self.events) + 1,
+                }
+            )
             self.condition.notify_all()
 
 
@@ -90,21 +100,37 @@ class RunManager:
             workspace=workspace,
             git_before=snapshot(workspace),
         )
-        if not resumed:
-            self.conversations.append_message(
-                conversation_id, "user", request, run.run_id
-            )
         with self.lock:
             self._prune_live_locked()
+            if any(
+                active.conversation_id == conversation_id and not active.done
+                for active in self.live.values()
+            ):
+                raise ActiveConversationError(
+                    "Une tâche est déjà active dans cette conversation."
+                )
+            if not resumed:
+                self.conversations.append_message(
+                    conversation_id,
+                    "user",
+                    request,
+                    run.run_id,
+                )
             self.live[run.run_id] = run
-            self._write_pending(
-                run,
-                agent,
-                mode,
-                model,
-                effort,
-                execution_mode,
-            )
+            try:
+                self._write_pending(
+                    run,
+                    agent,
+                    mode,
+                    model,
+                    effort,
+                    execution_mode,
+                )
+            except Exception:
+                self.live.pop(run.run_id, None)
+                if not resumed:
+                    self.conversations.remove_run(conversation_id, run.run_id)
+                raise
         if resumed:
             run.emit(
                 {
@@ -117,7 +143,15 @@ class RunManager:
             args=(run, agent, mode, model, effort, execution_mode),
             daemon=True,
         )
-        thread.start()
+        try:
+            thread.start()
+        except Exception:
+            with self.lock:
+                self.live.pop(run.run_id, None)
+            self._remove_pending(run.run_id)
+            if not resumed:
+                self.conversations.remove_run(conversation_id, run.run_id)
+            raise
         return run
 
     def _execute(
