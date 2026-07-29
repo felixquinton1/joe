@@ -205,6 +205,8 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b".copy-button.copied" in style
         assert b".language-picker" in style
         assert b".sr-only" in style
+        assert b"Floating controls" in style
+        assert b".layout{height:100vh}" in style
     finally:
         server.shutdown()
         thread.join(timeout=2)
