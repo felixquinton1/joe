@@ -1,10 +1,11 @@
 # Joe VS Code — Plan d'action
 
-> Statut : validé, phase 0 terminée et squelette de phase 1 implémenté.
+> Statut : en cours, phase 0 terminée, phase 1 validée sous Remote-SSH et
+> premier parcours interactif de phase 2 implémenté.
 > Le registre unique, la réservation
 > atomique par conversation, le curseur SSE et le contrat d’API 1.0 sont
-> livrés. Le prochain gate est le smoke test réel du squelette VS Code en
-> local puis sous Remote-SSH.
+> livrés. Le smoke test local reste recommandé avant diffusion ; le prochain
+> gate actif est la parité manuelle d’un run entre VS Code distant et Joe Web.
 
 ## 1. Objectif
 
@@ -116,7 +117,7 @@ Gate : aucune extension n'est développée tant que le contrat minimal et les ca
 de reconnexion ne sont pas testables. La livraison inclut la suite Python
 complète et les vérifications JavaScript du client web existant.
 
-### Phase 1 — Squelette VS Code en lecture seule — implémenté, smoke à faire
+### Phase 1 — Squelette VS Code en lecture seule — validé sous Remote-SSH
 
 1. Créer `vscode-extension/` avec TypeScript, lint, tests et packaging `.vsix`.
 2. Déclarer explicitement `extensionKind: ["workspace"]`.
@@ -128,7 +129,11 @@ complète et les vérifications JavaScript du client web existant.
 
 Gate : aucune écriture Joe n'est encore autorisée depuis l'extension.
 
-### Phase 2 — Conversation et run de bout en bout
+Le smoke distant a été validé par l’utilisateur. Le scénario local reste non
+testé et compare nécessairement l’extension locale à Joe Web local, sans
+attendre les conversations de l’instance distante.
+
+### Phase 2 — Conversation et run de bout en bout — en cours
 
 1. Créer et sélectionner une conversation de développement.
 2. Envoyer un prompt et restituer le flux SSE dans VS Code.
@@ -137,6 +142,15 @@ Gate : aucune écriture Joe n'est encore autorisée depuis l'extension.
 5. Conserver les réglages de permission portés par la conversation.
 6. Si une Webview est retenue, valider sa CSP, ses nonces, l'échappement du
    contenu et la validation de tous les messages avant d'afficher du Markdown.
+
+Implémenté dans le client natif :
+
+- sélection persistée et création d’une conversation ;
+- envoi minimal conservant les réglages portés par la conversation ;
+- lecture progressive du SSE dans le canal de sortie Joe ;
+- erreurs HTTP explicites, dont le conflit 409 ;
+- blocage d’une double soumission dans une même fenêtre et annulation ;
+- tests TypeScript du payload, du flux SSE et de l’annulation.
 
 Gate : les mêmes actions produisent le même historique depuis les deux
 interfaces, sans accès direct aux fichiers de stockage.
@@ -241,8 +255,9 @@ Prérequis déjà livrés :
 Ordre de livraison :
 
 1. Livré : contrat API 1.0, version d'API et tests Python ;
-2. Livré : squelette extension en lecture seule ; smoke VS Code à valider ;
-3. PR/commit C : envoi, flux et annulation ;
+2. Livré : squelette extension en lecture seule ; smoke Remote-SSH validé,
+   smoke local restant avant diffusion ;
+3. Livré en code, smoke à faire : envoi, flux et annulation ;
 4. PR/commit D : reconnexion et tests Remote-SSH ;
 5. PR/commit E : documentation et packaging privé.
 

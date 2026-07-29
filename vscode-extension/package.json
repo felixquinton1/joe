@@ -1,8 +1,8 @@
 {
   "name": "joe-control-room",
   "displayName": "Joe",
-  "description": "Read-only VS Code control room for a local Joe server.",
-  "version": "0.1.2",
+  "description": "VS Code control room for conversations and runs on a local Joe server.",
+  "version": "0.2.0",
   "publisher": "felixquinton",
   "license": "UNLICENSED",
   "repository": {
@@ -23,6 +23,9 @@
   "activationEvents": [
     "onView:joe.overview",
     "onCommand:joe.refresh",
+    "onCommand:joe.createConversation",
+    "onCommand:joe.sendPrompt",
+    "onCommand:joe.cancelRun",
     "onCommand:joe.restart"
   ],
   "contributes": {
@@ -35,6 +38,21 @@
         "command": "joe.restart",
         "title": "Joe: Redémarrer le serveur",
         "icon": "$(debug-restart)"
+      },
+      {
+        "command": "joe.createConversation",
+        "title": "Joe: Nouvelle conversation",
+        "icon": "$(add)"
+      },
+      {
+        "command": "joe.sendPrompt",
+        "title": "Joe: Envoyer une demande",
+        "icon": "$(send)"
+      },
+      {
+        "command": "joe.cancelRun",
+        "title": "Joe: Annuler la requête",
+        "icon": "$(debug-stop)"
       }
     ],
     "configuration": {
@@ -74,7 +92,22 @@
         {
           "command": "joe.restart",
           "when": "view == joe.overview",
+          "group": "navigation@4"
+        },
+        {
+          "command": "joe.createConversation",
+          "when": "view == joe.overview",
           "group": "navigation@2"
+        },
+        {
+          "command": "joe.sendPrompt",
+          "when": "view == joe.overview",
+          "group": "navigation@3"
+        },
+        {
+          "command": "joe.cancelRun",
+          "when": "view == joe.overview",
+          "group": "navigation@3"
         }
       ]
     }

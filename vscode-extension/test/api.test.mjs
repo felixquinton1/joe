@@ -10,13 +10,14 @@ import {
 import { planRestart, waitForJoe } from "../out/restart.js";
 
 function fixture(status) {
+  let startedPayload;
   const server = http.createServer((request, response) => {
     response.setHeader("Content-Type", "application/json");
     if (request.url === "/api/status") {
       response.end(JSON.stringify(status));
       return;
     }
-    if (request.url === "/api/conversations") {
+    if (request.url === "/api/conversations" && request.method === "GET") {
       response.end(JSON.stringify([{ id: "one", title: "Test" }]));
       return;
     }
@@ -24,22 +25,69 @@ function fixture(status) {
       response.end(JSON.stringify([]));
       return;
     }
+    if (request.url === "/api/conversations/one") {
+      response.end(JSON.stringify({
+        id: "one",
+        title: "Test",
+        messages: [{ role: "user", content: "Bonjour" }],
+      }));
+      return;
+    }
+    if (request.url === "/api/conversations" && request.method === "POST") {
+      response.statusCode = 201;
+      response.end(JSON.stringify({ id: "new", title: "Nouvelle conversation" }));
+      return;
+    }
+    if (request.url === "/api/runs" && request.method === "POST") {
+      let body = "";
+      request.on("data", chunk => {
+        body += chunk;
+      });
+      request.on("end", () => {
+        startedPayload = JSON.parse(body);
+        if (startedPayload.conversation_id === "conflict") {
+          response.statusCode = 409;
+          response.end(JSON.stringify({ error: "Conversation déjà occupée" }));
+          return;
+        }
+        response.statusCode = 202;
+        response.end(JSON.stringify({ run_id: "run-one" }));
+      });
+      return;
+    }
+    if (request.url === "/api/events/run-one?after=0") {
+      response.setHeader("Content-Type", "text/event-stream");
+      response.write(': keepalive\n\nid: 1\ndata: {"event_id":1,"type":"stream","text":"Bon"}\n\n');
+      response.end('id: 2\ndata: {"event_id":2,"type":"complete","response":"Bonjour"}\n\n');
+      return;
+    }
+    if (
+      request.url === "/api/runs/run-one/cancel" &&
+      request.method === "POST"
+    ) {
+      response.statusCode = 202;
+      response.end(JSON.stringify({ cancelled: true }));
+      return;
+    }
     response.statusCode = 404;
     response.end(JSON.stringify({ error: "missing" }));
   });
   return new Promise(resolve => {
-    server.listen(0, "127.0.0.1", () => resolve(server));
+    server.listen(0, "127.0.0.1", () =>
+      resolve({ server, startedPayload: () => startedPayload })
+    );
   });
 }
 
 test("reads status and conversations from API 1.x", async t => {
-  const server = await fixture({
+  const fixtureServer = await fixture({
     version: "0.21.16",
     api_version: "1.0",
     project: "/tmp/project",
     providers: ["codex"],
     modes: ["fast"],
   });
+  const { server } = fixtureServer;
   t.after(() => server.close());
   const address = server.address();
   const client = new JoeClient(`http://127.0.0.1:${address.port}`);
@@ -54,13 +102,14 @@ test("reads status and conversations from API 1.x", async t => {
 });
 
 test("rejects an incompatible API major", async t => {
-  const server = await fixture({
+  const fixtureServer = await fixture({
     version: "1.0.0",
     api_version: "2.0",
     project: "/tmp/project",
     providers: [],
     modes: [],
   });
+  const { server } = fixtureServer;
   t.after(() => server.close());
   const address = server.address();
   const client = new JoeClient(`http://127.0.0.1:${address.port}`);
@@ -72,6 +121,53 @@ test("rejects an incompatible API major", async t => {
       mode: "error",
       message: "API Joe incompatible : 2.0",
     }
+  );
+});
+
+test("creates a conversation, starts a run, reads SSE and cancels", async t => {
+  const fixtureServer = await fixture({
+    version: "0.21.19",
+    api_version: "1.0",
+    project: "/tmp/project",
+    providers: ["codex"],
+    modes: ["fast"],
+  });
+  const { server, startedPayload } = fixtureServer;
+  t.after(() => server.close());
+  const address = server.address();
+  const client = new JoeClient(`http://127.0.0.1:${address.port}`);
+
+  assert.equal((await client.conversation("one")).messages[0].content, "Bonjour");
+  assert.equal((await client.createConversation()).id, "new");
+  assert.equal(await client.startRun("one", "Réponds"), "run-one");
+  assert.deepEqual(startedPayload(), {
+    conversation_id: "one",
+    request: "Réponds",
+  });
+  const events = [];
+  for await (const event of client.events("run-one")) {
+    events.push(event);
+  }
+  assert.deepEqual(events.map(event => event.type), ["stream", "complete"]);
+  assert.equal(await client.cancelRun("run-one"), true);
+});
+
+test("keeps the HTTP status and server detail on an API conflict", async t => {
+  const fixtureServer = await fixture({
+    version: "0.21.20",
+    api_version: "1.0",
+    project: "/tmp/project",
+    providers: [],
+    modes: [],
+  });
+  const { server } = fixtureServer;
+  t.after(() => server.close());
+  const address = server.address();
+  const client = new JoeClient(`http://127.0.0.1:${address.port}`);
+
+  await assert.rejects(
+    () => client.startRun("conflict", "Encore"),
+    error => error.status === 409 && error.message === "Conversation déjà occupée"
   );
 });
 
