@@ -24,7 +24,9 @@ def run_review_workflow(
         context
         + "\n\nPresent the implementation report in a factual, collective voice. "
         "Use 'nous' or impersonal phrasing, never an ambiguous first-person "
-        "singular. Focus on the completed result and validation."
+        "singular. Focus on the completed result and validation. Do not invoke "
+        "another AI provider or perform an independent review yourself: Joe "
+        "owns the review stage after this implementation finishes."
     )
     workflow_event(
         on_event,
@@ -44,6 +46,7 @@ def run_review_workflow(
         execution_mode=execution_mode,
         on_event=on_event,
         cancel_event=cancel_event,
+        fallback_error_kinds={"authentication", "quota", "unavailable"},
     )
     workflow_event(
         on_event,
@@ -71,6 +74,7 @@ def run_review_workflow(
         review_request,
         Intent.ANALYZE,
         results,
+        exclude={primary.provider},
         on_event=on_event,
         cancel_event=cancel_event,
     )

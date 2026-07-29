@@ -123,6 +123,57 @@ def test_review_uses_primary_intent_then_read_only_review(tmp_path):
     assert "claude response" not in response
     assert providers["codex"].calls[0][2] is Intent.MODIFY
     assert providers["claude"].calls[0][2] is Intent.ANALYZE
+    assert "Do not invoke another AI provider" in providers["codex"].calls[0][0]
+
+
+def test_review_fallback_never_uses_implementation_provider(tmp_path):
+    providers = {
+        "codex": FakeProvider("codex"),
+        "claude": FakeProvider("claude", fail=True),
+        "gemini": FakeProvider("gemini"),
+        "copilot": FakeProvider("copilot"),
+    }
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    response, _ = orchestrator.execute(
+        "change", Route(Intent.MODIFY, Mode.REVIEW, "codex", "claude")
+    )
+
+    assert "Le détail de l’avis de Gemini reste disponible" in response
+    assert len(providers["codex"].calls) == 1
+    assert len(providers["claude"].calls) == 1
+    assert len(providers["gemini"].calls) == 1
+
+
+def test_timed_out_implementation_is_not_retried_by_another_provider(tmp_path):
+    providers = {
+        name: FakeProvider(name)
+        for name in ("codex", "claude", "gemini", "copilot")
+    }
+    providers["codex"].run = lambda *args, **kwargs: ProviderResult(
+        "codex",
+        ["codex"],
+        "",
+        "provider timed out after possible writes",
+        124,
+        0.01,
+        timed_out=True,
+        error_kind="timeout",
+    )
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    try:
+        orchestrator.execute(
+            "change", Route(Intent.MODIFY, Mode.REVIEW, "codex", "claude")
+        )
+    except OrchestrationError as error:
+        assert "codex:timeout" in str(error)
+    else:
+        raise AssertionError("A timed-out implementation must fail closed")
+
+    assert providers["claude"].calls == []
+    assert providers["gemini"].calls == []
+    assert providers["copilot"].calls == []
 
 
 def test_consensus_is_read_only_and_uses_distinct_proposals(tmp_path):
