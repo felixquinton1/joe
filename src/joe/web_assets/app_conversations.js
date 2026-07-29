@@ -249,9 +249,9 @@ window.createJoeConversations = function createJoeConversations({
     restoreConversationPanel(conversationId);
     const running = state.runs.has(conversationId);
     $("send").disabled = false;
-    $("send").querySelector("span").textContent = running ? "Mettre en file" : "Lancer";
+    $("send").querySelector("span").textContent = t(running ? "queue" : "send");
     $("stop").classList.toggle("hidden", !running);
-    $("run-state").textContent = running ? "En cours" : "Prêt";
+    $("run-state").textContent = t(running ? "running" : "ready");
     $("run-state").className = `run-state ${running ? "running" : "idle"}`;
     if (running) {
       const bubble = addMessage("Joe", "Cette tâche continue en arrière-plan…", "assistant");

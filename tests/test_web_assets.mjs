@@ -6,6 +6,9 @@ const require = createRequire(import.meta.url);
 const { authenticatedFetch, pairBrowser } = require(
   "../src/joe/web_assets/app_auth.js"
 );
+const { initialLanguage, translate } = require(
+  "../src/joe/web_assets/i18n.js"
+);
 
 test("pairs from the fragment and removes it from browser history", async () => {
   const calls = [];
@@ -54,4 +57,12 @@ test("turns an API 401 into an actionable pairing message", async () => {
     ),
     /joe url/
   );
+});
+
+test("selects a supported interface language and falls back to French", () => {
+  assert.equal(initialLanguage({ getItem: () => "en" }, "fr-FR"), "en");
+  assert.equal(initialLanguage({ getItem: () => null }, "en-US"), "en");
+  assert.equal(initialLanguage({ getItem: () => null }, "de-DE"), "fr");
+  assert.equal(translate("en", "send"), "Send");
+  assert.equal(translate("fr", "send"), "Envoyer");
 });

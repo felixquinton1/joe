@@ -158,6 +158,8 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b'id="toggle-history"' in page
         assert b'id="toggle-activity"' in page
         assert b'src="/markdown.js"' in page
+        assert b'src="/i18n.js"' in page
+        assert b'id="language"' in page
         assert b'<span class="brand-mark">J</span>' in page
         assert b"<option>codex</option>" not in page
 
@@ -191,6 +193,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b".activity-panel.mobile-open" in style
         assert b".message.workflow-summary-pending" in style
         assert b".copy-button.copied" in style
+        assert b".language-picker" in style
     finally:
         server.shutdown()
         thread.join(timeout=2)

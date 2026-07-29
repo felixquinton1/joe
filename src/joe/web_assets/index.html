@@ -12,10 +12,11 @@
     <div class="joe-tagline"><span>✦</span><strong>L’IA à la mode chez les jeunes</strong></div>
     <div class="topbar-tools">
       <div class="mobile-panel-tools">
-        <button id="toggle-history" type="button" aria-expanded="false">Conversations</button>
-        <button id="toggle-activity" type="button" aria-expanded="false">Activité</button>
+        <button id="toggle-history" type="button" aria-expanded="false" data-i18n="conversations">Conversations</button>
+        <button id="toggle-activity" type="button" aria-expanded="false" data-i18n="activity">Activité</button>
       </div>
       <div class="project"><span class="status-dot"></span><span id="project">Chargement…</span></div>
+      <label class="language-picker"><span data-i18n="language">Langue</span><select id="language" aria-label="Langue"><option value="fr">FR</option><option value="en">EN</option></select></label>
       <details class="usage-popover">
         <summary title="Consommation personnelle"><span class="quota-dot"></span>Quotas</summary>
         <div class="usage-panel">
@@ -31,44 +32,44 @@
   <div id="restart-warning" class="restart-warning hidden"></div>
   <main class="layout">
     <aside class="history-panel">
-      <div class="panel-title"><div><span class="eyebrow">Projet</span><h2>Conversations</h2></div><button id="new-project" class="icon-button" title="Nouveau sous-projet">＋</button></div>
+      <div class="panel-title"><div><span class="eyebrow" data-i18n="project">Projet</span><h2 data-i18n="conversations">Conversations</h2></div><button id="new-project" class="icon-button" title="Nouveau sous-projet">＋</button></div>
       <div id="conversations" class="history-list"></div>
     </aside>
     <div class="panel-resizer resize-left" data-resizer="left" title="Redimensionner les conversations"></div>
     <section class="workspace">
       <div class="controls">
         <div class="control-group routing-controls">
-          <label>Agent<select id="agent"><option value="">Automatique</option></select></label>
-          <label>Workflow<select id="mode"><option value="">Automatique</option><option value="fast">FAST</option><option value="review">REVIEW</option><option value="consensus">CONSENSUS</option></select></label>
+          <label><span data-i18n="agent">Agent</span><select id="agent"><option value="">Automatique</option></select></label>
+          <label><span data-i18n="workflow">Workflow</span><select id="mode"><option value="">Automatique</option><option value="fast">FAST</option><option value="review">REVIEW</option><option value="consensus">CONSENSUS</option></select></label>
         </div>
         <details class="advanced-config">
-          <summary>Configuration <span>modèle · effort · permissions</span></summary>
+          <summary><span data-i18n="configuration">Configuration</span> <span>modèle · effort · permissions</span></summary>
           <div class="control-group provider-controls">
-            <label>Modèle<select id="model"><option value="">Défaut du fournisseur</option></select></label>
-            <label>Effort<select id="effort"><option value="">Défaut du modèle</option></select></label>
-            <label>Permissions<select id="execution-mode"><option value="">Automatique</option></select></label>
+            <label><span data-i18n="model">Modèle</span><select id="model"><option value="">Défaut du fournisseur</option></select></label>
+            <label><span data-i18n="effort">Effort</span><select id="effort"><option value="">Défaut du modèle</option></select></label>
+            <label><span data-i18n="permissions">Permissions</span><select id="execution-mode"><option value="">Automatique</option></select></label>
           </div>
         </details>
       </div>
       <div class="conversation">
-        <div class="conversation-head"><div><span class="eyebrow">Conversation active</span><h1 id="conversation-title">Que veux-tu accomplir ?</h1></div><div id="route-badge" class="route-badge hidden"></div></div>
+        <div class="conversation-head"><div><span class="eyebrow" data-i18n="active_conversation">Conversation active</span><h1 id="conversation-title">Que veux-tu accomplir ?</h1></div><div id="route-badge" class="route-badge hidden"></div></div>
         <div id="messages" class="messages">
-          <div class="empty-state"><span class="empty-mark">J</span><h3>Un seul point d’entrée, plusieurs intelligences.</h3><p>Décris simplement ton besoin. Joe choisira le workflow et transmettra le contexte du projet.</p></div>
+          <div class="empty-state"><span class="empty-mark">J</span><h3 data-i18n="empty_title">Un seul point d’entrée, plusieurs intelligences.</h3><p data-i18n="empty_text">Décris simplement ton besoin. Joe choisira le workflow et transmettra le contexte du projet.</p></div>
         </div>
       </div>
       <form id="composer" class="composer">
         <div id="prompt-queue" class="prompt-queue hidden"></div>
-        <textarea id="request" rows="2" placeholder="Ex. Ajoute une option pour désactiver la loss Gamma…" required></textarea>
-        <div class="composer-foot"><span>Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne</span><div class="composer-actions"><button id="stop" class="stop-button hidden" type="button"><span>Interrompre</span><b>■</b></button><button id="send" type="submit"><span>Lancer</span><b>→</b></button></div></div>
+        <textarea id="request" rows="2" placeholder="Ex. Ajoute une option pour désactiver la loss Gamma…" data-i18n-placeholder="prompt_placeholder" required></textarea>
+        <div class="composer-foot"><span data-i18n="composer_hint">Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne</span><div class="composer-actions"><button id="stop" class="stop-button hidden" type="button"><b>■</b><span data-i18n="stop">Interrompre</span></button><button id="send" class="send-button" type="submit"><span data-i18n="send">Envoyer</span><b aria-hidden="true">↗</b></button></div></div>
       </form>
     </section>
     <div class="panel-resizer resize-right" data-resizer="right" title="Redimensionner le suivi"></div>
     <aside class="activity-panel">
-      <div class="panel-title"><div><span class="eyebrow">Temps réel</span><h2>Agents</h2></div><span id="run-state" class="run-state idle">Prêt</span></div>
+      <div class="panel-title"><div><span class="eyebrow" data-i18n="live">Temps réel</span><h2 data-i18n="agents">Agents</h2></div><span id="run-state" class="run-state idle" data-i18n="ready">Prêt</span></div>
       <div id="agents" class="agent-stack"></div>
       <details class="raw-panel">
-        <summary>Preuves et diagnostic <span>vérifié · inféré · refusé</span></summary>
-        <p>À ouvrir seulement pour contrôler qu’une affirmation repose sur une opération réellement réussie ou diagnostiquer un blocage.</p>
+        <summary><span data-i18n="evidence">Preuves et diagnostic</span> <span>vérifié · inféré · refusé</span></summary>
+        <p data-i18n="evidence_text">À ouvrir seulement pour contrôler une affirmation ou diagnostiquer un blocage.</p>
         <div id="evidence-log" class="evidence-log"></div>
         <pre id="raw-log"></pre>
       </details>
@@ -104,6 +105,7 @@
       <div class="dialog-actions"><button value="cancel">Annuler</button><button id="confirm-full-access" value="default">Autoriser une fois</button></div>
     </form>
   </dialog>
+  <script src="/i18n.js"></script>
   <script src="/markdown.js"></script>
   <script src="/app_auth.js"></script>
   <script src="/app_usage.js"></script>

@@ -202,6 +202,16 @@ def test_feature_request_phrased_as_a_preference_is_writable():
     assert route.intent is Intent.MODIFY
 
 
+def test_polite_interface_change_is_writable():
+    route = Router().route(
+        "Tu peux faire en sorte qu'on puisse choisir la langue de l'interface ? "
+        "Je n'aime pas les boutons Lancer, améliore le visuel de cette section."
+    )
+
+    assert route.intent is Intent.MODIFY
+    assert route.mode is Mode.FAST
+
+
 def test_capability_question_about_access_stays_read_only():
     route = Router().route(
         "Est-ce que tu peux modifier le code de Joe depuis cette session ?"

@@ -1,4 +1,4 @@
-const APP_VERSION = "0.23.4";
+const APP_VERSION = "0.23.5";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -14,6 +14,25 @@ const state = {
 const $ = id => document.getElementById(id);
 const renderMarkdown = window.JoeMarkdown.renderMarkdown;
 const joeFetch = window.JoeAuth.authenticatedFetch;
+let language = window.JoeI18n.initialLanguage(
+  window.localStorage,
+  window.navigator.language
+);
+const t = key => window.JoeI18n.translate(language, key);
+
+function applyLanguage(value) {
+  language = window.JoeI18n.apply(document, value);
+  window.localStorage.setItem("joe-language", language);
+  $("language").value = language;
+  const running = state.activeConversationId
+    && state.runs.has(state.activeConversationId);
+  $("send").querySelector("span").textContent = t(running ? "queue" : "send");
+  $("stop").querySelector("span").textContent = t("stop");
+  if (!state.activeConversationId) {
+    $("conversation-title").textContent = t("accomplish");
+  }
+  updateCapabilityMenus();
+}
 
 async function loadStatus() {
   const status = await fetch("/api/status").then(response => response.json());
@@ -36,7 +55,7 @@ function updateProviderMenu(providers) {
   ));
   setOptions(
     $("agent"),
-    [{ id: "", label: "Automatique" }, ...items]
+    [{ id: "", label: t("automatic") }, ...items]
   );
   if ([...$("agent").options].some(option => option.value === selected)) {
     $("agent").value = selected;
@@ -165,9 +184,9 @@ function renderGitReport(report, runId) {
 function updateCapabilityMenus() {
   const provider = $("agent").value;
   const capability = state.capabilities[provider];
-  setOptions($("model"), [{ id: "", label: "Défaut du fournisseur" }]);
-  setOptions($("effort"), [{ id: "", label: "Défaut du modèle" }]);
-  setOptions($("execution-mode"), [{ id: "", label: "Automatique" }]);
+  setOptions($("model"), [{ id: "", label: t("provider_default") }]);
+  setOptions($("effort"), [{ id: "", label: t("model_default") }]);
+  setOptions($("execution-mode"), [{ id: "", label: t("automatic") }]);
   if (!capability) {
     for (const control of [$("model"), $("effort"), $("execution-mode")]) {
       control.disabled = true;
@@ -187,7 +206,7 @@ function updateEfforts() {
   const capability = state.capabilities[provider] || {};
   const selectedModel = (capability.models || []).find(model => model.id === $("model").value);
   const efforts = selectedModel?.efforts || capability.efforts || [];
-  setOptions($("effort"), [{ id: "", label: selectedModel?.default_effort ? `Défaut · ${selectedModel.default_effort}` : "Défaut du modèle" }]);
+  setOptions($("effort"), [{ id: "", label: selectedModel?.default_effort ? `${t("model_default")} · ${selectedModel.default_effort}` : t("model_default") }]);
   addOptions($("effort"), efforts.map(value => ({ id: value, label: value })));
   $("effort").disabled = !efforts.length;
 }
@@ -672,11 +691,11 @@ function handleEvent(conversationId, event, finalBubble) {
 function finishRun(conversationId, ok) {
   state.runs.delete(conversationId);
   $("send").disabled = false;
-  $("send").querySelector("span").textContent = "Lancer";
+  $("send").querySelector("span").textContent = t("send");
   $("stop").classList.add("hidden");
   $("stop").disabled = false;
-  $("stop").querySelector("span").textContent = "Interrompre";
-  $("run-state").textContent = ok ? "Terminé" : "Échec";
+  $("stop").querySelector("span").textContent = t("stop");
+  $("run-state").textContent = t(ok ? "done" : "failed");
   $("run-state").className = `run-state ${ok ? "done" : "idle"}`;
 }
 
@@ -783,9 +802,9 @@ async function startRun(
     $("agents").replaceChildren();
     $("raw-log").textContent = "";
     $("send").disabled = false;
-    $("send").querySelector("span").textContent = "Mettre en file";
+    $("send").querySelector("span").textContent = t("queue");
     $("stop").classList.remove("hidden");
-    $("run-state").textContent = "En cours";
+    $("run-state").textContent = t("running");
     $("run-state").className = "run-state running";
     addMessage("Toi", request, "user");
   }
@@ -942,11 +961,11 @@ async function cancelActiveRun() {
   const run = state.runs.get(conversationId);
   if (!run) return;
   $("stop").disabled = true;
-  $("stop").querySelector("span").textContent = "Arrêt…";
+  $("stop").querySelector("span").textContent = t("stopping");
   const response = await joeFetch(`/api/runs/${run.runId}/cancel`, { method: "POST" });
   if (!response.ok) {
     $("stop").disabled = false;
-    $("stop").querySelector("span").textContent = "Interrompre";
+    $("stop").querySelector("span").textContent = t("stop");
   }
 }
 
@@ -986,6 +1005,7 @@ $("save-project").onclick = saveProject;
 $("confirm-delete-conversation").onclick = deleteConversation;
 $("stop").onclick = cancelActiveRun;
 $("refresh-usage").onclick = () => loadUsage(true);
+$("language").addEventListener("change", event => applyLanguage(event.target.value));
 
 function escapeHtml(value) {
   const node = document.createElement("span");
@@ -1070,6 +1090,7 @@ setInterval(updateCountdowns, 1000);
 setInterval(() => loadUsage().catch(() => {}), 60000);
 setupPanelResizers();
 resizeComposer();
+applyLanguage(language);
 $("toggle-history").onclick = () => toggleMobilePanel(
   ".history-panel",
   "toggle-history"

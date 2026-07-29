@@ -10,7 +10,7 @@ MODIFY_WORDS = {
     "créer", "implémente", "implémenter", "modifie", "modifier", "refactor",
     "implémentation", "implementation", "merge", "merger", "fusionne",
     "fusionner", "pull", "rebase", "commit", "push", "cherry-pick",
-    "remove", "fix", "implement", "update", "write",
+    "remove", "fix", "implement", "update", "write", "améliore", "améliorer",
 }
 MODIFY_PHRASES = {
     "vas-y",
@@ -40,6 +40,13 @@ FEATURE_REQUEST_PATTERNS = (
     re.compile(
         r"\b(?:j['’]aimerais?|je\s+voudrais)\s+(?:seulement\s+)?"
         r"(?:avoir|afficher|ajouter|mettre|retirer|enlever)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:peux[- ]tu|pourrais[- ]tu|tu\s+peux)\s+faire\s+en\s+sorte\s+"
+        r"(?:de|qu['’]on\s+puisse)\s+"
+        r"(?:ajouter|améliorer|changer|choisir|corriger|créer|implémenter|"
+        r"modifier|refaire|rendre|traduire)\b",
         re.IGNORECASE,
     ),
 )
