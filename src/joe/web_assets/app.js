@@ -1,4 +1,4 @@
-const APP_VERSION = "0.23.12";
+const APP_VERSION = "0.23.13";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -23,7 +23,11 @@ const t = key => window.JoeI18n.translate(language, key);
 function applyLanguage(value) {
   language = window.JoeI18n.apply(document, value);
   window.localStorage.setItem("joe-language", language);
-  $("language").value = language;
+  for (const button of document.querySelectorAll("[data-language]")) {
+    const active = button.dataset.language === language;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  }
   const running = state.activeConversationId
     && state.runs.has(state.activeConversationId);
   $("send").querySelector("span").textContent = t(running ? "queue" : "send");
@@ -1004,7 +1008,9 @@ $("save-project").onclick = saveProject;
 $("confirm-delete-conversation").onclick = deleteConversation;
 $("stop").onclick = cancelActiveRun;
 $("refresh-usage").onclick = () => loadUsage(true);
-$("language").addEventListener("change", event => applyLanguage(event.target.value));
+for (const button of document.querySelectorAll("[data-language]")) {
+  button.addEventListener("click", () => applyLanguage(button.dataset.language));
+}
 
 function escapeHtml(value) {
   const node = document.createElement("span");

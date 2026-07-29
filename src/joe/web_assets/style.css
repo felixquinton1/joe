@@ -472,16 +472,26 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 /* Activity and usage */
 .activity-tools { flex: 0 0 auto; display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin: 0 4px 20px; }
 .language-picker {
-  width: 68px; height: 32px;
-  display: flex; align-items: center; gap: 4px;
-  padding: 0 5px 0 8px;
+  height: 32px;
+  display: inline-flex; align-items: center;
+  padding: 2px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  color: var(--muted);
-  background: var(--surface);
+  background: #eceae4;
 }
-.language-picker > span[aria-hidden] { color: var(--green); font-size: 13px; }
-.language-picker select { width: 35px; height: 28px; padding: 0; border: 0; outline: 0; color: var(--ink); background: transparent; cursor: pointer; font-size: 10px; font-weight: 750; }
+.language-picker button {
+  width: 34px; height: 26px; padding: 0;
+  border: 0; border-radius: 7px;
+  color: var(--muted); background: transparent;
+  cursor: pointer; font-size: 9px; font-weight: 750;
+}
+.language-picker button:hover { color: var(--ink); }
+.language-picker button.active {
+  color: var(--green);
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(26, 37, 34, .12);
+}
+.language-picker button:focus-visible { outline: 2px solid #8eb8aa; outline-offset: 1px; }
 .usage-popover { position: relative; }
 .usage-popover summary {
   height: 32px;

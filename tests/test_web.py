@@ -160,7 +160,8 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b'src="/markdown.js"' in page
         assert b'src="/i18n.js"' in page
         assert b'id="language"' in page
-        assert b'class="sr-only"' in page
+        assert page.index(b'id="language-en"') < page.index(b'id="language-fr"')
+        assert b"<select id=\"language\"" not in page
         assert b'data-i18n="slogan"' in page
         assert b'class="topbar"' not in page
         assert b'class="raw-panel"' not in page
@@ -209,7 +210,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b".message.workflow-summary-pending" in style
         assert b".copy-button.copied" in style
         assert b".language-picker" in style
-        assert b".sr-only" in style
+        assert b".language-picker button.active" in style
         assert b"height: 100dvh" in style
         assert b"grid-template-columns: var(--left-panel)" in style
         assert b"overflow: visible" in style

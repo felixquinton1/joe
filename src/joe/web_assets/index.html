@@ -52,7 +52,10 @@
     <div class="panel-resizer resize-right" data-resizer="right" title="Redimensionner le suivi"></div>
     <aside class="activity-panel">
       <div class="activity-tools">
-        <label class="language-picker" title="Langue / Language"><span aria-hidden="true">◎</span><span class="sr-only" data-i18n="language">Langue</span><select id="language" aria-label="Langue / Language"><option value="fr">FR</option><option value="en">EN</option></select></label>
+        <div id="language" class="language-picker" role="group" aria-label="Langue / Language">
+          <button id="language-en" type="button" data-language="en" aria-pressed="false">EN</button>
+          <button id="language-fr" type="button" data-language="fr" aria-pressed="false">FR</button>
+        </div>
         <details class="usage-popover">
           <summary title="Consommation personnelle"><span class="quota-dot"></span><span data-i18n="quotas">Quotas</span></summary>
           <div class="usage-panel">
