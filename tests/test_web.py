@@ -201,16 +201,17 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         response = connection.getresponse()
         style = response.read()
         assert response.status == 200
-        assert b"max-height:min(42vh,360px)" in style
-        assert b".bubble,.composer textarea" in style
+        assert b"max-height: min(42vh, 360px)" in style
+        assert b".composer textarea" in style
         assert b".activity-panel.mobile-open" in style
+        assert b"prefers-reduced-motion" in style
+        assert b".conversation-item:hover .pin-button" in style
         assert b".message.workflow-summary-pending" in style
         assert b".copy-button.copied" in style
         assert b".language-picker" in style
         assert b".sr-only" in style
-        assert b"Floating controls" in style
-        assert b".layout{height:100vh}" in style
-        assert b"Headerless layout" in style
+        assert b"height: 100dvh" in style
+        assert b"grid-template-columns: var(--left-panel)" in style
     finally:
         server.shutdown()
         thread.join(timeout=2)
