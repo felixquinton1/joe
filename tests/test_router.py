@@ -165,6 +165,11 @@ def test_fais_cela_is_an_explicit_follow_up_change():
     assert route.intent is Intent.MODIFY
 
 
+def test_short_go_follow_up_is_an_explicit_change():
+    for request in ("go", "vas-y", "vas y"):
+        assert Router().route(request).intent is Intent.MODIFY
+
+
 def test_feature_request_phrased_as_possibility_is_writable():
     route = Router().route(
         "C'est possible de préciser le modèle utilisé dans tous les modes ?"

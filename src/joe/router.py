@@ -13,6 +13,9 @@ MODIFY_WORDS = {
     "remove", "fix", "implement", "update", "write",
 }
 MODIFY_PHRASES = {
+    "go",
+    "vas-y",
+    "vas y",
     "fais cela",
     "fais ça",
     "mets en œuvre",

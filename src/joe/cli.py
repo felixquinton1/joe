@@ -140,7 +140,13 @@ def _web(argv: list[str]) -> int:
     web_parser.add_argument(
         "--allow-remote",
         action="store_true",
-        help="allow a non-local bind despite the unauthenticated HTTP API",
+        help="allow a non-local bind (authentication remains required)",
+    )
+    web_parser.add_argument(
+        "--profile",
+        choices=("viewer", "operator", "maintainer"),
+        default="maintainer",
+        help="maximum capabilities granted by this server",
     )
     web_parser.add_argument("--no-browser", action="store_true")
     web_parser.add_argument(
@@ -173,6 +179,7 @@ def _web(argv: list[str]) -> int:
             args.host,
             args.port,
             allow_remote=args.allow_remote,
+            profile=args.profile,
         )
     except KeyboardInterrupt:
         print("\nJoe Web stopped.")
@@ -206,6 +213,8 @@ def _tmux_web(args: argparse.Namespace, url: str) -> int:
             str(args.port),
             "--no-browser",
             "--foreground",
+            "--profile",
+            args.profile,
         ]
         if args.allow_remote:
             command.append("--allow-remote")
@@ -350,9 +359,16 @@ def _restart(argv: list[str]) -> int:
 
 
 def _active_runs(url: str) -> list[dict] | None:
+    from .auth import auth_token_path
+
     try:
-        with urllib.request.urlopen(
+        token = auth_token_path().read_text().strip()
+        request = urllib.request.Request(
             f"{url}/api/runs/active",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        with urllib.request.urlopen(
+            request,
             timeout=2,
         ) as response:
             payload = json.loads(response.read())

@@ -1,6 +1,6 @@
 # Joe HTTP/SSE API — MVP contract
 
-> Statut : validé. Contrat client introduit avec `api_version: "1.0"`.
+> Statut : validé. Contrat client courant : `api_version: "1.1"`.
 
 ## Portée et compatibilité
 
@@ -17,9 +17,8 @@ VS Code. Il ne constitue pas une API distante ou multi-utilisateur.
 - Une suppression, un renommage ou un changement de sémantique exige une
   nouvelle version majeure d’API.
 
-Joe 1.0 ne fournit ni authentification HTTP, ni isolation entre plusieurs
-utilisateurs du même compte système. Un bind non local reste refusé sans
-option explicite.
+Joe 1.1 authentifie l’API locale et impose un profil de capacités. Un bind non
+local reste refusé sans option explicite.
 
 ## Matrice des endpoints MVP
 
@@ -57,7 +56,7 @@ ne font pas partie du premier client VS Code en lecture seule.
 ```json
 {
   "version": "0.x.y",
-  "api_version": "1.0",
+  "api_version": "1.1",
   "project": "/chemin/du/projet",
   "providers": ["codex", "claude", "gemini", "copilot"],
   "provider_catalog": [{"id": "codex", "label": "Codex"}],
@@ -66,6 +65,26 @@ ne font pas partie du premier client VS Code en lecture seule.
 ```
 
 Le client vérifie la version majeure de `api_version` avant toute mutation.
+
+## Authentification et rôles
+
+`GET /api/status` et les fichiers statiques restent publics pour le diagnostic
+et l’ouverture de Joe Web. La page principale associe le navigateur local avec
+un cookie `HttpOnly`, `SameSite=Strict`. Les autres endpoints exigent ce cookie
+ou `Authorization: Bearer <jeton>`.
+
+Le jeton est généré dans le répertoire de données utilisateur avec des
+permissions `0600`; il n’est jamais placé dans le projet ou dans Git.
+
+| Profil | Capacités |
+|---|---|
+| `viewer` | quotas, conversations, historique et événements |
+| `operator` | capacités `viewer`, conversations et runs ordinaires |
+| `maintainer` | capacités `operator`, projets, rejet Git et accès projet complet |
+
+Une requête non authentifiée reçoit `401`; un jeton valide mais insuffisant
+reçoit `403`. La confirmation ponctuelle `428` d’un accès complet reste requise
+pour un `maintainer`.
 
 ### Lancement
 

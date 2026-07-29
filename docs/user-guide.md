@@ -62,6 +62,12 @@ affiche le routage choisi sans appeler d’agent.
 
 ### Interface Web
 
+Joe Web démarre par défaut avec le profil privé `maintainer`. Une instance
+volontairement limitée se lance avec `joe web --profile viewer` ou
+`joe web --profile operator`. Le navigateur local est authentifié
+automatiquement; le secret reste hors du projet et ne doit pas être copié dans
+un dépôt.
+
 Depuis le projet à traiter :
 
 ```bash

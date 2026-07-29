@@ -39,7 +39,7 @@ def test_contract_exposes_independent_api_version(tmp_path):
 
         assert response.status == 200
         assert payload["version"] == __version__
-        assert payload["api_version"] == API_VERSION == "1.0"
+        assert payload["api_version"] == API_VERSION == "1.1"
         assert isinstance(payload["providers"], list)
         assert isinstance(payload["modes"], list)
     finally:

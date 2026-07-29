@@ -1,4 +1,5 @@
 import json
+import subprocess
 from datetime import datetime
 
 from joe.usage import (
@@ -10,6 +11,7 @@ from joe.usage import (
     cached_usage_status,
     normalize_codex_usage,
 )
+from joe.usage_claude import claude_account_plan
 
 
 def test_normalize_codex_usage_windows():
@@ -37,6 +39,20 @@ def test_normalize_codex_usage_windows():
     assert status["windows"][1]["remaining_percent"] == 20
 
 
+def test_claude_account_plan_uses_authenticated_subscription():
+    class Runner:
+        @staticmethod
+        def run(*args, **kwargs):
+            return subprocess.CompletedProcess(
+                args[0],
+                0,
+                stdout='{"subscriptionType":"team"}',
+                stderr="",
+            )
+
+    assert claude_account_plan(subprocess_module=Runner) == "team"
+
+
 def test_cached_usage_never_probes_providers(monkeypatch):
     monkeypatch.setattr("joe.usage._cache", None)
     monkeypatch.setattr(
@@ -62,6 +78,7 @@ def test_claude_status_reads_fresh_local_cache(tmp_path, monkeypatch):
     path.write_text(
         json.dumps(
             {
+                "subscriptionType": "team",
                 "cachedUsageUtilization": {
                     "fetchedAtMs": 1_900_000,
                     "utilization": {
@@ -86,6 +103,7 @@ def test_claude_status_reads_fresh_local_cache(tmp_path, monkeypatch):
     status = _claude_status(path)
 
     assert status["available"] is True
+    assert status["plan"] == "team"
     assert status["windows"][0]["remaining_percent"] == 70
     assert status["windows"][1]["remaining_percent"] == 25
     assert status["windows"][2]["name"] == "Opus · 7 jours"
@@ -243,10 +261,12 @@ def test_parse_claude_usage_screen_returns_live_windows():
         Resets Aug 2, 2:59pm (Europe/Paris)
         """,
         now=datetime.fromisoformat("2026-07-28T12:00:00+02:00"),
+        plan="pro",
     )
 
     assert status is not None
     assert status["stale"] is False
+    assert status["plan"] == "pro"
     assert status["windows"][0]["remaining_percent"] == 87
     assert status["windows"][1]["remaining_percent"] == 85
     assert all(window["resets_at"] for window in status["windows"])
@@ -283,4 +303,5 @@ def test_gemini_status_explains_api_key_quota(tmp_path):
     status = _gemini_status(usage_path, settings_path)
 
     assert status["metrics"][0]["value"] == "Clé API · variable par modèle/offre"
+    assert status["plan"] == "API"
     assert "réserve globale de tokens" in status["message"]

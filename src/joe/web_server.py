@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 from . import __version__
+from .auth import LocalAuth, required_role
 from .http_utils import RequestBodyError, read_json_body, validate_bind
 from .provider_registry import get_provider_catalog, get_provider_names
 from .web_runs import ActiveConversationError, RunManager
@@ -21,11 +22,12 @@ _ASSETS = {
     "/app_conversations.js": ("app_conversations.js", "text/javascript; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
 }
-API_VERSION = "1.0"
+API_VERSION = "1.1"
 
 
 class JoeServer(ThreadingHTTPServer):
     manager: RunManager
+    auth = LocalAuth()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -52,8 +54,12 @@ class Handler(BaseHTTPRequestHandler):
                     "providers": get_provider_names(),
                     "provider_catalog": get_provider_catalog(),
                     "modes": ["fast", "review", "consensus"],
+                    "auth_required": self.server.auth.enabled,
+                    "profile": self.server.auth.role,
                 }
             )
+        if not self._authorize(required_role("GET", path)):
+            return
         facade = _web_facade()
         if path == "/api/capabilities":
             return self._json(facade.provider_capabilities())
@@ -102,6 +108,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
+        if not self._authorize(required_role("POST", path)):
+            return
         if path.startswith("/api/runs/") and path.endswith("/reject"):
             run_id = unquote(path.split("/")[-2])
             payload = self._read_payload(allow_empty=True)
@@ -173,16 +181,19 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("invalid mode")
         except ValueError as exc:
             return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-        if (
-            self.server.manager.requires_full_access_approval(
-                request,
-                conversation_id,
-                agent,
-                mode,
-                execution_mode,
+        needs_full_access = self.server.manager.requires_full_access_approval(
+            request,
+            conversation_id,
+            agent,
+            mode,
+            execution_mode,
+        )
+        if needs_full_access and not self.server.auth.allows("maintainer"):
+            return self._json(
+                {"error": "Le profil maintainer est requis pour cet accès."},
+                HTTPStatus.FORBIDDEN,
             )
-            and not full_access_approved
-        ):
+        if needs_full_access and not full_access_approved:
             return self._json(
                 {
                     "error": (
@@ -210,6 +221,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_PATCH(self) -> None:
         path = urlparse(self.path).path
+        if not self._authorize(required_role("PATCH", path)):
+            return
         is_conversation = path.startswith("/api/conversations/")
         is_project = path.startswith("/api/projects/")
         if not is_conversation and not is_project:
@@ -227,6 +240,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         path = urlparse(self.path).path
+        if not self._authorize(required_role("DELETE", path)):
+            return
         if not path.startswith("/api/conversations/"):
             return self.send_error(HTTPStatus.NOT_FOUND)
         conversation_id = unquote(path.rsplit("/", 1)[1])
@@ -280,8 +295,37 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
+        if self.server.auth.enabled and name == "index.html":
+            self.send_header(
+                "Set-Cookie",
+                f"joe_token={self.server.auth.token}; HttpOnly; SameSite=Strict; Path=/",
+            )
         self.end_headers()
         self.wfile.write(data)
+
+    def _authorize(self, required: str) -> bool:
+        if not self.server.auth.enabled:
+            return True
+        token = None
+        authorization = self.headers.get("Authorization", "")
+        if authorization.startswith("Bearer "):
+            token = authorization[7:].strip()
+        if token is None:
+            for item in self.headers.get("Cookie", "").split(";"):
+                key, separator, value = item.strip().partition("=")
+                if separator and key == "joe_token":
+                    token = value
+                    break
+        if not self.server.auth.accepts(token):
+            self._json({"error": "Authentification Joe requise."}, HTTPStatus.UNAUTHORIZED)
+            return False
+        if not self.server.auth.allows(required):
+            self._json(
+                {"error": f"Le profil {required} est requis."},
+                HTTPStatus.FORBIDDEN,
+            )
+            return False
+        return True
 
     def _read_payload(self, *, allow_empty: bool = False) -> dict[str, Any] | None:
         try:
@@ -313,9 +357,11 @@ def serve(
     port: int = 8765,
     *,
     allow_remote: bool = False,
+    profile: str = "maintainer",
 ) -> None:
     validate_bind(host, allow_remote=allow_remote)
     server = JoeServer((host, port), Handler)
+    server.auth = LocalAuth.enabled_for(profile)
     server.manager = RunManager(project)
     server.serve_forever()
 

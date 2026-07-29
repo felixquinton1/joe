@@ -62,7 +62,7 @@ def claude_status(
         "provider": "claude",
         "available": bool(windows),
         "stale": stale,
-        "plan": None,
+        "plan": claude_plan(payload),
         "windows": windows,
         "message": (
             "Dernière mesure connue · ouvre /usage dans Claude pour l’actualiser"
@@ -216,6 +216,7 @@ def parse_claude_usage_screen(
     output: str,
     *,
     now: datetime | None = None,
+    plan: str | None = None,
 ) -> dict[str, Any] | None:
     text = strip_terminal_codes(output)
     current = now or datetime.now().astimezone()
@@ -252,10 +253,46 @@ def parse_claude_usage_screen(
         "provider": "claude",
         "available": True,
         "stale": False,
-        "plan": None,
+        "plan": plan,
         "windows": windows,
         "message": "Actualisé via /usage Claude",
     }
+
+
+def claude_plan(payload: dict[str, Any]) -> str | None:
+    for key in ("subscriptionType", "subscription_type", "plan"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def local_claude_plan(path: Path | None = None) -> str | None:
+    target = path or Path.home() / ".claude.json"
+    try:
+        payload = json.loads(target.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    return claude_plan(payload)
+
+
+def claude_account_plan(
+    *,
+    subprocess_module=subprocess,
+    timeout: int = 3,
+) -> str | None:
+    try:
+        result = subprocess_module.run(
+            ["claude", "auth", "status"],
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+        )
+        payload = json.loads(result.stdout)
+    except (OSError, subprocess_module.TimeoutExpired, json.JSONDecodeError):
+        return None
+    return claude_plan(payload)
 
 
 def strip_terminal_codes(value: str) -> str:

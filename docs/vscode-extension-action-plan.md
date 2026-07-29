@@ -1,9 +1,8 @@
 # Joe — Plan d’action produit, extension et distribution
 
-> Statut : en cours. Les phases 0 et 1 sont terminées, la phase 2 est livrée en
-> code, les fondations des phases 3 à 5 sont implémentées. Les smokes manuels,
-> l’autorisation forte côté serveur et la publication PyPI/Marketplace restent
-> des gates distincts.
+> Statut : en cours. Les phases 0 à 6 sont livrées localement. Les smokes
+> multiplateformes, le pilote et la publication PyPI/Marketplace restent des
+> gates distincts.
 
 ## 1. Objectif
 
@@ -80,7 +79,7 @@ la base portable.
 
 ### Phase 0 — Contrat HTTP/SSE — terminée
 
-API 1.0, réservation atomique 202/409, curseur monotone, reprise SSE et tests de
+API 1.x, réservation atomique 202/409, curseur monotone, reprise SSE et tests de
 contrat sont livrés.
 
 ### Phase 1 — Squelette VS Code — terminée pour Remote-SSH
@@ -133,12 +132,13 @@ PyPI reste un canal supplémentaire après configuration de Trusted Publishing.
 Le changement de visibilité GitHub et le choix de licence sont des opérations
 explicites : ils ne sont pas déclenchés automatiquement par cette phase.
 
-### Phase 6 — Autorisation serveur — à faire avant large diffusion
+### Phase 6 — Autorisation serveur — terminée
 
-Définir des profils `viewer`, `operator` et `maintainer`; associer chaque
-endpoint et mode d’exécution à une capacité; authentifier le client local;
-refuser côté serveur toute élévation. L’instance privée peut conserver le profil
-complet sans l’exposer par défaut.
+Les profils `viewer`, `operator` et `maintainer` sont imposés par une matrice
+centrale. Un secret local hors Git authentifie cookie Web et clients Bearer.
+Les mutations de projets, le rejet Git et tout accès projet complet exigent
+`maintainer`; une élévation demandée par le client reçoit `403`. L’instance
+privée démarre en `maintainer`, sans élargir les racines autorisées.
 
 ### Phase 7 — Pilote et canaux publics — à faire
 
@@ -177,7 +177,7 @@ les irritants récurrents, puis publier sur PyPI et éventuellement Marketplace.
 | Déconnexion tue le travail | fournisseur enfant du serveur, bookmark client |
 | Flux perdu ou dupliqué | `event_id`, curseur et historique |
 | Écriture publique involontaire | override lecture seule par défaut |
-| Réglage client contourné | future autorisation côté serveur |
+| Réglage client contourné | autorisation et profil imposés côté serveur |
 | API exposée | bind local, aucune ouverture automatique |
 | Windows sans `tmux` | serveur foreground et arrêt de processus portable |
 | UI trop lourde | natif VS Code avant Webview |
@@ -194,8 +194,8 @@ version.
 |---|---|---|
 | Licence publique | avant redistribution large | droits réservés jusque-là |
 | Webview riche | après pilote | rester natif si les besoins restent couverts |
-| Profils/capacités | phase 6 | viewer/operator/maintainer |
-| Auth locale | phase 6 | secret local court ou socket selon plateformes |
+| Profils/capacités | décidé | viewer/operator/maintainer |
+| Auth locale | décidé | secret local `0600`, cookie HttpOnly ou Bearer |
 | PyPI | après release GitHub | Trusted Publishing sans token long terme |
 | Marketplace | après pilote | seulement si maintenance acceptable |
 | Service détaché Windows/macOS | après pilote | ne pas bloquer le CLI/foreground |

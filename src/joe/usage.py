@@ -15,9 +15,11 @@ from . import __version__
 from .models import Mode, Route
 from .provider_health import apply_cooldowns
 from .usage_claude import (
+    claude_account_plan as _claude_account_plan,
     claude_reset_timestamp as _claude_reset_timestamp,
     claude_status as _claude_status_impl,
     iso_timestamp as _iso_timestamp,
+    local_claude_plan as _local_claude_plan,
     parse_claude_usage_screen as _parse_claude_usage_screen,
     refresh_claude_status as _refresh_claude_status_impl,
     refresh_claude_via_tmux as _refresh_claude_via_tmux_impl,
@@ -460,19 +462,27 @@ def _quota_pressure(
 
 
 def _claude_status(path: Path | None = None) -> dict[str, Any]:
-    return _claude_status_impl(
+    status = _claude_status_impl(
         path,
         unavailable=_unavailable,
         now_timestamp=time.time(),
         stale_usage_seconds=_STALE_USAGE_SECONDS,
     )
+    if path is None and not status.get("plan"):
+        status["plan"] = _claude_account_plan()
+    return status
 
 
 def _refresh_claude_status(timeout: int = 18) -> dict[str, Any]:
+    plan = _local_claude_plan() or _claude_account_plan()
+    parse_screen = lambda output: _parse_claude_usage_screen(
+        output,
+        plan=plan,
+    )
     return _refresh_claude_status_impl(
         timeout,
         refresh_via_tmux=_refresh_claude_via_tmux,
-        parse_screen=_parse_claude_usage_screen,
+        parse_screen=parse_screen,
         fallback_reader=_claude_status,
         subprocess_module=subprocess,
         os_module=os,
@@ -483,7 +493,10 @@ def _refresh_claude_status(timeout: int = 18) -> dict[str, Any]:
 def _refresh_claude_via_tmux(timeout: int) -> dict[str, Any] | None:
     return _refresh_claude_via_tmux_impl(
         timeout,
-        parse_screen=_parse_claude_usage_screen,
+        parse_screen=lambda output: _parse_claude_usage_screen(
+            output,
+            plan=_local_claude_plan(),
+        ),
         subprocess_module=subprocess,
         shutil_module=shutil,
         time_module=time,

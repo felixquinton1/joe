@@ -107,7 +107,7 @@ def gemini_status(
         return {
             "provider": "gemini",
             "available": True,
-            "plan": None,
+            "plan": gemini_plan(auth_type),
             "windows": [],
             "metrics": [{"name": "Quota", "value": quota_description}],
             "message": (
@@ -123,7 +123,7 @@ def gemini_status(
     return {
         "provider": "gemini",
         "available": True,
-        "plan": None,
+        "plan": gemini_plan(auth_type),
         "windows": [],
         "metrics": [
             {"name": "Tokens aujourd’hui", "value": f"{current['tokens']:,}"},
@@ -162,3 +162,11 @@ def gemini_quota_description(auth_type: str | None) -> str:
     if auth_type:
         return "Compte Google · plafond en requêtes"
     return "Limites variables par modèle/offre"
+
+
+def gemini_plan(auth_type: str | None) -> str | None:
+    if auth_type == "gemini-api-key":
+        return "API"
+    if auth_type:
+        return "Compte Google"
+    return None
