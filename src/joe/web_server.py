@@ -27,7 +27,7 @@ API_VERSION = "1.1"
 
 class JoeServer(ThreadingHTTPServer):
     manager: RunManager
-    auth = LocalAuth()
+    auth = LocalAuth("", "viewer", True)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -58,7 +58,11 @@ class Handler(BaseHTTPRequestHandler):
                     "profile": self.server.auth.role,
                 }
             )
-        if not self._authorize(required_role("GET", path)):
+        force_usage = path == "/api/usage" and parse_qs(parsed.query).get(
+            "force"
+        ) == ["1"]
+        required = "maintainer" if force_usage else required_role("GET", path)
+        if not self._authorize(required):
             return
         facade = _web_facade()
         if path == "/api/capabilities":
@@ -108,6 +112,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
+        if path == "/api/pair":
+            return self._pair()
         if not self._authorize(required_role("POST", path)):
             return
         if path.startswith("/api/runs/") and path.endswith("/reject"):
@@ -295,13 +301,26 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
-        if self.server.auth.enabled and name == "index.html":
-            self.send_header(
-                "Set-Cookie",
-                f"joe_token={self.server.auth.token}; HttpOnly; SameSite=Strict; Path=/",
-            )
         self.end_headers()
         self.wfile.write(data)
+
+    def _pair(self) -> None:
+        authorization = self.headers.get("Authorization", "")
+        token = authorization[7:].strip() if authorization.startswith("Bearer ") else None
+        if not self.server.auth.accepts(token):
+            return self._json(
+                {"error": "Jeton d’appairage invalide."},
+                HTTPStatus.UNAUTHORIZED,
+            )
+        self._json(
+            {"paired": True},
+            headers={
+                "Set-Cookie": (
+                    f"joe_token={self.server.auth.token}; "
+                    "HttpOnly; SameSite=Strict; Path=/"
+                )
+            },
+        )
 
     def _authorize(self, required: str) -> bool:
         if not self.server.auth.enabled:
@@ -310,7 +329,7 @@ class Handler(BaseHTTPRequestHandler):
         authorization = self.headers.get("Authorization", "")
         if authorization.startswith("Bearer "):
             token = authorization[7:].strip()
-        if token is None:
+        if not token:
             for item in self.headers.get("Cookie", "").split(";"):
                 key, separator, value = item.strip().partition("=")
                 if separator and key == "joe_token":
@@ -338,12 +357,20 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": str(exc)}, exc.status)
             return None
 
-    def _json(self, payload: Any, status: HTTPStatus = HTTPStatus.OK) -> None:
+    def _json(
+        self,
+        payload: Any,
+        status: HTTPStatus = HTTPStatus.OK,
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         data = json.dumps(payload, ensure_ascii=False).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(data)
 

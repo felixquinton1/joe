@@ -69,22 +69,27 @@ Le client vérifie la version majeure de `api_version` avant toute mutation.
 ## Authentification et rôles
 
 `GET /api/status` et les fichiers statiques restent publics pour le diagnostic
-et l’ouverture de Joe Web. La page principale associe le navigateur local avec
-un cookie `HttpOnly`, `SameSite=Strict`. Les autres endpoints exigent ce cookie
-ou `Authorization: Bearer <jeton>`.
+et l’ouverture de Joe Web, mais ne distribuent aucun secret. La CLI ouvre une
+URL dont le fragment contient le jeton; la page l’échange une fois via
+`POST /api/pair` contre un cookie `HttpOnly`, `SameSite=Strict`, puis efface le
+fragment de l’historique. Les autres endpoints exigent ce cookie ou
+`Authorization: Bearer <jeton>`.
 
 Le jeton est généré dans le répertoire de données utilisateur avec des
 permissions `0600`; il n’est jamais placé dans le projet ou dans Git.
 
 | Profil | Capacités |
 |---|---|
-| `viewer` | quotas, conversations, historique et événements |
+| `viewer` | quotas en cache, conversations, historique et événements |
 | `operator` | capacités `viewer`, conversations et runs ordinaires |
 | `maintainer` | capacités `operator`, projets, rejet Git et accès projet complet |
 
 Une requête non authentifiée reçoit `401`; un jeton valide mais insuffisant
 reçoit `403`. La confirmation ponctuelle `428` d’un accès complet reste requise
 pour un `maintainer`.
+
+L’actualisation active des quotas (`GET /api/usage?force=1`) et la lecture des
+configurations de projets exigent également `maintainer`.
 
 ### Lancement
 

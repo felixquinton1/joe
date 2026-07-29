@@ -74,5 +74,5 @@ def validate_bind(host: str, *, allow_remote: bool = False) -> None:
     if not is_loopback_host(host) and not allow_remote:
         raise ValueError(
             "Bind non local refusé sans --allow-remote. "
-            "Joe n’authentifie pas son API HTTP."
+            "L’authentification reste obligatoire avec --allow-remote."
         )

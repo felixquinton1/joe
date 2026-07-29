@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 export const SUPPORTED_API_MAJOR = 1;
 
 export interface JoeStatus {
@@ -53,7 +57,18 @@ export class JoeConnectionError extends JoeApiError {}
 export class JoeCompatibilityError extends JoeApiError {}
 
 export class JoeClient {
-  constructor(private readonly baseUrl: string) {}
+  constructor(
+    private readonly baseUrl: string,
+    private readonly token = localJoeToken()
+  ) {}
+
+  browserUrl(): string {
+    const url = new URL(this.baseUrl);
+    if (this.token) {
+      url.hash = new URLSearchParams({ token: this.token }).toString();
+    }
+    return url.toString();
+  }
 
   async status(): Promise<JoeStatus> {
     const status = await this.get<JoeStatus>("/api/status");
@@ -180,7 +195,11 @@ export class JoeClient {
 
   private async fetch(path: string, init?: RequestInit): Promise<Response> {
     try {
-      return await fetch(new URL(path, this.baseUrl), init);
+      const headers = new Headers(init?.headers);
+      if (this.token) {
+        headers.set("Authorization", `Bearer ${this.token}`);
+      }
+      return await fetch(new URL(path, this.baseUrl), { ...init, headers });
     } catch (error) {
       throw new JoeConnectionError(
         `Serveur Joe inaccessible : ${error instanceof Error ? error.message : error}`
@@ -202,5 +221,15 @@ export class JoeClient {
         response.status
       );
     }
+  }
+}
+
+function localJoeToken(): string {
+  const dataHome = process.env.XDG_DATA_HOME
+    || join(homedir(), ".local", "share");
+  try {
+    return readFileSync(join(dataHome, "joe", "auth-token"), "utf8").trim();
+  } catch {
+    return "";
   }
 }

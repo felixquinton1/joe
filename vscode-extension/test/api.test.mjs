@@ -11,7 +11,9 @@ import { planRestart, waitForJoe } from "../out/restart.js";
 
 function fixture(status) {
   let startedPayload;
+  let authorization;
   const server = http.createServer((request, response) => {
+    authorization = request.headers.authorization;
     response.setHeader("Content-Type", "application/json");
     if (request.url === "/api/status") {
       response.end(JSON.stringify(status));
@@ -74,7 +76,11 @@ function fixture(status) {
   });
   return new Promise(resolve => {
     server.listen(0, "127.0.0.1", () =>
-      resolve({ server, startedPayload: () => startedPayload })
+      resolve({
+        server,
+        startedPayload: () => startedPayload,
+        authorization: () => authorization,
+      })
     );
   });
 }
@@ -98,6 +104,30 @@ test("reads status and conversations from API 1.x", async t => {
   assert.deepEqual(
     await planRestart(client, "/tmp/fallback"),
     { mode: "ready", project: "/tmp/project" }
+  );
+});
+
+test("sends the local bearer token and builds a pairing URL", async t => {
+  const fixtureServer = await fixture({
+    version: "0.23.1",
+    api_version: "1.1",
+    project: "/tmp/project",
+    providers: [],
+    modes: [],
+  });
+  const { server, authorization } = fixtureServer;
+  t.after(() => server.close());
+  const address = server.address();
+  const client = new JoeClient(
+    `http://127.0.0.1:${address.port}`,
+    "test-token"
+  );
+
+  await client.conversations();
+  assert.equal(authorization(), "Bearer test-token");
+  assert.equal(
+    new URL(client.browserUrl()).hash,
+    "#token=test-token"
   );
 });
 

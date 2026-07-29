@@ -86,9 +86,10 @@ export function activate(context: vscode.ExtensionContext): void {
   });
 
   const openWeb = async (): Promise<void> => {
-    await new JoeClient(serverUrl()).status();
+    const client = new JoeClient(serverUrl());
+    await client.status();
     const externalUrl = await vscode.env.asExternalUri(
-      vscode.Uri.parse(serverUrl())
+      vscode.Uri.parse(client.browserUrl())
     );
     await vscode.env.openExternal(externalUrl);
   };

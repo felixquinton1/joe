@@ -53,6 +53,10 @@ def test_restart_recreates_only_selected_tmux_session(
     monkeypatch.setattr("joe.cli.shutil.which", lambda name: "/usr/bin/tmux")
     monkeypatch.setattr("joe.cli._active_runs", lambda url: [])
     monkeypatch.setattr(
+        "joe.cli._server_status",
+        lambda url: {"profile": "viewer"},
+    )
+    monkeypatch.setattr(
         "joe.cli.subprocess.run",
         lambda command, **kwargs: calls.append(command)
         or SimpleNamespace(returncode=0, stdout=""),
@@ -63,6 +67,7 @@ def test_restart_recreates_only_selected_tmux_session(
     assert calls[0] == ["tmux", "kill-session", "-t", "joe-9000"]
     assert "--port" in calls[1]
     assert "9000" in calls[1]
+    assert calls[1][-2:] == ["--profile", "viewer"]
 
 
 def test_restart_requires_force_when_server_is_unreachable(

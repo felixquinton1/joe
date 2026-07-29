@@ -5,6 +5,7 @@ import time
 from types import SimpleNamespace
 
 from joe import __version__
+from joe.auth import LocalAuth
 from joe.http_utils import MAX_JSON_BODY_BYTES
 from joe.web import Handler, JoeServer, LiveRun, RunManager
 from joe.web_server import API_VERSION
@@ -12,6 +13,7 @@ from joe.web_server import API_VERSION
 
 def start_server(tmp_path):
     server = JoeServer(("127.0.0.1", 0), Handler)
+    server.auth = LocalAuth()
     server.manager = RunManager(tmp_path)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

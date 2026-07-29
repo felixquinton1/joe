@@ -170,6 +170,16 @@ def test_short_go_follow_up_is_an_explicit_change():
         assert Router().route(request).intent is Intent.MODIFY
 
 
+def test_go_inside_an_unrelated_word_stays_read_only():
+    for request in (
+        "Explique-moi l'algorithme utilisé",
+        "Quelle est l'ergonomie actuelle de la page ?",
+        "Montre-moi le logo",
+        "Où est configuré Django dans ce projet ?",
+    ):
+        assert Router().route(request).intent is not Intent.MODIFY
+
+
 def test_feature_request_phrased_as_possibility_is_writable():
     route = Router().route(
         "C'est possible de préciser le modèle utilisé dans tous les modes ?"

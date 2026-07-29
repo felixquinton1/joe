@@ -13,7 +13,6 @@ MODIFY_WORDS = {
     "remove", "fix", "implement", "update", "write",
 }
 MODIFY_PHRASES = {
-    "go",
     "vas-y",
     "vas y",
     "fais cela",
@@ -160,6 +159,7 @@ class Router:
             if (
                 intent_words & MODIFY_WORDS
                 or any(phrase in intent_text.lower() for phrase in MODIFY_PHRASES)
+                or intent_text.strip().lower() == "go"
                 or feature_request
             )
             and (not capability_question or feature_request)

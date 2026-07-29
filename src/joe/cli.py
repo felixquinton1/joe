@@ -172,7 +172,7 @@ def _web(argv: list[str]) -> int:
         return _tmux_web(args, url)
     print(f"Joe Web — {args.project.resolve()}\n{url}\nCtrl+C to stop.")
     if not args.no_browser:
-        threading.Timer(0.4, webbrowser.open, args=(url,)).start()
+        threading.Timer(0.4, webbrowser.open, args=(_pairing_url(url),)).start()
     try:
         serve(
             args.project,
@@ -230,7 +230,7 @@ def _tmux_web(args: argparse.Namespace, url: str) -> int:
         f"Console : tmux attach -t {session}"
     )
     if not args.no_browser:
-        webbrowser.open(url)
+        webbrowser.open(_pairing_url(url))
     return 0
 
 
@@ -305,6 +305,11 @@ def _restart(argv: list[str]) -> int:
     restart_parser.add_argument("--host", default="127.0.0.1")
     restart_parser.add_argument("--port", type=int, default=8765)
     restart_parser.add_argument(
+        "--profile",
+        choices=("viewer", "operator", "maintainer"),
+        help="override the current server profile",
+    )
+    restart_parser.add_argument(
         "--force",
         action="store_true",
         help="restart even when the active-run check is unavailable",
@@ -324,6 +329,7 @@ def _restart(argv: list[str]) -> int:
         return 2
 
     url = f"http://{args.host}:{args.port}"
+    status = _server_status(url)
     active = _active_runs(url)
     if active:
         print(
@@ -345,6 +351,9 @@ def _restart(argv: list[str]) -> int:
         stderr=subprocess.DEVNULL,
         check=False,
     )
+    profile = args.profile or (
+        str(status.get("profile")) if status and status.get("profile") else "maintainer"
+    )
     return _web(
         [
             "-C",
@@ -354,6 +363,8 @@ def _restart(argv: list[str]) -> int:
             "--port",
             str(args.port),
             "--no-browser",
+            "--profile",
+            profile,
         ]
     )
 
@@ -380,6 +391,26 @@ def _active_runs(url: str) -> list[dict] | None:
     ):
         return None
     return payload if isinstance(payload, list) else None
+
+
+def _server_status(url: str) -> dict | None:
+    try:
+        with urllib.request.urlopen(f"{url}/api/status", timeout=2) as response:
+            payload = json.loads(response.read())
+    except (
+        OSError,
+        ValueError,
+        json.JSONDecodeError,
+        urllib.error.URLError,
+    ):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _pairing_url(url: str) -> str:
+    from .auth import load_or_create_token
+
+    return f"{url}#token={load_or_create_token()}"
 
 
 def _doctor(argv: list[str]) -> int:

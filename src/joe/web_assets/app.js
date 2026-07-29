@@ -1,4 +1,4 @@
-const APP_VERSION = "0.23.0";
+const APP_VERSION = "0.23.1";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -13,6 +13,18 @@ const state = {
 };
 const $ = id => document.getElementById(id);
 const renderMarkdown = window.JoeMarkdown.renderMarkdown;
+
+async function pairBrowser() {
+  const fragment = new URLSearchParams(window.location.hash.slice(1));
+  const token = fragment.get("token");
+  if (!token) return;
+  const response = await fetch("/api/pair", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+  if (!response.ok) throw new Error("Appairage local Joe refusé");
+}
 
 async function loadStatus() {
   const status = await fetch("/api/status").then(response => response.json());
@@ -1023,16 +1035,22 @@ $("toggle-activity").onclick = () => toggleMobilePanel(
   "toggle-activity"
 );
 
-Promise.all([loadStatus(), loadActiveRuns()])
-  .then(() => loadConversations())
-  .then(connectActiveRuns)
+pairBrowser()
+  .then(() => {
+    Promise.all([loadStatus(), loadActiveRuns()])
+      .then(() => loadConversations())
+      .then(connectActiveRuns)
+      .catch(error => {
+        $("project").textContent = `Erreur : ${error.message}`;
+      });
+
+    loadCapabilities().catch(() => {
+      state.capabilities = {};
+    });
+    loadUsage().catch(() => {
+      $("usage").innerHTML = '<span class="usage-loading">Quotas momentanément indisponibles</span>';
+    });
+  })
   .catch(error => {
     $("project").textContent = `Erreur : ${error.message}`;
   });
-
-loadCapabilities().catch(() => {
-  state.capabilities = {};
-});
-loadUsage().catch(() => {
-  $("usage").innerHTML = '<span class="usage-loading">Quotas momentanément indisponibles</span>';
-});

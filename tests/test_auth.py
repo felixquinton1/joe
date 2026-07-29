@@ -16,12 +16,12 @@ def start_server(tmp_path, role):
     return server, thread
 
 
-def request(server, method, path, payload=None, token=None):
+def request(server, method, path, payload=None, token=None, headers=None):
     connection = http.client.HTTPConnection(
         "127.0.0.1", server.server_port, timeout=5
     )
     body = None if payload is None else json.dumps(payload)
-    headers = {}
+    headers = dict(headers or {})
     if body is not None:
         headers["Content-Type"] = "application/json"
     if token:
@@ -47,6 +47,7 @@ def test_capability_matrix_is_centralized():
     assert required_role("POST", "/api/runs") == "operator"
     assert required_role("POST", "/api/projects") == "maintainer"
     assert required_role("POST", "/api/runs/id/reject") == "maintainer"
+    assert required_role("GET", "/api/projects") == "maintainer"
 
 
 def test_status_is_public_but_api_requires_a_token(tmp_path):
@@ -70,7 +71,7 @@ def test_status_is_public_but_api_requires_a_token(tmp_path):
         thread.join(timeout=2)
 
 
-def test_root_pairs_the_local_browser_with_an_http_only_cookie(tmp_path):
+def test_root_never_distributes_the_token(tmp_path):
     server, thread = start_server(tmp_path, "maintainer")
     try:
         connection = http.client.HTTPConnection(
@@ -80,10 +81,82 @@ def test_root_pairs_the_local_browser_with_an_http_only_cookie(tmp_path):
         response = connection.getresponse()
         response.read()
 
+        assert response.getheader("Set-Cookie") is None
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_pairing_requires_possession_and_returns_an_http_only_cookie(tmp_path):
+    server, thread = start_server(tmp_path, "maintainer")
+    try:
+        status, _, response = request(server, "POST", "/api/pair", {})
+        assert status == 401
+        assert response.getheader("Set-Cookie") is None
+
+        status, payload, response = request(
+            server,
+            "POST",
+            "/api/pair",
+            {},
+            token="test-token",
+        )
+        assert status == 200
+        assert payload["paired"] is True
         cookie = response.getheader("Set-Cookie")
         assert "joe_token=test-token" in cookie
         assert "HttpOnly" in cookie
         assert "SameSite=Strict" in cookie
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_cookie_auth_works_even_with_an_empty_bearer_header(tmp_path):
+    server, thread = start_server(tmp_path, "maintainer")
+    try:
+        status, _, _ = request(
+            server,
+            "GET",
+            "/api/conversations",
+            headers={
+                "Authorization": "Bearer ",
+                "Cookie": "joe_token=test-token",
+            },
+        )
+        assert status == 200
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_non_ascii_bearer_is_rejected_without_crashing(tmp_path):
+    server, thread = start_server(tmp_path, "maintainer")
+    try:
+        status, payload, _ = request(
+            server,
+            "GET",
+            "/api/conversations",
+            headers={"Authorization": "Bearer é"},
+        )
+        assert status == 401
+        assert "Authentification" in payload["error"]
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_viewer_cannot_force_a_quota_refresh(tmp_path):
+    server, thread = start_server(tmp_path, "viewer")
+    try:
+        status, payload, _ = request(
+            server,
+            "GET",
+            "/api/usage?force=1",
+            token="test-token",
+        )
+        assert status == 403
+        assert "maintainer" in payload["error"]
     finally:
         server.shutdown()
         thread.join(timeout=2)

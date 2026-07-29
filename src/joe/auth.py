@@ -22,12 +22,14 @@ def load_or_create_token(path: Path | None = None) -> str:
     except OSError:
         token = ""
     if token:
+        target.chmod(0o600)
         return token
     target.parent.mkdir(parents=True, exist_ok=True)
     token = secrets.token_urlsafe(32)
     temporary = target.with_suffix(".tmp")
-    temporary.write_text(token)
-    temporary.chmod(0o600)
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, "w") as stream:
+        stream.write(token)
     os.replace(temporary, target)
     target.chmod(0o600)
     return token
@@ -46,21 +48,25 @@ class LocalAuth:
         return cls(load_or_create_token(path), role, True)
 
     def accepts(self, candidate: str | None) -> bool:
-        return bool(
-            self.enabled
-            and candidate
-            and hmac.compare_digest(self.token, candidate)
-        )
+        if not self.enabled or not candidate:
+            return False
+        try:
+            return hmac.compare_digest(
+                self.token.encode("ascii"),
+                candidate.encode("ascii"),
+            )
+        except UnicodeEncodeError:
+            return False
 
     def allows(self, required: str) -> bool:
         return _ROLE_LEVEL[self.role] >= _ROLE_LEVEL[required]
 
 
 def required_role(method: str, path: str) -> str:
-    if method == "GET":
-        return "viewer"
     if path == "/api/projects" or path.startswith("/api/projects/"):
         return "maintainer"
     if path.endswith("/reject"):
         return "maintainer"
+    if method == "GET":
+        return "viewer"
     return "operator"
