@@ -257,7 +257,9 @@ function copyButton(getText) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "copy-button";
-  button.textContent = "Copier";
+  button.textContent = "⧉ Copier";
+  button.title = "Copier dans le presse-papiers";
+  button.setAttribute("aria-label", "Copier dans le presse-papiers");
   button.onclick = async event => {
     event.preventDefault();
     event.stopPropagation();
@@ -272,8 +274,12 @@ function copyButton(getText) {
       document.execCommand("copy");
       area.remove();
     }
-    button.textContent = "Copié";
-    setTimeout(() => { button.textContent = "Copier"; }, 1200);
+    button.textContent = "✓ Copié";
+    button.classList.add("copied");
+    setTimeout(() => {
+      button.textContent = "⧉ Copier";
+      button.classList.remove("copied");
+    }, 1200);
   };
   return button;
 }

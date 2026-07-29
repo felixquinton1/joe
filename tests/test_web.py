@@ -159,6 +159,8 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b"renderMarkdown" in script
         assert b"launchNextQueued" in script
         assert b"copyButton" in script
+        assert "⧉ Copier".encode() in script
+        assert "✓ Copié".encode() in script
         assert b"moveConversation" in script
         assert b"setupPanelResizers" in script
         assert b"resizeComposer" in script
@@ -177,6 +179,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b".bubble,.composer textarea" in style
         assert b".activity-panel.mobile-open" in style
         assert b".message.workflow-summary-pending" in style
+        assert b".copy-button.copied" in style
     finally:
         server.shutdown()
         thread.join(timeout=2)
