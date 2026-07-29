@@ -75,6 +75,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(facade.usage_status(force=force))
         if path == "/api/conversations":
             return self._json(self.server.manager.conversations.list())
+        if path == "/api/preferences":
+            return self._json(self.server.manager.conversations.preferences())
         if path == "/api/runs/active":
             return self._json(
                 [
@@ -236,6 +238,13 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if not self._authorize(required_role("PATCH", path)):
             return
+        if path == "/api/preferences":
+            payload = self._read_payload()
+            if payload is None:
+                return
+            return self._json(
+                self.server.manager.conversations.update_preferences(payload)
+            )
         is_conversation = path.startswith("/api/conversations/")
         is_project = path.startswith("/api/projects/")
         if not is_conversation and not is_project:

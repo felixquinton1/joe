@@ -15,8 +15,9 @@ DEFAULT_SETTINGS = {
     "effort": "",
     "execution_mode": "",
 }
+DEFAULT_PREFERENCES = {"agent": "", "mode": ""}
 DEFAULT_PROJECT_ID = "main"
-CURRENT_SCHEMA_VERSION = 4
+CURRENT_SCHEMA_VERSION = 5
 
 
 class ConversationStore:
@@ -56,9 +57,32 @@ class ConversationStore:
                         "created_at": time.time(),
                     }
                 ],
+                "preferences": dict(DEFAULT_PREFERENCES),
                 "conversations": conversations,
             }
         )
+
+    def preferences(self) -> dict[str, str]:
+        with self.lock:
+            return dict(self._read()["preferences"])
+
+    def update_preferences(self, changes: dict[str, Any]) -> dict[str, str]:
+        with self.lock:
+            payload = self._read()
+            preferences = payload["preferences"]
+            if "agent" in changes:
+                agent = str(changes["agent"])
+                preferences["agent"] = (
+                    agent if agent in {"", "codex", "claude", "gemini", "copilot"}
+                    else ""
+                )
+            if "mode" in changes:
+                mode = str(changes["mode"])
+                preferences["mode"] = (
+                    mode if mode in {"", "fast", "review", "consensus"} else ""
+                )
+            self._write(payload)
+            return dict(preferences)
 
     def list_projects(self) -> list[dict[str, Any]]:
         with self.lock:
@@ -156,20 +180,22 @@ class ConversationStore:
 
     def create(self, project_id: str | None = None) -> dict[str, Any]:
         now = time.time()
-        conversation = {
-            "id": uuid.uuid4().hex,
-            "title": "Nouvelle conversation",
-            "pinned": False,
-            "project_id": project_id or DEFAULT_PROJECT_ID,
-            "created_at": now,
-            "updated_at": now,
-            "last_call_at": now,
-            "position": None,
-            "settings": dict(DEFAULT_SETTINGS),
-            "messages": [],
-        }
         with self.lock:
             payload = self._read()
+            settings = dict(DEFAULT_SETTINGS)
+            settings.update(payload["preferences"])
+            conversation = {
+                "id": uuid.uuid4().hex,
+                "title": "Nouvelle conversation",
+                "pinned": False,
+                "project_id": project_id or DEFAULT_PROJECT_ID,
+                "created_at": now,
+                "updated_at": now,
+                "last_call_at": now,
+                "position": None,
+                "settings": settings,
+                "messages": [],
+            }
             payload["conversations"].append(conversation)
             self._write(payload)
         return conversation
@@ -438,6 +464,19 @@ class ConversationStore:
                     "created_at": time.time(),
                 }
             ],
+        )
+        preferences = payload.setdefault("preferences", dict(DEFAULT_PREFERENCES))
+        preferences["agent"] = (
+            preferences.get("agent", "")
+            if preferences.get("agent", "")
+            in {"", "codex", "claude", "gemini", "copilot"}
+            else ""
+        )
+        preferences["mode"] = (
+            preferences.get("mode", "")
+            if preferences.get("mode", "")
+            in {"", "fast", "review", "consensus"}
+            else ""
         )
         for conversation in payload.setdefault("conversations", []):
             conversation.setdefault("project_id", DEFAULT_PROJECT_ID)

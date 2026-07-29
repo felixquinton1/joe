@@ -50,6 +50,37 @@ def test_conversations_default_to_pinned_then_most_recent(tmp_path):
     assert listed[0]["last_call_at"] == older["created_at"]
 
 
+def test_global_preferences_apply_only_to_new_conversations(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+    existing = store.create()
+
+    preferences = store.update_preferences(
+        {"agent": "claude", "mode": "review"}
+    )
+    created = store.create()
+
+    assert preferences == {"agent": "claude", "mode": "review"}
+    assert store.get(existing["id"])["settings"]["agent"] == ""
+    assert created["settings"]["agent"] == "claude"
+    assert created["settings"]["mode"] == "review"
+
+
+def test_invalid_global_preferences_fall_back_to_automatic(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+
+    preferences = store.update_preferences(
+        {"agent": "unknown", "mode": "expensive"}
+    )
+
+    assert preferences == {"agent": "", "mode": ""}
+
+
 def test_manual_positions_and_project_collapse_persist(tmp_path):
     root = tmp_path / ".agentflow"
     runs = root / "runs"

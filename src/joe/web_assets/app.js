@@ -1,4 +1,4 @@
-const APP_VERSION = "0.23.13";
+const APP_VERSION = "0.23.14";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -243,6 +243,33 @@ async function saveSettings() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ settings: currentSettings() })
   });
+}
+
+async function openPreferences() {
+  const preferences = await joeFetch("/api/preferences").then(
+    response => response.json()
+  );
+  $("preference-agent").value = preferences.agent || "";
+  $("preference-mode").value = preferences.mode || "";
+  $("preferences-dialog").showModal();
+}
+
+async function savePreferences(event) {
+  event.preventDefault();
+  const response = await joeFetch("/api/preferences", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      agent: $("preference-agent").value,
+      mode: $("preference-mode").value
+    })
+  });
+  if (!response.ok) {
+    const payload = await response.json();
+    window.alert(payload.error || response.statusText);
+    return;
+  }
+  $("preferences-dialog").close();
 }
 
 function setOptions(select, items) {
@@ -1008,6 +1035,10 @@ $("save-project").onclick = saveProject;
 $("confirm-delete-conversation").onclick = deleteConversation;
 $("stop").onclick = cancelActiveRun;
 $("refresh-usage").onclick = () => loadUsage(true);
+$("open-preferences").onclick = () => openPreferences().catch(
+  error => window.alert(error.message)
+);
+$("save-preferences").onclick = savePreferences;
 for (const button of document.querySelectorAll("[data-language]")) {
   button.addEventListener("click", () => applyLanguage(button.dataset.language));
 }

@@ -166,6 +166,8 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b'class="topbar"' not in page
         assert b'class="raw-panel"' not in page
         assert b'class="activity-tools"' in page
+        assert b'id="preferences-dialog"' in page
+        assert b'id="open-preferences"' in page
         assert b'id="project"' not in page
         assert b'<span class="brand-mark">J</span>' in page
         assert b"<option>codex</option>" not in page

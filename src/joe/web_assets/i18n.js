@@ -20,7 +20,14 @@
       empty_title: "Un seul point d’entrée, plusieurs intelligences.",
       empty_text: "Décris simplement ton besoin. Joe choisira le workflow et transmettra le contexte du projet.",
       live: "Temps réel", agents: "Agents", evidence: "Preuves et diagnostic",
-      evidence_text: "À ouvrir seulement pour contrôler une affirmation ou diagnostiquer un blocage."
+      evidence_text: "À ouvrir seulement pour contrôler une affirmation ou diagnostiquer un blocage.",
+      preferences: "Préférences", defaults_title: "Réglages des nouvelles conversations",
+      defaults_intro: "Ces choix servent de point de départ. Chaque conversation peut ensuite conserver ses propres réglages.",
+      preferred_agent: "Agent principal", automatic_recommended: "Automatique — recommandé",
+      preferred_agent_help: "Joe privilégie cet agent, puis utilise un fallback si nécessaire.",
+      default_workflow: "Workflow par défaut",
+      default_workflow_help: "En automatique, Joe adapte le nombre d’agents à la demande.",
+      cancel: "Annuler", save: "Enregistrer"
     },
     en: {
       language: "Language", slogan: "AI, the way the cool kids do it",
@@ -38,7 +45,14 @@
       empty_title: "One entry point, multiple intelligences.",
       empty_text: "Describe what you need. Joe will choose the workflow and pass the relevant project context.",
       live: "Live", agents: "Agents", evidence: "Evidence and diagnostics",
-      evidence_text: "Open only to verify a claim or diagnose a blocked operation."
+      evidence_text: "Open only to verify a claim or diagnose a blocked operation.",
+      preferences: "Preferences", defaults_title: "New conversation defaults",
+      defaults_intro: "These choices are a starting point. Each conversation can then keep its own settings.",
+      preferred_agent: "Primary agent", automatic_recommended: "Automatic — recommended",
+      preferred_agent_help: "Joe prioritizes this agent, then falls back when needed.",
+      default_workflow: "Default workflow",
+      default_workflow_help: "In automatic mode, Joe adapts the number of agents to the request.",
+      cancel: "Cancel", save: "Save"
     }
   };
 

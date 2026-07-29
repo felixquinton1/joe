@@ -194,6 +194,15 @@ def test_feature_request_phrased_as_possibility_is_writable():
     assert route.intent is Intent.MODIFY
 
 
+def test_option_request_phrased_as_possibility_is_writable():
+    route = Router().route(
+        "C'est possible de faire une option pour configurer les préférences "
+        "d'utilisation par défaut ?"
+    )
+
+    assert route.intent is Intent.MODIFY
+
+
 def test_feature_request_phrased_as_a_preference_is_writable():
     route = Router().route(
         "J'aimerais seulement avoir le modèle et l'effort dans les panneaux"

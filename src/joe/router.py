@@ -34,7 +34,8 @@ MODIFY_PHRASES = {
 FEATURE_REQUEST_PATTERNS = (
     re.compile(
         r"\b(?:c['’]est|est[- ]ce|est il)\s+possible\s+de\s+"
-        r"(?:ajouter|afficher|préciser|integrer|intégrer|permettre|corriger)\b",
+        r"(?:ajouter|afficher|avoir|faire|préciser|integrer|intégrer|"
+        r"permettre|corriger)\b",
         re.IGNORECASE,
     ),
     re.compile(

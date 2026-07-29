@@ -52,6 +52,7 @@
     <div class="panel-resizer resize-right" data-resizer="right" title="Redimensionner le suivi"></div>
     <aside class="activity-panel">
       <div class="activity-tools">
+        <button id="open-preferences" class="icon-button" type="button" title="Préférences" aria-label="Préférences">⚙</button>
         <div id="language" class="language-picker" role="group" aria-label="Langue / Language">
           <button id="language-en" type="button" data-language="en" aria-pressed="false">EN</button>
           <button id="language-fr" type="button" data-language="fr" aria-pressed="false">FR</button>
@@ -103,6 +104,33 @@
       <h2>Autoriser l’accès complet ?</h2>
       <p>Cette tâche pourra modifier le projet, lancer ses tests et utiliser le réseau. L’autorisation vaut uniquement pour ce run.</p>
       <div class="dialog-actions"><button value="cancel">Annuler</button><button id="confirm-full-access" value="default">Autoriser une fois</button></div>
+    </form>
+  </dialog>
+  <dialog id="preferences-dialog" class="project-dialog preferences-dialog">
+    <form method="dialog">
+      <span class="eyebrow" data-i18n="preferences">Préférences</span>
+      <h2 data-i18n="defaults_title">Réglages des nouvelles conversations</h2>
+      <p data-i18n="defaults_intro">Ces choix servent de point de départ. Chaque conversation peut ensuite conserver ses propres réglages.</p>
+      <label><span data-i18n="preferred_agent">Agent principal</span>
+        <select id="preference-agent">
+          <option value="" data-i18n="automatic_recommended">Automatique — recommandé</option>
+          <option value="codex">Codex</option><option value="claude">Claude</option>
+          <option value="gemini">Gemini</option><option value="copilot">Copilot</option>
+        </select>
+        <small data-i18n="preferred_agent_help">Joe privilégie cet agent, puis utilise un fallback si nécessaire.</small>
+      </label>
+      <label><span data-i18n="default_workflow">Workflow par défaut</span>
+        <select id="preference-mode">
+          <option value="" data-i18n="automatic_recommended">Automatique — recommandé</option>
+          <option value="fast">FAST</option><option value="review">REVIEW</option>
+          <option value="consensus">CONSENSUS</option>
+        </select>
+        <small data-i18n="default_workflow_help">En automatique, Joe adapte le nombre d’agents à la demande.</small>
+      </label>
+      <div class="dialog-actions">
+        <button value="cancel" data-i18n="cancel">Annuler</button>
+        <button id="save-preferences" value="default" data-i18n="save">Enregistrer</button>
+      </div>
     </form>
   </dialog>
   <script src="/i18n.js"></script>
