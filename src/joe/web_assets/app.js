@@ -464,11 +464,12 @@ function ensureAgent(name) {
   if (state.agents.has(name)) return state.agents.get(name);
   const card = document.createElement("div");
   card.className = "agent-card";
-  card.innerHTML = `<div class="agent-head"><span class="agent-name">${escapeHtml(name)}</span><span class="agent-status">En attente</span></div><div class="agent-activity"></div><pre class="agent-output"></pre>`;
+  card.innerHTML = `<div class="agent-head"><span class="agent-name">${escapeHtml(name)}</span><span class="agent-status">En attente</span></div><p class="agent-heartbeat hidden"></p><div class="agent-activity"></div><pre class="agent-output"></pre>`;
   $("agents").appendChild(card);
   const agent = {
     card,
     status: card.querySelector(".agent-status"),
+    heartbeat: card.querySelector(".agent-heartbeat"),
     activity: card.querySelector(".agent-activity"),
     output: card.querySelector(".agent-output")
   };
@@ -732,6 +733,8 @@ function handleEvent(conversationId, event, finalBubble) {
     const agent = ensureAgent(event.provider);
     agent.card.classList.add("active");
     agent.status.textContent = "En cours";
+    agent.heartbeat.textContent = "";
+    agent.heartbeat.classList.add("hidden");
     const metadata = [
       event.model || "modèle par défaut",
       `effort ${event.effort || "défaut"}`
@@ -743,17 +746,23 @@ function handleEvent(conversationId, event, finalBubble) {
     updateWorkflowProviderMetadata(event.provider, metadata);
   } else if (event.type === "activity") {
     const agent = ensureAgent(event.provider);
-    const signature = `${event.label}\n${event.detail || ""}`;
-    const previous = agent.activity.lastElementChild;
-    if (previous?.dataset.signature === signature) return;
-    const row = document.createElement("div");
-    row.className = "activity-row";
-    row.dataset.signature = signature;
-    row.innerHTML = `<i></i><div><strong>${escapeHtml(event.label)}</strong>${event.detail ? `<span>${escapeHtml(event.detail)}</span>` : ""}</div>`;
-    const followActivity = shouldFollow(agent.activity);
-    agent.activity.appendChild(row);
-    while (agent.activity.children.length > 12) agent.activity.firstElementChild.remove();
-    scrollIfFollowing(agent.activity, followActivity);
+    if (event.kind === "heartbeat") {
+      agent.heartbeat.textContent = event.detail || event.label;
+      agent.heartbeat.classList.remove("hidden");
+    } else {
+      const signature = `${event.label}\n${event.detail || ""}`;
+      const previous = agent.activity.lastElementChild;
+      if (previous?.dataset.signature !== signature) {
+        const row = document.createElement("div");
+        row.className = "activity-row";
+        row.dataset.signature = signature;
+        row.innerHTML = `<i></i><div><strong>${escapeHtml(event.label)}</strong>${event.detail ? `<span>${escapeHtml(event.detail)}</span>` : ""}</div>`;
+        const followActivity = shouldFollow(agent.activity);
+        agent.activity.appendChild(row);
+        while (agent.activity.children.length > 12) agent.activity.firstElementChild.remove();
+        scrollIfFollowing(agent.activity, followActivity);
+      }
+    }
   } else if (event.type === "stream") {
     const agent = ensureAgent(event.provider);
     const followOutput = shouldFollow(agent.output);
@@ -764,6 +773,7 @@ function handleEvent(conversationId, event, finalBubble) {
   } else if (event.type === "provider_end") {
     const agent = ensureAgent(event.provider);
     agent.card.classList.remove("active");
+    agent.heartbeat.classList.add("hidden");
     agent.status.textContent = event.ok ? "Terminé" : `Échec · ${event.error || "inconnu"}`;
     if (!structuredWorkflow && event.ok) {
       renderWorkflowUpdate({
@@ -777,6 +787,7 @@ function handleEvent(conversationId, event, finalBubble) {
   } else if (event.type === "provider_fallback") {
     const agent = ensureAgent(event.provider);
     agent.card.classList.remove("active");
+    agent.heartbeat.classList.add("hidden");
     agent.status.textContent = event.error === "quota"
       ? `Quota épuisé · relais ${capitalize(event.fallback)}`
       : `Indisponible · relais ${capitalize(event.fallback)}`;
