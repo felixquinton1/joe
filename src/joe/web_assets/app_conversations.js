@@ -375,6 +375,8 @@ window.createJoeConversations = function createJoeConversations({
     $("project-execution-mode").value = "";
     refreshSelectMenu($("project-execution-mode"));
     $("project-context").value = "";
+    $("project-skills").innerHTML = "<small>Enregistre le projet pour ajouter des skills.</small>";
+    $("import-skill").disabled = true;
     $("project-dialog").showModal();
     requestAnimationFrame(() => $("project-name").focus());
   }
@@ -392,8 +394,46 @@ window.createJoeConversations = function createJoeConversations({
     $("project-execution-mode").value = project.default_execution_mode || "";
     refreshSelectMenu($("project-execution-mode"));
     $("project-context").value = project.context || "";
+    $("import-skill").disabled = false;
+    loadProjectSkills(project.id).catch(() => {});
     $("project-dialog").showModal();
   }
+
+  async function loadProjectSkills(projectId) {
+    const skills = await fetcher(`/api/projects/${projectId}/skills`).then(response => response.json());
+    const target = $("project-skills");
+    target.replaceChildren();
+    if (!skills.length) {
+      target.innerHTML = "<small>Aucun skill partagé détecté.</small>";
+      return;
+    }
+    for (const skill of skills) {
+      const row = document.createElement("span");
+      row.innerHTML = `<b>${escapeHtml(skill.name)}</b><small>${escapeHtml(skill.scope || "projet")}</small>`;
+      target.appendChild(row);
+    }
+  }
+
+  $("import-skill").onclick = async () => {
+    if (!state.editingProjectId) return;
+    const source = $("skill-source").value.trim();
+    if (!source) return;
+    const response = await fetcher(`/api/projects/${state.editingProjectId}/skills/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source,
+        provider: $("skill-provider").value,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      window.alert(payload.message || "Import du skill impossible.");
+      return;
+    }
+    $("skill-source").value = "";
+    await loadProjectSkills(state.editingProjectId);
+  };
 
   function updateAutoDeliveryHelp() {
     const help = $("project-auto-delivery-help");

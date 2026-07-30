@@ -88,6 +88,11 @@
       <small id="project-auto-delivery-help" class="setting-help">Désactivé : tu peux examiner les changements et utiliser « Rejeter la sélection ».</small>
       <label>Permission des validations opérationnelles<select id="project-execution-mode"><option value="">Automatique (lecture seule)</option><option value="workspace-write">Écriture dans le projet</option><option value="danger-full-access">Accès complet</option></select></label>
       <label>Contexte transmis à toutes ses conversations<textarea id="project-context" rows="10" placeholder="Objectif, conventions, décisions stables…"></textarea></label>
+      <section class="skill-manager" aria-label="Skills partagés">
+        <div class="skill-manager-head"><span>Skills partagés</span><small>Utilisés par tous les fournisseurs de ce projet</small></div>
+        <div id="project-skills" class="skill-list"><small>Aucun skill partagé détecté.</small></div>
+        <div class="skill-import-row"><input id="skill-source" placeholder="Chemin vers SKILL.md ou son dossier"><select id="skill-provider"><option value="unknown">Source inconnue</option><option value="claude">Claude</option><option value="codex">Codex</option></select><button id="import-skill" type="button">Importer</button></div>
+      </section>
       <div class="dialog-actions"><button id="cancel-project" type="button">Annuler</button><button id="save-project" value="default">Enregistrer</button></div>
     </form>
   </dialog>

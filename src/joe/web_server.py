@@ -12,7 +12,8 @@ from . import __version__
 from .auth import LocalAuth, auth_token_path, required_role, rotate_token
 from .http_utils import RequestBodyError, read_json_body, validate_bind
 from .provider_registry import get_provider_catalog, get_provider_names
-from .web_runs import ActiveConversationError, RunManager
+from .skills import import_skill, list_skills
+from .web_runs import ActiveConversationError, RunManager, _existing_directory
 
 _ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
@@ -90,6 +91,13 @@ class Handler(BaseHTTPRequestHandler):
             )
         if path == "/api/projects":
             return self._json(self.server.manager.conversations.list_projects())
+        if path.startswith("/api/projects/") and path.endswith("/skills"):
+            project_id = unquote(path.split("/")[-2])
+            project = self.server.manager.conversations.get_project(project_id)
+            if not project:
+                return self._json({}, HTTPStatus.NOT_FOUND)
+            workspace = _existing_directory(project.get("workspace_root")) or self.server.manager.project
+            return self._json(list_skills(workspace))
         if path.startswith("/api/projects/"):
             item = self.server.manager.conversations.get_project(
                 unquote(path.rsplit("/", 1)[1])
@@ -172,6 +180,25 @@ class Handler(BaseHTTPRequestHandler):
                 ),
                 HTTPStatus.CREATED,
             )
+        if path.startswith("/api/projects/") and path.endswith("/skills/import"):
+            project_id = unquote(path.split("/")[-3])
+            project = self.server.manager.conversations.get_project(project_id)
+            if not project:
+                return self._json({}, HTTPStatus.NOT_FOUND)
+            payload = self._read_payload(allow_empty=True)
+            if payload is None:
+                return
+            workspace = _existing_directory(project.get("workspace_root")) or self.server.manager.project
+            try:
+                imported = import_skill(
+                    workspace,
+                    Path(str(payload.get("source", ""))),
+                    name=str(payload.get("name", "")).strip() or None,
+                    source_provider=str(payload.get("provider", "unknown")),
+                )
+            except (OSError, ValueError) as error:
+                return self._json({"message": str(error)}, HTTPStatus.BAD_REQUEST)
+            return self._json(imported, HTTPStatus.CREATED)
         if path != "/api/runs":
             return self.send_error(HTTPStatus.NOT_FOUND)
         try:
