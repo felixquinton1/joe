@@ -65,6 +65,15 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert f'const APP_VERSION = "{__version__}";' in app
         assert "window.location.reload()" not in app
 
+        connection.request("GET", "/style.css")
+        response = connection.getresponse()
+        stylesheet = response.read().decode()
+        assert response.status == 200
+        assert ".composer {" in stylesheet
+        assert "z-index: 60;" in stylesheet
+        assert ".tool-panel {" in stylesheet
+        assert "z-index: 1000;" in stylesheet
+
         connection.request("GET", "/markdown.js")
         response = connection.getresponse()
         markdown = response.read().decode()
