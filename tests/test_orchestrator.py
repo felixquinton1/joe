@@ -2,7 +2,7 @@ from pathlib import Path
 import time
 
 from joe.models import Intent, Mode, ProviderResult, Route
-from joe.orchestrator import OrchestrationError, Orchestrator
+from joe.orchestrator import OrchestrationError, Orchestrator, _external_reference_context
 from joe.orchestrator_workflows import clean_report
 from joe.provider_health import clear_cooldowns, record_result
 
@@ -479,6 +479,23 @@ def test_health_check_skips_project_context_and_uses_short_timeout(tmp_path):
     assert "SECRET CONVERSATION CONTEXT" not in prompt
     assert "17 × 23" in prompt
     assert timeout == 30
+
+
+def test_external_github_reference_is_added_as_bounded_context(monkeypatch):
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *args): return None
+        def read(self, size): return b"# Maestro\nagent orchestration"
+
+    monkeypatch.setattr(
+        "joe.orchestrator.urllib.request.urlopen",
+        lambda *args, **kwargs: Response(),
+    )
+    context = _external_reference_context(
+        "Compare https://github.com/RunMaestro/Maestro"
+    )
+    assert "External public reference: RunMaestro/Maestro" in context
+    assert "agent orchestration" in context
 
 
 def test_clean_report_omits_internal_validation_refusal_section():

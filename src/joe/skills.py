@@ -67,7 +67,14 @@ def promote_skill(project: Path, name: str) -> dict[str, Any]:
     if global_root not in destination.parents:
         raise ValueError("Destination de skill commun invalide.")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(source.read_text(errors="replace"))
+    content = source.read_text(errors="replace")
+    content = re.sub(
+        r"^<!-- Joe shared skill: imported from .*? -->\n\n",
+        "",
+        content,
+        count=1,
+    )
+    destination.write_text(content.rstrip())
     return {
         "name": skill_name,
         "path": str(destination),

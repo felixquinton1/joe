@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import re
 import threading
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -18,6 +20,33 @@ from .orchestrator_workflows import (
 from .provider_health import recent_failure, record_result
 from .providers import Provider, default_providers
 from .router import Router
+
+_PUBLIC_URL = re.compile(r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/[^\s]*)?")
+
+
+def _external_reference_context(request: str) -> str:
+    """Fetch small public GitHub README references for comparison requests."""
+    chunks = []
+    for url in dict.fromkeys(_PUBLIC_URL.findall(request)):
+        parts = url.rstrip("/").split("/")
+        if len(parts) < 5:
+            continue
+        owner, repo = parts[3], parts[4].removesuffix(".git")
+        candidates = (
+            f"https://raw.githubusercontent.com/{owner}/{repo}/main/README.md",
+            f"https://raw.githubusercontent.com/{owner}/{repo}/master/README.md",
+        )
+        content = None
+        for candidate in candidates:
+            try:
+                with urllib.request.urlopen(candidate, timeout=6) as response:
+                    content = response.read(120_000).decode("utf-8", "replace")
+                break
+            except (OSError, urllib.error.URLError, UnicodeError):
+                continue
+        if content:
+            chunks.append(f"## External public reference: {owner}/{repo}\n{content}")
+    return "\n\n".join(chunks)
 
 
 class OrchestrationError(RuntimeError):
@@ -76,6 +105,17 @@ class Orchestrator:
         )
         if extra_context and not health_check:
             context += "\n\n" + extra_context
+        if not health_check:
+            external = _external_reference_context(request)
+            if external:
+                context += "\n\n" + external
+        if route.mode is Mode.FAST and route.intent is not Intent.MODIFY:
+            context += (
+                "\n\n# Direct-answer style\n"
+                "Answer the user's question directly. Do not write a plan, "
+                "do not start with 'Ce que je vais faire', and do not describe "
+                "an implementation workflow unless the user asks for one."
+            )
         results: list[ProviderResult] = []
 
         if route.mode is Mode.FAST:
