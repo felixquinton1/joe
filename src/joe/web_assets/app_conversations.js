@@ -15,6 +15,12 @@ window.createJoeConversations = function createJoeConversations({
   fetcher
 }) {
   let draggedItem = null;
+  let historyFilter = "";
+
+  $("history-search").addEventListener("input", event => {
+    historyFilter = event.target.value.trim().toLocaleLowerCase();
+    renderConversations();
+  });
 
   async function loadConversations(selectFirst = true) {
     [state.conversations, state.projects] = await Promise.all([
@@ -63,6 +69,12 @@ window.createJoeConversations = function createJoeConversations({
       group.appendChild(header);
       const conversations = state.conversations
         .filter(item => item.project_id === project.id)
+        .filter(item => {
+          if (!historyFilter) return true;
+          const text = [item.title, ...(item.messages || []).map(message => message.content || "")]
+            .join(" ").toLocaleLowerCase();
+          return text.includes(historyFilter);
+        })
         .sort((left, right) => Number(right.pinned) - Number(left.pinned));
       const conversationList = document.createElement("div");
       conversationList.className = "project-conversations";
@@ -371,6 +383,7 @@ window.createJoeConversations = function createJoeConversations({
     $("project-extra-roots").value = "";
     $("project-remote-access").checked = false;
     $("project-auto-delivery").checked = false;
+    $("project-isolated-worktrees").checked = false;
     updateAutoDeliveryHelp();
     $("project-execution-mode").value = "";
     refreshSelectMenu($("project-execution-mode"));
@@ -392,6 +405,7 @@ window.createJoeConversations = function createJoeConversations({
     $("project-extra-roots").value = (project.additional_roots || []).join("\n");
     $("project-remote-access").checked = Boolean(project.remote_access);
     $("project-auto-delivery").checked = Boolean(project.auto_commit_push);
+    $("project-isolated-worktrees").checked = Boolean(project.isolated_worktrees);
     updateAutoDeliveryHelp();
     $("project-execution-mode").value = project.default_execution_mode || "";
     refreshSelectMenu($("project-execution-mode"));
@@ -515,6 +529,7 @@ window.createJoeConversations = function createJoeConversations({
             .split("\n").map(value => value.trim()).filter(Boolean),
           remote_access: $("project-remote-access").checked,
           auto_commit_push: $("project-auto-delivery").checked,
+          isolated_worktrees: $("project-isolated-worktrees").checked,
           default_execution_mode: $("project-execution-mode").value,
           context: $("project-context").value
         })

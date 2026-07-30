@@ -119,6 +119,7 @@ class ConversationStore:
             "additional_roots": [],
             "remote_access": False,
             "auto_commit_push": False,
+            "isolated_worktrees": False,
             "default_execution_mode": "",
             "collapsed": False,
             "position": len(existing),
@@ -154,6 +155,8 @@ class ConversationStore:
                 project["remote_access"] = bool(changes["remote_access"])
             if "auto_commit_push" in changes:
                 project["auto_commit_push"] = bool(changes["auto_commit_push"])
+            if "isolated_worktrees" in changes:
+                project["isolated_worktrees"] = bool(changes["isolated_worktrees"])
             if "default_execution_mode" in changes:
                 value = str(changes["default_execution_mode"])
                 project["default_execution_mode"] = (
@@ -184,6 +187,85 @@ class ConversationStore:
                     ),
                 ),
             )
+
+    def search(self, query: str, project_id: str | None = None) -> list[dict[str, Any]]:
+        """Search conversation titles and messages without external services."""
+        needle = " ".join(query.casefold().split())
+        if not needle:
+            return []
+        with self.lock:
+            payload = self._read()
+            projects = {item["id"]: item for item in payload["projects"]}
+            results: list[dict[str, Any]] = []
+            for conversation in payload["conversations"]:
+                if project_id and conversation.get("project_id") != project_id:
+                    continue
+                haystack = "\n".join(
+                    [conversation.get("title", "")]
+                    + [str(message.get("content", "")) for message in conversation.get("messages", [])]
+                )
+                folded = haystack.casefold()
+                position = folded.find(needle)
+                if position < 0:
+                    continue
+                start = max(0, position - 120)
+                snippet = haystack[start:position + len(needle) + 180].replace("\n", " ")
+                results.append({
+                    "conversation_id": conversation["id"],
+                    "title": conversation.get("title", "Nouvelle conversation"),
+                    "project_id": conversation.get("project_id"),
+                    "project": projects.get(conversation.get("project_id"), {}).get("name", ""),
+                    "updated_at": conversation.get("updated_at", 0),
+                    "snippet": snippet,
+                })
+            return sorted(results, key=lambda item: item["updated_at"], reverse=True)[:100]
+
+    def analytics(self, project_id: str | None = None) -> dict[str, Any]:
+        """Aggregate known run metadata; unknown token/cost values stay null."""
+        with self.lock:
+            payload = self._read()
+            runs: list[dict[str, Any]] = []
+            by_provider: dict[str, dict[str, Any]] = {}
+            by_mode: dict[str, int] = {}
+            for conversation in payload["conversations"]:
+                if project_id and conversation.get("project_id") != project_id:
+                    continue
+                for message in conversation.get("messages", []):
+                    summary = message.get("run_summary")
+                    if not summary:
+                        continue
+                    route = summary.get("route") or {}
+                    attempts = summary.get("attempts") or []
+                    providers = sorted({str(item.get("provider")) for item in attempts if item.get("provider")})
+                    item = {
+                        "run_id": message.get("run_id"),
+                        "conversation_id": conversation["id"],
+                        "project_id": conversation.get("project_id"),
+                        "at": message.get("at"),
+                        "mode": route.get("mode"),
+                        "intent": route.get("intent"),
+                        "providers": providers,
+                        "attempts": len(attempts),
+                        "tokens": None,
+                        "cost_usd": None,
+                    }
+                    runs.append(item)
+                    mode = route.get("mode") or "unknown"
+                    by_mode[mode] = by_mode.get(mode, 0) + 1
+                    for provider in providers:
+                        stats = by_provider.setdefault(provider, {"runs": 0, "successes": 0, "failures": 0})
+                        stats["runs"] += 1
+                        if any(a.get("provider") == provider and a.get("status") == "complete" for a in attempts):
+                            stats["successes"] += 1
+                        else:
+                            stats["failures"] += 1
+            return {
+                "runs": sorted(runs, key=lambda item: item.get("at") or 0, reverse=True),
+                "total_runs": len(runs),
+                "by_provider": by_provider,
+                "by_mode": by_mode,
+                "note": "Tokens et coûts sont null lorsqu’ils ne sont pas exposés par le fournisseur.",
+            }
 
     def get(self, conversation_id: str) -> dict[str, Any] | None:
         with self.lock:
@@ -488,6 +570,7 @@ class ConversationStore:
                     "additional_roots": [],
                     "remote_access": False,
                     "auto_commit_push": False,
+                    "isolated_worktrees": False,
                     "default_execution_mode": "",
                     "collapsed": False,
                     "position": 0,
@@ -521,6 +604,7 @@ class ConversationStore:
             project.setdefault("additional_roots", [])
             project.setdefault("remote_access", False)
             project.setdefault("auto_commit_push", False)
+            project.setdefault("isolated_worktrees", False)
             project.setdefault("default_execution_mode", "")
             project.setdefault("collapsed", False)
             project.setdefault("position", payload["projects"].index(project))

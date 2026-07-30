@@ -19,6 +19,7 @@
         <div class="joe-tagline"><span>✦</span><strong data-i18n="slogan">L’IA à la mode chez les jeunes</strong></div>
       </div>
       <div class="panel-title"><div><span class="eyebrow" data-i18n="project">Projet</span><h2 data-i18n="conversations">Conversations</h2></div><button id="new-project" class="icon-button" type="button" title="Nouveau sous-projet" aria-label="Nouveau sous-projet">＋</button></div>
+      <input id="history-search" class="history-search" type="search" placeholder="Rechercher dans l’historique…" aria-label="Rechercher dans l’historique">
       <div id="conversations" class="history-list"></div>
     </aside>
     <div class="panel-resizer resize-left" data-resizer="left" title="Redimensionner les conversations"></div>
@@ -90,6 +91,7 @@
         <legend>Exécution &amp; livraison</legend>
         <label>Permission des validations opérationnelles<select id="project-execution-mode"><option value="">Automatique (lecture seule)</option><option value="workspace-write">Écriture dans le projet</option><option value="danger-full-access">Accès complet</option></select></label>
         <label class="check-label"><input id="project-auto-delivery" type="checkbox"> Commit et push automatiques après une modification validée</label>
+        <label class="check-label"><input id="project-isolated-worktrees" type="checkbox"> Isoler les modifications dans un worktree Git</label>
         <small id="project-auto-delivery-help" class="setting-help">Désactivé : tu peux examiner les changements et utiliser « Rejeter la sélection ».</small>
       </fieldset>
       <fieldset class="dialog-section">

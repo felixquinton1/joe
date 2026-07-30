@@ -19,6 +19,7 @@ from .orchestrator import Orchestrator
 from .router import _routing_text
 from .routing import resolve_route
 from .usage import cached_usage_status, usage_status
+from .worktrees import WorktreeManager
 
 
 class ActiveConversationError(RuntimeError):
@@ -39,6 +40,8 @@ class LiveRun:
     request: str
     conversation_id: str
     workspace: Path | None = None
+    base_workspace: Path | None = None
+    isolated_worktree: bool = False
     events: list[dict[str, Any]] = field(default_factory=list)
     done: bool = False
     cancel_event: threading.Event = field(default_factory=threading.Event)
@@ -94,12 +97,19 @@ class RunManager:
         run_id: str | None = None,
         resumed: bool = False,
     ) -> LiveRun:
+        run_id = run_id or uuid.uuid4().hex
         workspace, _, _, _ = self._project_scope(conversation_id)
+        base_workspace = workspace
+        isolated = self._project_uses_worktree(conversation_id)
+        if isolated:
+            workspace = WorktreeManager(workspace).create(run_id)
         run = LiveRun(
-            run_id or uuid.uuid4().hex,
+            run_id,
             request,
             conversation_id,
             workspace=workspace,
+            base_workspace=base_workspace,
+            isolated_worktree=isolated,
             git_before=snapshot(workspace),
         )
         with self.lock:
@@ -108,6 +118,8 @@ class RunManager:
                 active.conversation_id == conversation_id and not active.done
                 for active in self.live.values()
             ):
+                if isolated:
+                    WorktreeManager(base_workspace).remove(workspace)
                 raise ActiveConversationError(
                     "Une tâche est déjà active dans cette conversation."
                 )
@@ -130,6 +142,8 @@ class RunManager:
                 )
             except Exception:
                 self.live.pop(run.run_id, None)
+                if isolated:
+                    WorktreeManager(base_workspace).remove(workspace)
                 if not resumed:
                     self.conversations.remove_run(conversation_id, run.run_id)
                 raise
@@ -151,6 +165,8 @@ class RunManager:
             with self.lock:
                 self.live.pop(run.run_id, None)
             self._remove_pending(run.run_id)
+            if run.isolated_worktree and run.base_workspace and run.workspace:
+                WorktreeManager(run.base_workspace).remove(run.workspace)
             if not resumed:
                 self.conversations.remove_run(conversation_id, run.run_id)
             raise
@@ -198,6 +214,7 @@ class RunManager:
                 remote_access,
                 project_execution_mode,
             ) = self._project_scope(run.conversation_id)
+            workspace = run.workspace or workspace
             orchestrator = Orchestrator(
                 workspace,
                 additional_roots=additional_roots,
@@ -559,6 +576,11 @@ class RunManager:
             str(project.get("default_execution_mode", "")),
         )
 
+    def _project_uses_worktree(self, conversation_id: str) -> bool:
+        conversation = self.conversations.get(conversation_id) or {}
+        project = self.conversations.get_project(conversation.get("project_id", "main")) or {}
+        return bool(project.get("isolated_worktrees"))
+
     def _schedule_compaction(
         self,
         conversation_id: str,
@@ -868,6 +890,9 @@ def _run_summary(run: LiveRun) -> dict[str, Any]:
         "quota_admission": quota_admission,
         "workflow": list(workflow.values()),
         "attempts": attempts,
+        "isolated_worktree": run.isolated_worktree,
+        "workspace": str(run.workspace) if run.workspace else None,
+        "base_workspace": str(run.base_workspace) if run.base_workspace else None,
     }
 
 

@@ -149,6 +149,29 @@ def test_run_summary_persists_with_assistant_message(tmp_path):
     assert store.get(conversation["id"])["messages"][0]["run_summary"] == summary
 
 
+def test_search_and_analytics_are_local_and_bounded(tmp_path):
+    store = ConversationStore(tmp_path, tmp_path / "runs")
+    store.ensure()
+    conversation = store.create()
+    store.append_message(conversation["id"], "user", "Analyse le worktree", "run-1")
+    store.append_message(
+        conversation["id"],
+        "assistant",
+        "Worktree isolé terminé",
+        "run-1",
+        run_summary={
+            "route": {"mode": "fast", "intent": "analyze"},
+            "attempts": [{"provider": "codex", "status": "complete"}],
+        },
+    )
+    results = store.search("worktree")
+    assert results and results[0]["conversation_id"] == conversation["id"]
+    report = store.analytics()
+    assert report["total_runs"] == 1
+    assert report["by_provider"]["codex"]["successes"] == 1
+    assert report["runs"][0]["cost_usd"] is None
+
+
 def test_subproject_context_is_shared_by_its_conversations(tmp_path):
     root = tmp_path / ".agentflow"
     runs = root / "runs"

@@ -76,6 +76,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(facade.usage_status(force=force))
         if path == "/api/conversations":
             return self._json(self.server.manager.conversations.list())
+        if path == "/api/search":
+            query = parse_qs(parsed.query).get("q", [""])[0]
+            project_id = parse_qs(parsed.query).get("project", [None])[0]
+            return self._json(self.server.manager.conversations.search(query, project_id))
+        if path == "/api/analytics":
+            project_id = parse_qs(parsed.query).get("project", [None])[0]
+            return self._json(self.server.manager.conversations.analytics(project_id))
         if path == "/api/preferences":
             return self._json(self.server.manager.conversations.preferences())
         if path == "/api/runs/active":
