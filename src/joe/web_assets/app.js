@@ -1,4 +1,4 @@
-const APP_VERSION = "0.23.20";
+const APP_VERSION = "0.23.21";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -87,6 +87,7 @@ function setupSelectMenu(select) {
 
   const close = () => {
     wrapper.classList.remove("open");
+    wrapper.classList.remove("open-up");
     button.setAttribute("aria-expanded", "false");
   };
   button.onclick = event => {
@@ -96,6 +97,16 @@ function setupSelectMenu(select) {
     closeSelectMenus();
     if (opening) {
       wrapper.classList.add("open");
+      const boundary = wrapper.closest("dialog")?.getBoundingClientRect()
+        || { top: 8, bottom: window.innerHeight - 8 };
+      const triggerBounds = button.getBoundingClientRect();
+      const menuHeight = menu.getBoundingClientRect().height;
+      const spaceBelow = boundary.bottom - triggerBounds.bottom;
+      const spaceAbove = triggerBounds.top - boundary.top;
+      wrapper.classList.toggle(
+        "open-up",
+        spaceBelow < menuHeight + 10 && spaceAbove > spaceBelow,
+      );
       button.setAttribute("aria-expanded", "true");
     }
   };

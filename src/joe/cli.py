@@ -301,7 +301,7 @@ def _restart(argv: list[str]) -> int:
         prog="joe restart",
         description="Restart one tmux-managed Joe web server.",
     )
-    restart_parser.add_argument("-C", "--project", type=Path, default=Path.cwd())
+    restart_parser.add_argument("-C", "--project", type=Path)
     restart_parser.add_argument("--host", default="127.0.0.1")
     restart_parser.add_argument("--port", type=int, default=8765)
     restart_parser.add_argument(
@@ -315,9 +315,15 @@ def _restart(argv: list[str]) -> int:
         help="restart even when the active-run check is unavailable",
     )
     args = restart_parser.parse_args(argv)
-    if not args.project.is_dir():
+    url = f"http://{args.host}:{args.port}"
+    status = _server_status(url)
+    project = args.project
+    if project is None and status and status.get("project"):
+        project = Path(str(status["project"]))
+    project = project or Path.cwd()
+    if not project.is_dir():
         print(
-            f"joe restart: project directory does not exist: {args.project}",
+            f"joe restart: project directory does not exist: {project}",
             file=sys.stderr,
         )
         return 2
@@ -328,8 +334,6 @@ def _restart(argv: list[str]) -> int:
         )
         return 2
 
-    url = f"http://{args.host}:{args.port}"
-    status = _server_status(url)
     active = _active_runs(url)
     if active:
         print(
@@ -357,7 +361,7 @@ def _restart(argv: list[str]) -> int:
     return _web(
         [
             "-C",
-            str(args.project.resolve()),
+            str(project.resolve()),
             "--host",
             args.host,
             "--port",

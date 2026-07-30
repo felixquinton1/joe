@@ -364,6 +364,11 @@ button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-v
   animation: dropdown-in .12s ease-out;
 }
 .select-menu.open .select-menu-options { display: grid; gap: 1px; }
+.select-menu.open-up .select-menu-options {
+  top: auto;
+  bottom: calc(100% + 6px);
+  animation-name: dropdown-in-up;
+}
 .select-menu-option {
   width: 100%; padding: 7px 8px;
   border: 0; border-radius: 7px;
@@ -731,6 +736,10 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 .dialog-actions .danger-button:last-child { border-color: var(--danger); background: var(--danger); }
 @keyframes dropdown-in {
   from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes dropdown-in-up {
+  from { opacity: 0; transform: translateY(3px); }
   to { opacity: 1; transform: translateY(0); }
 }
 @keyframes dialog-in {

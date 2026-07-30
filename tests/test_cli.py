@@ -70,6 +70,28 @@ def test_restart_recreates_only_selected_tmux_session(
     assert calls[1][-2:] == ["--profile", "viewer"]
 
 
+def test_restart_reuses_the_active_server_project_by_default(
+    tmp_path, monkeypatch
+):
+    calls = []
+    monkeypatch.setattr("joe.cli.shutil.which", lambda name: "/usr/bin/tmux")
+    monkeypatch.setattr("joe.cli._active_runs", lambda url: [])
+    monkeypatch.setattr(
+        "joe.cli._server_status",
+        lambda url: {"profile": "maintainer", "project": str(tmp_path)},
+    )
+    monkeypatch.setattr(
+        "joe.cli.subprocess.run",
+        lambda command, **kwargs: calls.append(command)
+        or SimpleNamespace(returncode=0, stdout=""),
+    )
+    monkeypatch.setattr("joe.cli._web", lambda args: calls.append(args) or 0)
+
+    assert _restart([]) == 0
+    project_index = calls[1].index("-C") + 1
+    assert calls[1][project_index] == str(tmp_path.resolve())
+
+
 def test_restart_requires_force_when_server_is_unreachable(
     tmp_path, monkeypatch, capsys
 ):
