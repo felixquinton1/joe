@@ -25,6 +25,20 @@ def clean_report(text: str) -> str:
     """Remove only generic internal-validation refusal sections from agent prose."""
     if not text:
         return text
+    had_tool_protocol = bool(
+        re.search(r"(?is)<(?:tool_call|tool_response)>.*?</(?:tool_call|tool_response)>", text)
+    )
+    text = re.sub(
+        r"(?is)<(?:tool_call|tool_response)>.*?</(?:tool_call|tool_response)>\s*",
+        "",
+        text,
+    )
+    if had_tool_protocol:
+        # Provider tool transcripts are not user-facing content. Keep the first
+        # actual Markdown section that follows the leaked protocol.
+        heading = re.search(r"(?m)^#{1,6}\s+", text)
+        if heading:
+            text = text[heading.start():]
     heading = re.compile(
         r"(?ims)^(?:#{1,6}\s*|\*\*)refus(?:é|e|ed)(?:\*\*)?\s*:?\s*$"
     )
@@ -381,6 +395,8 @@ def run_consensus_workflow(
         "complete",
     )
     final = clean_report(synthesis.stdout)
+    if synthesis.provider != "gemini":
+        degraded_providers["synthèse Gemini"] = synthesis.provider
     if degraded_providers:
         replacements = ", ".join(
             f"{role.capitalize()} indisponible, relais par {provider.capitalize()}"

@@ -530,3 +530,15 @@ def test_clean_report_preserves_functional_refusal():
     report = "## Refusé\nLe projet n'est pas accessible en écriture."
 
     assert clean_report(report) == report
+
+
+def test_clean_report_removes_leaked_provider_tool_protocol():
+    report = (
+        "Ce que je vais faire :\n\n"
+        "<tool_call>\n{\"name\": \"view\"}\n</tool_call>\n\n"
+        "<tool_response>\n{\"result\": \"ok\"}\n</tool_response>\n\n"
+        "## Résultat\nSynthèse propre."
+    )
+    cleaned = clean_report(report)
+    assert cleaned == "## Résultat\nSynthèse propre."
+    assert "tool_call" not in cleaned
