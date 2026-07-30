@@ -388,14 +388,28 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("invalid mode")
         except ValueError as exc:
             return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-        needs_full_access = self.server.manager.requires_full_access_approval(
-            request,
-            conversation_id,
-            agent,
-            mode,
-            execution_mode,
-        )
         skill_request = parse_skill_request(request)
+        classification = (
+            None
+            if skill_request is not None
+            else self.server.manager.classify(
+                request,
+                conversation_id,
+                agent,
+                mode,
+            )
+        )
+        if (
+            skill_request is None
+            and classification is not None
+            and classification.action == "create_skill"
+            and classification.confidence >= 0.85
+        ):
+            skill_request = {
+                "name": classification.skill_name,
+                "instructions": classification.skill_instructions,
+                "scope": classification.skill_scope,
+            }
         if skill_request is not None:
             if not self.server.auth.allows("maintainer"):
                 return self._json(
@@ -424,6 +438,14 @@ class Handler(BaseHTTPRequestHandler):
             except ActiveConversationError as exc:
                 return self._json({"error": str(exc)}, HTTPStatus.CONFLICT)
             return self._json({"run_id": run.run_id}, HTTPStatus.ACCEPTED)
+        needs_full_access = self.server.manager.requires_full_access_approval(
+            request,
+            conversation_id,
+            agent,
+            mode,
+            execution_mode,
+            classification,
+        )
         if needs_full_access and not self.server.auth.allows("maintainer"):
             return self._json(
                 {"error": "Le profil maintainer est requis pour cet accès."},
@@ -477,6 +499,7 @@ class Handler(BaseHTTPRequestHandler):
                 effort,
                 execution_mode,
                 attachments,
+                classification=classification,
             )
         except ActiveConversationError as exc:
             return self._json({"error": str(exc)}, HTTPStatus.CONFLICT)

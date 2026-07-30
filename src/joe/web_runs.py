@@ -11,7 +11,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .capabilities import cached_provider_capabilities, select_model
+from .capabilities import (
+    cached_provider_capabilities,
+    select_model,
+    select_model_tier,
+)
 from .approvals import ApprovalStore
 from .conversations import ConversationStore, FREE_PROJECT_ID
 from .files import FileLibrary
@@ -20,6 +24,10 @@ from .models import Intent, Mode, Route
 from .orchestrator import Orchestrator
 from .router import _routing_text
 from .routing import resolve_route
+from .route_classifier import (
+    RouteClassification,
+    classify_request as classify_route_request,
+)
 from .skills import create_skill
 from .tasks import TaskStore
 from .usage import cached_usage_status, usage_status
@@ -130,6 +138,7 @@ class RunManager:
         *,
         run_id: str | None = None,
         resumed: bool = False,
+        classification: RouteClassification | None = None,
     ) -> LiveRun:
         run_id = run_id or uuid.uuid4().hex
         workspace, _, _, _ = self._project_scope(conversation_id)
@@ -218,7 +227,15 @@ class RunManager:
             )
         thread = threading.Thread(
             target=self._execute,
-            args=(run, agent, mode, model, effort, execution_mode),
+            args=(
+                run,
+                agent,
+                mode,
+                model,
+                effort,
+                execution_mode,
+                classification,
+            ),
             daemon=True,
         )
         try:
@@ -341,17 +358,21 @@ class RunManager:
         agent: str | None,
         mode: str | None,
         execution_mode: str | None,
+        classification: RouteClassification | None = None,
     ) -> bool:
         _, _, _, project_execution_mode = self._project_scope(conversation_id)
         forced_mode = Mode(mode) if mode else None
-        route = self.orchestrator.router.route(
+        route = resolve_route(
+            self.orchestrator.router,
             request,
+            cached_usage_status(),
             forced_agent=agent,
             forced_mode=forced_mode,
             previous_provider=self.conversations.previous_provider(
                 conversation_id
             ),
-        )
+            classification=classification,
+        ).route
         resolved = _resolve_execution_mode(
             execution_mode,
             project_execution_mode,
@@ -359,6 +380,41 @@ class RunManager:
             request,
         )
         return resolved == "danger-full-access"
+
+    def classify(
+        self,
+        request: str,
+        conversation_id: str,
+        agent: str | None,
+        mode: str | None,
+    ) -> RouteClassification | None:
+        if os.environ.get("JOE_DISABLE_LLM_ROUTER") == "1":
+            return None
+        workspace, additional_roots, remote_access, _ = self._project_scope(
+            conversation_id
+        )
+        orchestrator = Orchestrator(
+            workspace,
+            additional_roots=additional_roots,
+            remote_access=remote_access,
+        )
+        forced_mode = Mode(mode) if mode else None
+        previous = self.conversations.previous_provider(conversation_id)
+        baseline = orchestrator.router.route(
+            request,
+            forced_agent=agent,
+            forced_mode=forced_mode,
+            previous_provider=previous,
+        )
+        return classify_route_request(
+            request,
+            baseline,
+            orchestrator.providers,
+            cached_usage_status(),
+            workspace,
+            forced_agent=bool(agent),
+            forced_mode=forced_mode is not None,
+        )
 
     def _execute(
         self,
@@ -368,6 +424,7 @@ class RunManager:
         model: str | None,
         effort: str | None,
         execution_mode: str | None,
+        classification: RouteClassification | None = None,
     ) -> None:
         try:
             (
@@ -393,6 +450,24 @@ class RunManager:
             )
             routing_started = time.monotonic()
             forced_mode = Mode(mode) if mode else None
+            if classification is None:
+                baseline = orchestrator.router.route(
+                    run.request,
+                    forced_agent=agent,
+                    forced_mode=forced_mode,
+                    previous_provider=self.conversations.previous_provider(
+                        run.conversation_id
+                    ),
+                )
+                classification = classify_route_request(
+                    run.request,
+                    baseline,
+                    orchestrator.providers,
+                    cached_usage_status(),
+                    workspace,
+                    forced_agent=bool(agent),
+                    forced_mode=forced_mode is not None,
+                )
             decision = resolve_route(
                 orchestrator.router,
                 run.request,
@@ -402,6 +477,7 @@ class RunManager:
                 previous_provider=self.conversations.previous_provider(
                     run.conversation_id
                 ),
+                classification=classification,
             )
             route = decision.route
             quota_admission = decision.quota_admission
@@ -418,7 +494,13 @@ class RunManager:
                 )
                 or _write_enabled(execution_mode)
             )
-            if _complex_request(run.request, route):
+            if classification is not None:
+                effort = effort or classification.effort
+                model = model or select_model_tier(
+                    route.primary,
+                    classification.model_tier,
+                )
+            elif _complex_request(run.request, route):
                 effort = effort or "high"
                 model = model or select_model(route.primary, complex_request=True)
             elif route.mode is Mode.FAST:
@@ -444,6 +526,9 @@ class RunManager:
                     ),
                     "health_check": "health-check" in route.reason,
                     "profile": self.profile,
+                    "classifier": (
+                        classification.payload() if classification else None
+                    ),
                 }
             )
             self.tasks.update(

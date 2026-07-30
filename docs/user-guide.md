@@ -60,6 +60,25 @@ joe cli
 `joe chat` est un alias conservé. `/exit` quitte la session. `--dry-run`
 affiche le routage choisi sans appeler d’agent.
 
+### Routage hybride
+
+Les commandes locales certaines restent déterministes et n’appellent aucun
+modèle. Pour une demande naturelle suffisamment ambiguë, Joe peut demander à
+un modèle léger déjà disponible de retourner une classification JSON bornée :
+intention, complexité, workflow, fournisseur, niveau de modèle et effort.
+
+Le classificateur est choisi selon les quotas connus, la disponibilité, les
+échecs récents et sa latence observée. Il dispose de six secondes, ne tente
+pas plusieurs fournisseurs en chaîne et revient au routeur local en cas
+d’échec. Les niveaux `light`, `standard`, `strong` et `long-context` sont
+ensuite traduits vers le catalogue réellement publié par chaque CLI.
+
+La classification ne peut ni accorder une permission, ni diminuer une
+intention d’écriture détectée localement, ni imposer un consensus pour une
+tâche simple. Un agent, un modèle, un effort ou un workflow choisi
+explicitement par l’utilisateur reste prioritaire. Le mécanisme peut être
+désactivé avec `JOE_DISABLE_LLM_ROUTER=1`.
+
 ### Interface Web
 
 Joe Web démarre par défaut avec le profil privé `maintainer`. Une instance

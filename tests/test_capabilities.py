@@ -1,5 +1,10 @@
 import joe.capabilities as capabilities_module
-from joe.capabilities import provider_capabilities, provider_defaults, select_model
+from joe.capabilities import (
+    provider_capabilities,
+    provider_defaults,
+    select_model,
+    select_model_tier,
+)
 
 
 def test_capabilities_have_safe_defaults_and_provider_specific_controls():
@@ -64,6 +69,9 @@ def test_simple_selection_prefers_declared_fast_lower_cost_model(monkeypatch):
 
     assert select_model("codex", complex_request=False) == "terra"
     assert select_model("codex", complex_request=True) == "frontier"
+    assert select_model_tier("codex", "light") == "terra"
+    assert select_model_tier("codex", "standard") == "frontier"
+    assert select_model_tier("codex", "strong") == "frontier"
 
 
 def test_claude_uses_sonnet_for_simple_and_opus_for_complex_requests(monkeypatch):

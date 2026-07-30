@@ -17,7 +17,9 @@ from .models import Mode
 from .orchestrator import OrchestrationError, Orchestrator
 from .provider_registry import get_provider_names
 from .routing import resolve_route
-from .skills import import_skill, list_skills
+from .route_classifier import classify_request
+from .capabilities import select_model_tier
+from .skills import create_skill, import_skill, list_skills, parse_skill_request
 from .usage import usage_status
 
 def parser() -> argparse.ArgumentParser:
@@ -100,13 +102,67 @@ def _handle(
     mode: Mode | None,
     dry_run: bool,
 ) -> int:
-    decision = resolve_route(
-        orchestrator.router,
+    local_skill = parse_skill_request(request)
+    statuses = usage_status()
+    baseline = orchestrator.router.route(
         request,
-        usage_status(),
         forced_agent=agent,
         forced_mode=mode,
         previous_provider=orchestrator.memory.previous_provider(),
+    )
+    classification = (
+        None
+        if local_skill is not None or dry_run
+        else classify_request(
+            request,
+            baseline,
+            orchestrator.providers,
+            statuses,
+            orchestrator.project,
+            forced_agent=bool(agent),
+            forced_mode=mode is not None,
+        )
+    )
+    if (
+        local_skill is None
+        and classification
+        and classification.action == "create_skill"
+        and classification.confidence >= 0.85
+    ):
+        local_skill = {
+            "name": classification.skill_name,
+            "instructions": classification.skill_instructions,
+            "scope": classification.skill_scope,
+        }
+    if local_skill is not None:
+        if not local_skill["name"] or not local_skill["instructions"]:
+            print(
+                "joe: précise le nom et les instructions du skill",
+                file=sys.stderr,
+            )
+            return 2
+        if dry_run:
+            print(
+                f"local-action=create_skill scope={local_skill['scope']} "
+                f"name={local_skill['name']}"
+            )
+            return 0
+        created = create_skill(
+            None if local_skill["scope"] == "global" else orchestrator.project,
+            local_skill["name"],
+            local_skill["instructions"],
+            global_scope=local_skill["scope"] == "global",
+        )
+        print(f"Skill {created['name']} créé : {created['path']}")
+        return 0
+    decision = resolve_route(
+        orchestrator.router,
+        request,
+        statuses,
+        forced_agent=agent,
+        forced_mode=mode,
+        previous_provider=orchestrator.memory.previous_provider(),
+        classification=classification,
     )
     route = decision.route
     quota_admission = decision.quota_admission
@@ -124,7 +180,16 @@ def _handle(
         print(route.reason)
         return 0
     try:
-        response, log = orchestrator.execute(request, route)
+        response, log = orchestrator.execute(
+            request,
+            route,
+            model=(
+                select_model_tier(route.primary, classification.model_tier)
+                if classification
+                else None
+            ),
+            effort=classification.effort if classification else None,
+        )
     except OrchestrationError as exc:
         print(f"joe: {exc}", file=sys.stderr)
         return 1

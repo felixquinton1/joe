@@ -134,6 +134,24 @@ def select_model(provider: str, *, complex_request: bool) -> str | None:
     return str(min(models, key=score).get("id"))
 
 
+def select_model_tier(provider: str, tier: str) -> str | None:
+    """Map an abstract routing tier to the provider's current model catalog."""
+    models = list(
+        (cached_provider_capabilities() or provider_capabilities())
+        .get(provider, {})
+        .get("models", [])
+    )
+    if not models:
+        return None
+    if tier == "light":
+        return select_model(provider, complex_request=False)
+    if tier in {"strong", "long-context"}:
+        return str(models[0].get("id"))
+    if len(models) <= 2:
+        return str(models[0].get("id"))
+    return str(models[len(models) // 2].get("id"))
+
+
 def _codex() -> dict[str, Any]:
     models = []
     if shutil.which("codex"):

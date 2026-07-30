@@ -5,6 +5,7 @@ from typing import Any
 
 from .models import Mode, Route
 from .router import Router
+from .route_classifier import RouteClassification, apply_classification
 from .usage import admit_route, balance_route
 
 
@@ -12,6 +13,7 @@ from .usage import admit_route, balance_route
 class RoutingDecision:
     route: Route
     quota_admission: dict[str, Any] | None
+    classification: RouteClassification | None = None
 
 
 def resolve_route(
@@ -22,6 +24,7 @@ def resolve_route(
     forced_agent: str | None = None,
     forced_mode: Mode | None = None,
     previous_provider: str | None = None,
+    classification: RouteClassification | None = None,
 ) -> RoutingDecision:
     """Apply the shared lexical, balancing, and quota-admission pipeline."""
     route = router.route(
@@ -30,6 +33,8 @@ def resolve_route(
         forced_mode=forced_mode,
         previous_provider=previous_provider,
     )
+    if not forced_agent and forced_mode is None:
+        route = apply_classification(route, classification)
     if not forced_agent:
         route = balance_route(route, statuses)
     route, quota_admission = admit_route(
@@ -38,4 +43,4 @@ def resolve_route(
         forced_agent=bool(forced_agent),
         forced_mode=forced_mode is not None,
     )
-    return RoutingDecision(route, quota_admission)
+    return RoutingDecision(route, quota_admission, classification)
