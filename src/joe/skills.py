@@ -6,7 +6,8 @@ from typing import Any
 
 
 _CREATE_REQUEST = re.compile(
-    r"\b(?:cr[eé]e(?:r)?|ajoute(?:r)?)\s+(?:moi\s+)?(?:un\s+)?skill\b(?P<tail>.*)",
+    r"\b(?:cr(?:ée|éer|éé|ee|eer)|ajoute(?:r)?)\s+"
+    r"(?:moi\s+)?(?:un\s+)?skill\b(?P<tail>.*)",
     re.IGNORECASE,
 )
 

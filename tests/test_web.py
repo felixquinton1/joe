@@ -395,7 +395,7 @@ def test_explicit_skill_prompt_is_handled_locally_without_provider(tmp_path):
             "POST",
             "/api/runs",
             body=json.dumps({
-                "request": "crée un skill test",
+                "request": "créé un skill test pour ce projet pour voir si ca marche",
                 "conversation_id": conversation["id"],
             }),
             headers={"Content-Type": "application/json"},

@@ -17,6 +17,7 @@ from joe.skills import (
     ("prompt", "name", "scope", "has_instructions"),
     [
         ("crée un skill test", "test", "project", True),
+        ("créé un skill test pour ce projet pour voir si ça marche", "test", "project", True),
         ("Crée un skill commun test", "test", "global", True),
         (
             "créer un skill « revue-python » qui vérifie les tests",
