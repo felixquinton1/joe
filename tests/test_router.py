@@ -9,6 +9,12 @@ def test_simple_python_change_routes_once_to_codex():
     assert route.primary == "codex"
 
 
+def test_external_comparison_is_consensus_and_marked_for_research():
+    route = Router().route("Compare Maestro, Crewly and Compozy with their sites")
+    assert route.mode is Mode.CONSENSUS
+    assert "external-research" in route.reason
+
+
 def test_architecture_choice_uses_consensus():
     route = Router().route("Propose quelle approche d'architecture choisir")
     assert route.mode is Mode.CONSENSUS
@@ -267,3 +273,7 @@ def test_capability_question_about_access_stays_read_only():
     )
 
     assert route.intent is Intent.ANSWER
+def test_external_comparison_is_consensus_and_marked_for_research():
+    route = Router().route("Compare Maestro, Crewly and Compozy with their sites")
+    assert route.mode is Mode.CONSENSUS
+    assert "external-research" in route.reason

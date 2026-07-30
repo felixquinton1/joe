@@ -498,6 +498,21 @@ def test_external_github_reference_is_added_as_bounded_context(monkeypatch):
     assert "agent orchestration" in context
 
 
+def test_known_product_source_is_fetched_and_ledgered(monkeypatch):
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *args): return None
+        def read(self, size): return b"<h1>Maestro</h1> worktrees"
+
+    monkeypatch.setattr(
+        "joe.orchestrator.urllib.request.urlopen",
+        lambda *args, **kwargs: Response(),
+    )
+    context = _external_reference_context("Compare Maestro and Crewly")
+    assert "[VERIFIED]" in context
+    assert "## Source: maestro" in context
+
+
 def test_clean_report_omits_internal_validation_refusal_section():
     report = (
         "## Résultat\nTout est prêt.\n\n"

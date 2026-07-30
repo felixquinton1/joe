@@ -3,13 +3,13 @@ from __future__ import annotations
 import json
 import re
 import threading
-import urllib.error
-import urllib.request
+import urllib.request  # kept as a patch point for existing integrations/tests
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
 from .capabilities import provider_defaults
+from .external_sources import collect_sources
 from .memory import ProjectMemory
 from .models import Intent, Mode, ProviderResult, Route
 from .orchestrator_workflows import (
@@ -21,32 +21,10 @@ from .provider_health import recent_failure, record_result
 from .providers import Provider, default_providers
 from .router import Router
 
-_PUBLIC_URL = re.compile(r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/[^\s]*)?")
-
-
 def _external_reference_context(request: str) -> str:
-    """Fetch small public GitHub README references for comparison requests."""
-    chunks = []
-    for url in dict.fromkeys(_PUBLIC_URL.findall(request)):
-        parts = url.rstrip("/").split("/")
-        if len(parts) < 5:
-            continue
-        owner, repo = parts[3], parts[4].removesuffix(".git")
-        candidates = (
-            f"https://raw.githubusercontent.com/{owner}/{repo}/main/README.md",
-            f"https://raw.githubusercontent.com/{owner}/{repo}/master/README.md",
-        )
-        content = None
-        for candidate in candidates:
-            try:
-                with urllib.request.urlopen(candidate, timeout=6) as response:
-                    content = response.read(120_000).decode("utf-8", "replace")
-                break
-            except (OSError, urllib.error.URLError, UnicodeError):
-                continue
-        if content:
-            chunks.append(f"## External public reference: {owner}/{repo}\n{content}")
-    return "\n\n".join(chunks)
+    """Fetch bounded public references with an explicit evidence ledger."""
+    context, _ = collect_sources(request)
+    return context
 
 
 class OrchestrationError(RuntimeError):
@@ -109,6 +87,11 @@ class Orchestrator:
             external = _external_reference_context(request)
             if external:
                 context += "\n\n" + external
+                context += (
+                    "\n\nUse only sources marked [VERIFIED] for factual claims. "
+                    "Do not state that a site was checked when its ledger entry is "
+                    "[REFUSED] or absent. List unavailable sources explicitly."
+                )
         if route.mode is Mode.FAST and route.intent is not Intent.MODIFY:
             context += (
                 "\n\n# Direct-answer style\n"

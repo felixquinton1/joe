@@ -15,7 +15,9 @@ REPORT_RULES = (
     "run tests, npm, git, network, or sandboxed commands. Omit that detail from "
     "the user report; it belongs to the technical run log. Mention a validation "
     "limitation only when it materially changes the result, in one short sentence "
-    "under Validation. Never claim a check passed unless it actually ran."
+    "under Validation. Never claim a check passed unless it actually ran. "
+    "Never name a provider, reviewer, or stage as having run unless it appears "
+    "in the execution records supplied to you."
 )
 
 
@@ -333,6 +335,15 @@ def run_consensus_workflow(
         "never use an ambiguous first-person singular. Clearly separate agreements, "
         "material disagreements, arbitration, and the final recommendation.\n\n"
         + REPORT_RULES
+        + "\n\nActual execution ledger (authoritative; do not invent providers): "
+        + json.dumps(
+            {
+                "proposal_roles": {role: proposal.provider for role, proposal in proposals.items()},
+                "review_roles": {role: review.provider for role, review in reviews.items()},
+                "synthesis_requested": "gemini",
+            },
+            ensure_ascii=False,
+        )
         + "\n\n"
         + json.dumps(
             {

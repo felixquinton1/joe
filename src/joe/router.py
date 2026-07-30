@@ -109,6 +109,10 @@ LARGE_IMPLEMENTATION_PHRASES = {
     "gros travail", "implémentation complète", "implementation complete",
     "de bout en bout", "plusieurs fichiers", "refonte", "refactor complet",
 }
+EXTERNAL_RESEARCH_PHRASES = {
+    "compare", "comparaison", "comparer", "outils similaires", "produits similaires",
+    "sites existants", "solutions existantes", "benchmark", "état des sources",
+}
 CAPABILITY_QUESTION_PHRASES = {
     "est-ce que tu peux", "est ce que tu peux", "est-il possible",
     "est il possible", "puis-je", "puis je", "dois-je", "dois je",
@@ -248,9 +252,15 @@ class Router:
             and " ou " in lower
             and len(words & STRATEGIC_CHOICE_WORDS) >= 2
         )
+        external_research = (
+            any(phrase in lower for phrase in EXTERNAL_RESEARCH_PHRASES)
+            or "http://" in lower
+            or "https://" in lower
+        )
         important = (
             any(phrase in lower for phrase in CONSENSUS_PHRASES)
             or strategic_choice
+            or external_research
         )
         ambiguous_architecture = bool(words & ARCHITECTURE_WORDS) and any(
             marker in lower for marker in ("choisir", "quelle approche", "propose")
@@ -304,6 +314,7 @@ class Router:
             + ("; explicit-provider" if explicit_provider and not forced_agent else "")
             + ("; explicit-review-workflow" if explicit_workflow_review else "")
             + ("; health-check" if health_check else "")
+            + ("; external-research" if external_research else "")
             + (
                 "; explicit-read-only"
                 if read_only_directive and intent is not Intent.MODIFY
