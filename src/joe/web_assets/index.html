@@ -131,11 +131,34 @@
       <section class="skill-manager" aria-label="Skills">
         <div class="skill-manager-head"><span>Skills du projet</span><small>Utilisés par Claude, Codex, Gemini et Copilot</small></div>
         <div id="project-skills" class="skill-list"><small>Enregistre le projet pour ajouter un skill.</small></div>
-        <div class="skill-import-help"><strong>Ajouter un skill existant</strong><small>Indique un fichier <code>SKILL.md</code> ou son dossier. Pour en créer un, prépare d’abord ce fichier puis ajoute-le ici.</small></div>
-        <div class="skill-import-row"><input id="skill-source" placeholder="Chemin vers SKILL.md ou son dossier"><select id="skill-provider" aria-label="Format d’origine"><option value="unknown">Auto-détecté</option><option value="claude">Claude</option><option value="codex">Codex</option><option value="gemini">Gemini</option><option value="copilot">Copilot</option></select><button id="import-skill" type="button">Ajouter</button></div>
+        <div class="skill-editor">
+          <div class="skill-manager-head"><span>Créer un skill</span><small>Écris directement les règles à transmettre aux agents</small></div>
+          <input id="skill-name" maxlength="64" placeholder="Nom du skill · ex. conventions-python">
+          <textarea id="skill-instructions" rows="4" placeholder="Instructions du skill…"></textarea>
+          <div class="skill-action-row">
+            <div class="scope-switch" role="group" aria-label="Portée du nouveau skill">
+              <label><input type="radio" name="skill-create-scope" value="project" checked><span>Projet</span></label>
+              <label><input type="radio" name="skill-create-scope" value="global"><span>Commun</span></label>
+            </div>
+            <button id="create-skill" class="skill-action" type="button">Créer</button>
+          </div>
+        </div>
+        <details class="skill-import">
+          <summary>Importer un SKILL.md existant</summary>
+          <div class="skill-import-content">
+            <input id="skill-source" placeholder="Chemin vers SKILL.md ou son dossier">
+            <div class="skill-action-row">
+              <div class="scope-switch" role="group" aria-label="Portée du skill importé">
+                <label><input type="radio" name="skill-import-scope" value="project" checked><span>Projet</span></label>
+                <label><input type="radio" name="skill-import-scope" value="global"><span>Commun</span></label>
+              </div>
+              <button id="import-skill" class="skill-action" type="button">Importer</button>
+            </div>
+          </div>
+        </details>
         <div class="skill-global">
           <div class="skill-manager-head"><span>Skills communs</span><small>Appliqués à tous les projets</small></div>
-          <div id="global-skills" class="skill-list"><small>Aucun skill commun. Ajoute un skill au projet, puis choisis « Rendre commun ».</small></div>
+          <div id="global-skills" class="skill-list"><small>Aucun skill commun pour l’instant.</small></div>
         </div>
       </section>
       <details class="dialog-advanced">

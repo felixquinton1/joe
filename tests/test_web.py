@@ -184,8 +184,9 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b'class="dialog-advanced"' in page
         assert b'class="dialog-section"' in page
         assert "Skills communs".encode() in page
-        assert "Auto-détecté".encode() in page
-        assert "Pour en créer un".encode() in page
+        assert "Créer un skill".encode() in page
+        assert b'name="skill-create-scope"' in page
+        assert b'name="skill-import-scope"' in page
         assert "SSH/Jean Zay".encode() not in page
         assert b'id="project"' not in page
         assert b'<span class="brand-mark">J</span>' in page
@@ -317,6 +318,69 @@ def test_skills_import_promote_and_global_listing(tmp_path, monkeypatch):
             headers={"Content-Type": "application/json"},
         )
         assert connection.getresponse().status == 400
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_skills_can_be_created_or_imported_at_both_scopes(tmp_path, monkeypatch):
+    from joe import skills
+
+    global_root = tmp_path / "global-skills"
+    monkeypatch.setattr(skills, "global_skills_root", lambda: global_root)
+    source = tmp_path / "shared-source"
+    source.mkdir()
+    (source / "SKILL.md").write_text("Règle commune importée.")
+    server, thread = start_server(tmp_path)
+    try:
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/api/projects",
+            body=json.dumps({"name": "Projet"}),
+            headers={"Content-Type": "application/json"},
+        )
+        project = json.loads(connection.getresponse().read())
+
+        connection.request(
+            "POST",
+            f"/api/projects/{project['id']}/skills/create",
+            body=json.dumps({
+                "name": "Python simple",
+                "instructions": "Garder le code lisible.",
+            }),
+            headers={"Content-Type": "application/json"},
+        )
+        assert connection.getresponse().status == 201
+
+        connection.request(
+            "POST",
+            "/api/skills/global/create",
+            body=json.dumps({
+                "name": "Revue commune",
+                "instructions": "Relire avant livraison.",
+            }),
+            headers={"Content-Type": "application/json"},
+        )
+        assert connection.getresponse().status == 201
+
+        connection.request(
+            "POST",
+            "/api/skills/global/import",
+            body=json.dumps({"source": str(source)}),
+            headers={"Content-Type": "application/json"},
+        )
+        assert connection.getresponse().status == 201
+
+        connection.request("GET", f"/api/projects/{project['id']}/skills")
+        project_skills = json.loads(connection.getresponse().read())
+        assert [item["name"] for item in project_skills] == ["python-simple"]
+        connection.request("GET", "/api/skills/global")
+        global_skills = json.loads(connection.getresponse().read())
+        assert [item["name"] for item in global_skills] == [
+            "revue-commune",
+            "shared-source",
+        ]
     finally:
         server.shutdown()
         thread.join(timeout=2)

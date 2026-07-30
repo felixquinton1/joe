@@ -485,9 +485,11 @@ window.createJoeConversations = function createJoeConversations({
     $("project-execution-mode").value = "";
     refreshSelectMenu($("project-execution-mode"));
     $("project-context").value = "";
+    $("skill-name").value = "";
+    $("skill-instructions").value = "";
+    $("skill-source").value = "";
     $("project-skills").innerHTML = "<small>Enregistre le projet pour ajouter des skills.</small>";
-    $("import-skill").disabled = true;
-    $("skill-source").disabled = true;
+    setSkillProjectAvailability(false);
     loadGlobalSkills();
     $("project-dialog").showModal();
     requestAnimationFrame(() => $("project-name").focus());
@@ -508,8 +510,10 @@ window.createJoeConversations = function createJoeConversations({
     $("project-execution-mode").value = project.default_execution_mode || "";
     refreshSelectMenu($("project-execution-mode"));
     $("project-context").value = project.context || "";
-    $("import-skill").disabled = false;
-    $("skill-source").disabled = false;
+    $("skill-name").value = "";
+    $("skill-instructions").value = "";
+    $("skill-source").value = "";
+    setSkillProjectAvailability(true);
     loadProjectSkills(project.id).catch(() => {});
     loadGlobalSkills();
     $("project-dialog").showModal();
@@ -580,17 +584,60 @@ window.createJoeConversations = function createJoeConversations({
     await loadGlobalSkills();
   }
 
-  $("import-skill").onclick = async () => {
-    if (!state.editingProjectId) return;
-    const source = $("skill-source").value.trim();
-    if (!source) return;
-    const response = await fetcher(`/api/projects/${state.editingProjectId}/skills/import`, {
+  function selectedSkillScope(name) {
+    return document.querySelector(`input[name="${name}"]:checked`)?.value || "project";
+  }
+
+  function setSkillProjectAvailability(available) {
+    for (const name of ["skill-create-scope", "skill-import-scope"]) {
+      const projectChoice = document.querySelector(`input[name="${name}"][value="project"]`);
+      const globalChoice = document.querySelector(`input[name="${name}"][value="global"]`);
+      projectChoice.disabled = !available;
+      if (!available) globalChoice.checked = true;
+      else projectChoice.checked = true;
+    }
+  }
+
+  $("create-skill").onclick = async () => {
+    const name = $("skill-name").value.trim();
+    const instructions = $("skill-instructions").value.trim();
+    if (!name || !instructions) {
+      window.alert("Indique un nom et les instructions du skill.");
+      return;
+    }
+    const scope = selectedSkillScope("skill-create-scope");
+    if (scope === "project" && !state.editingProjectId) return;
+    const endpoint = scope === "global"
+      ? "/api/skills/global/create"
+      : `/api/projects/${state.editingProjectId}/skills/create`;
+    const response = await fetcher(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        source,
-        provider: $("skill-provider").value,
-      }),
+      body: JSON.stringify({ name, instructions }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      window.alert(payload.message || "Création du skill impossible.");
+      return;
+    }
+    $("skill-name").value = "";
+    $("skill-instructions").value = "";
+    if (scope === "global") await loadGlobalSkills();
+    else await loadProjectSkills(state.editingProjectId);
+  };
+
+  $("import-skill").onclick = async () => {
+    const source = $("skill-source").value.trim();
+    if (!source) return;
+    const scope = selectedSkillScope("skill-import-scope");
+    if (scope === "project" && !state.editingProjectId) return;
+    const endpoint = scope === "global"
+      ? "/api/skills/global/import"
+      : `/api/projects/${state.editingProjectId}/skills/import`;
+    const response = await fetcher(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source }),
     });
     const payload = await response.json();
     if (!response.ok) {
@@ -598,7 +645,8 @@ window.createJoeConversations = function createJoeConversations({
       return;
     }
     $("skill-source").value = "";
-    await loadProjectSkills(state.editingProjectId);
+    if (scope === "global") await loadGlobalSkills();
+    else await loadProjectSkills(state.editingProjectId);
   };
 
   function updateAutoDeliveryHelp() {

@@ -16,7 +16,13 @@ from .files import MAX_FILE_BYTES
 from .http_utils import RequestBodyError, read_json_body, validate_bind
 from .provider_registry import get_provider_catalog, get_provider_names
 from .providers import NETWORK_CONTROLLED_PROVIDERS
-from .skills import import_skill, list_global_skills, list_skills, promote_skill
+from .skills import (
+    create_skill,
+    import_skill,
+    list_global_skills,
+    list_skills,
+    promote_skill,
+)
 from .web_runs import ActiveConversationError, RunManager, _existing_directory
 from .worktrees import WorktreeError
 
@@ -271,6 +277,52 @@ class Handler(BaseHTTPRequestHandler):
                 ),
                 HTTPStatus.CREATED,
             )
+        if path == "/api/skills/global/create":
+            payload = self._read_payload()
+            if payload is None:
+                return
+            try:
+                created = create_skill(
+                    None,
+                    str(payload.get("name", "")),
+                    str(payload.get("instructions", "")),
+                    global_scope=True,
+                )
+            except (OSError, ValueError) as error:
+                return self._json({"message": str(error)}, HTTPStatus.BAD_REQUEST)
+            return self._json(created, HTTPStatus.CREATED)
+        if path == "/api/skills/global/import":
+            payload = self._read_payload()
+            if payload is None:
+                return
+            try:
+                imported = import_skill(
+                    None,
+                    Path(str(payload.get("source", ""))),
+                    name=str(payload.get("name", "")).strip() or None,
+                    global_scope=True,
+                )
+            except (OSError, ValueError) as error:
+                return self._json({"message": str(error)}, HTTPStatus.BAD_REQUEST)
+            return self._json(imported, HTTPStatus.CREATED)
+        if path.startswith("/api/projects/") and path.endswith("/skills/create"):
+            project_id = unquote(path.split("/")[-3])
+            project = self.server.manager.conversations.get_project(project_id)
+            if not project:
+                return self._json({}, HTTPStatus.NOT_FOUND)
+            payload = self._read_payload()
+            if payload is None:
+                return
+            workspace = _existing_directory(project.get("workspace_root")) or self.server.manager.project
+            try:
+                created = create_skill(
+                    workspace,
+                    str(payload.get("name", "")),
+                    str(payload.get("instructions", "")),
+                )
+            except (OSError, ValueError) as error:
+                return self._json({"message": str(error)}, HTTPStatus.BAD_REQUEST)
+            return self._json(created, HTTPStatus.CREATED)
         if path.startswith("/api/projects/") and path.endswith("/skills/import"):
             project_id = unquote(path.split("/")[-3])
             project = self.server.manager.conversations.get_project(project_id)

@@ -4,11 +4,61 @@ import pytest
 
 from joe import skills
 from joe.skills import (
+    create_skill,
     import_skill,
     list_global_skills,
     list_skills,
     promote_skill,
 )
+
+
+def test_create_project_skill_from_instructions(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+
+    created = create_skill(
+        project,
+        "Conventions Python",
+        "Écrire des fonctions courtes et ajouter des tests.",
+    )
+
+    target = Path(created["path"])
+    assert created["scope"] == "project"
+    assert target == project / ".agentflow/skills/conventions-python/SKILL.md"
+    assert target.read_text() == (
+        "# Conventions Python\n\n"
+        "Écrire des fonctions courtes et ajouter des tests.\n"
+    )
+
+
+def test_create_and_import_global_skills(tmp_path, monkeypatch):
+    global_root = tmp_path / "global-skills"
+    monkeypatch.setattr(skills, "global_skills_root", lambda: global_root)
+
+    created = create_skill(
+        None,
+        "Revue",
+        "Relire les modifications avant livraison.",
+        global_scope=True,
+    )
+    source = tmp_path / "existing"
+    source.mkdir()
+    (source / "SKILL.md").write_text("Documenter les décisions.")
+    imported = import_skill(None, source, global_scope=True)
+
+    assert created["scope"] == "global"
+    assert imported["scope"] == "global"
+    assert [item["name"] for item in list_global_skills()] == ["existing", "revue"]
+
+
+def test_create_skill_refuses_empty_or_existing_content(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    with pytest.raises(ValueError):
+        create_skill(project, "vide", " ")
+    create_skill(project, "unique", "Une règle.")
+    with pytest.raises(FileExistsError):
+        create_skill(project, "unique", "Une autre règle.")
 
 
 def test_import_skill_creates_provider_neutral_project_skill(tmp_path):

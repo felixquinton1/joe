@@ -53,6 +53,37 @@ def list_global_skills() -> list[dict[str, Any]]:
     return found
 
 
+def create_skill(
+    project: Path | None,
+    name: str,
+    instructions: str,
+    *,
+    global_scope: bool = False,
+) -> dict[str, Any]:
+    """Create a provider-neutral skill directly from user instructions."""
+    skill_name = _skill_name(name)
+    content = instructions.strip()
+    if not content:
+        raise ValueError("Les instructions du skill sont obligatoires.")
+    if len(content) > 20_000:
+        raise ValueError("Les instructions du skill sont trop longues.")
+    root = global_skills_root() if global_scope else _project_skills_root(project)
+    destination = (root / skill_name / "SKILL.md").resolve()
+    resolved_root = root.resolve()
+    if resolved_root not in destination.parents:
+        raise ValueError("Destination de skill invalide.")
+    if destination.exists():
+        raise FileExistsError(f"Le skill « {skill_name} » existe déjà.")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(f"# {name.strip()}\n\n{content}\n")
+    return {
+        "name": skill_name,
+        "path": str(destination),
+        "scope": "global" if global_scope else "project",
+        "active": True,
+    }
+
+
 def promote_skill(project: Path, name: str) -> dict[str, Any]:
     """Copy a project skill into the global directory shared by all projects."""
     skill_name = re.sub(r"[^a-z0-9-]+", "-", name.lower()).strip("-")
@@ -84,22 +115,22 @@ def promote_skill(project: Path, name: str) -> dict[str, Any]:
 
 
 def import_skill(
-    project: Path,
+    project: Path | None,
     source: Path,
     *,
     name: str | None = None,
     source_provider: str = "unknown",
+    global_scope: bool = False,
 ) -> dict[str, Any]:
     source = source.expanduser().resolve()
     source_file = source / "SKILL.md" if source.is_dir() else source
     if not source_file.is_file():
         raise FileNotFoundError(f"Skill introuvable : {source_file}")
-    skill_name = re.sub(r"[^a-z0-9-]+", "-", (name or source_file.parent.name).lower()).strip("-")
-    if not skill_name:
-        raise ValueError("Le skill doit avoir un nom non vide.")
+    skill_name = _skill_name(name or source_file.parent.name)
     content = source_file.read_text(errors="replace").strip()
-    destination = (project / ".agentflow" / "skills" / skill_name / "SKILL.md").resolve()
-    root = (project / ".agentflow" / "skills").resolve()
+    root = global_skills_root() if global_scope else _project_skills_root(project)
+    destination = (root / skill_name / "SKILL.md").resolve()
+    root = root.resolve()
     if root not in destination.parents:
         raise ValueError("Destination de skill invalide.")
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -113,4 +144,18 @@ def import_skill(
         "path": str(destination),
         "source_provider": source_provider,
         "converted": True,
+        "scope": "global" if global_scope else "project",
     }
+
+
+def _project_skills_root(project: Path | None) -> Path:
+    if project is None:
+        raise ValueError("Un projet est requis pour créer ce skill.")
+    return project / ".agentflow" / "skills"
+
+
+def _skill_name(name: str) -> str:
+    skill_name = re.sub(r"[^a-z0-9-]+", "-", name.lower()).strip("-")
+    if not skill_name:
+        raise ValueError("Le skill doit avoir un nom non vide.")
+    return skill_name
