@@ -267,6 +267,8 @@ class RunManager:
         name: str,
         instructions: str,
         global_scope: bool,
+        classification: RouteClassification | None = None,
+        decided_by: str = "lexical",
     ) -> LiveRun:
         """Create a skill as a local Joe action, without calling a provider."""
         run_id = uuid.uuid4().hex
@@ -301,18 +303,37 @@ class RunManager:
         self.conversations.append_message(
             conversation_id, "user", request, run_id
         )
+        # Aucun fournisseur n'est appelé ici : Joe écrit le skill lui-même.
+        # On le dit explicitement plutôt que de laisser l'interface afficher un
+        # agent « joe » sans modèle ni statut.
         run.emit({
             "type": "route",
             "mode": "fast",
             "intent": "modify",
             "primary": "joe",
             "reviewer": None,
-            "reason": "Création locale de skill",
+            "reason": (
+                "Création locale de skill"
+                + (
+                    " (routeur LLM)"
+                    if decided_by == "classifier"
+                    else " (détection lexicale)"
+                )
+            ),
             "model": None,
             "effort": None,
             "execution_mode": "workspace-write",
-            "routing_ms": 0,
+            "routing_ms": classification.latency_ms if classification else 0,
             "profile": self.profile,
+            "local_action": "create_skill",
+            "decided_by": decided_by,
+            "classifier": classification.payload() if classification else None,
+        })
+        run.emit({
+            "type": "activity",
+            "provider": "joe",
+            "kind": "model",
+            "label": "action locale · aucun modèle appelé",
         })
         try:
             created = create_skill(
@@ -327,9 +348,11 @@ class RunManager:
                 f"`{created['path']}`"
             )
             self.tasks.update(run_id, status="completed", provider="joe", mode="fast")
+            failure = None
         except (OSError, ValueError) as error:
             response = f"Le skill n’a pas été créé : {error}"
             self.tasks.update(run_id, status="failed", provider="joe", mode="fast", error=str(error))
+            failure = str(error)
         self.conversations.append_message(
             conversation_id,
             "assistant",
@@ -337,6 +360,15 @@ class RunManager:
             run_id,
             provider="joe",
         )
+        # Clôture explicite de l'étape : sans cet événement l'interface laisse
+        # l'agent et le pipeline bloqués sur « En cours ».
+        run.emit({
+            "type": "provider_end",
+            "provider": "joe",
+            "ok": failure is None,
+            "error": failure,
+            "local_action": "create_skill",
+        })
         run.emit({"type": "complete", "response": response, "log": ""})
         with run.condition:
             run.done = True

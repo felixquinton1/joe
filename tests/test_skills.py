@@ -130,3 +130,86 @@ def test_promote_skill_rejects_unknown_project_skill(tmp_path, monkeypatch):
     monkeypatch.setattr(skills, "global_skills_root", lambda: tmp_path / "global")
     with pytest.raises(FileNotFoundError):
         promote_skill(tmp_path / "project", "absent")
+
+
+def test_local_skill_run_reports_routing_and_closes_the_stage(tmp_path):
+    """Une action locale doit dire qu'aucun modèle ne tourne, et se clôturer.
+
+    Sans ces événements l'interface affichait « joe en cours » indéfiniment,
+    avec une carte d'agent sans modèle ni statut.
+    """
+    from joe.web_runs import RunManager
+
+    manager = RunManager(tmp_path)
+    conversation = manager.conversations.create(None)
+    run = manager.start_local_skill(
+        "crée un skill test pour ce projet",
+        conversation["id"],
+        name="test",
+        instructions="Répondre avec le marqueur exact SKILL_TEST_ACTIF.",
+        global_scope=False,
+        classification=None,
+        decided_by="lexical",
+    )
+
+    by_type = {}
+    for event in run.events:
+        by_type.setdefault(event["type"], []).append(event)
+
+    route = by_type["route"][0]
+    assert route["primary"] == "joe"
+    assert route["local_action"] == "create_skill"
+    assert route["decided_by"] == "lexical"
+    assert "détection lexicale" in route["reason"]
+    assert "classifier" in route
+
+    # La carte d'agent tire son modèle de cet événement.
+    model_activity = [
+        event for event in by_type["activity"] if event.get("kind") == "model"
+    ]
+    assert model_activity
+    assert "aucun modèle" in model_activity[0]["label"]
+
+    # Clôture explicite : sinon l'étape reste « En cours ».
+    end = by_type["provider_end"][0]
+    assert end["provider"] == "joe"
+    assert end["ok"] is True
+    assert by_type["complete"]
+
+
+def test_local_skill_run_surfaces_the_llm_router_decision(tmp_path):
+    from joe.route_classifier import RouteClassification
+    from joe.web_runs import RunManager
+
+    manager = RunManager(tmp_path)
+    conversation = manager.conversations.create(None)
+    classification = RouteClassification(
+        intent="modify",
+        action="create_skill",
+        complexity="simple",
+        workflow="fast",
+        provider="codex",
+        model_tier="light",
+        effort="low",
+        confidence=0.93,
+        classifier_provider="gemini",
+        classifier_model="gemini-2.5-flash",
+        latency_ms=412,
+    )
+
+    run = manager.start_local_skill(
+        "ajoute une compétence de revue",
+        conversation["id"],
+        name="revue",
+        instructions="Vérifier les tests.",
+        global_scope=False,
+        classification=classification,
+        decided_by="classifier",
+    )
+
+    route = next(event for event in run.events if event["type"] == "route")
+    assert route["decided_by"] == "classifier"
+    assert "routeur LLM" in route["reason"]
+    assert route["routing_ms"] == 412
+    assert route["classifier"]["classifier_model"] == "gemini-2.5-flash"
+    assert route["classifier"]["confidence"] == 0.93

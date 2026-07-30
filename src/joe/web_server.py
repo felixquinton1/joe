@@ -389,6 +389,10 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as exc:
             return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
         skill_request = parse_skill_request(request)
+        # Quelle instance a décidé de l'action : la détection lexicale, qui
+        # n'appelle aucun modèle, ou le routeur LLM. L'interface doit pouvoir
+        # le dire au lieu d'afficher un agent sans information.
+        decided_by = "lexical" if skill_request is not None else "classifier"
         classification = (
             None
             if skill_request is not None
@@ -434,6 +438,8 @@ class Handler(BaseHTTPRequestHandler):
                     name=skill_request["name"],
                     instructions=skill_request["instructions"],
                     global_scope=skill_request["scope"] == "global",
+                    classification=classification,
+                    decided_by=decided_by,
                 )
             except ActiveConversationError as exc:
                 return self._json({"error": str(exc)}, HTTPStatus.CONFLICT)

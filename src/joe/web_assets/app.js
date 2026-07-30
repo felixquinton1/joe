@@ -1,4 +1,4 @@
-const APP_VERSION = "0.29.0";
+const APP_VERSION = "0.29.1";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -837,10 +837,66 @@ function copyButton(getText) {
   return button;
 }
 
-function showRoute(mode, primary, reviewer) {
+function showRoute(event) {
   const badge = $("route-badge");
-  badge.textContent = `${mode?.toUpperCase()} · ${primary}${reviewer ? ` → ${reviewer}` : ""}`;
+  const target = `${event.primary}${event.reviewer ? ` → ${event.reviewer}` : ""}`;
+  // Le modèle effectivement appelé fait partie de l'information attendue : une
+  // action locale doit dire qu'aucun modèle ne tourne, pas rester muette.
+  const model = event.local_action ? "aucun modèle appelé" : event.model;
+  badge.textContent = [
+    event.mode?.toUpperCase(),
+    target,
+    model
+  ].filter(Boolean).join(" · ");
+  badge.title = describeRouterDecision(event);
   badge.classList.remove("hidden");
+}
+
+function describeRouterDecision(event) {
+  const classifier = event.classifier;
+  if (!classifier) {
+    return event.decided_by === "lexical"
+      ? "Routage lexical déterministe — aucun modèle de routage appelé."
+      : `Routage lexical · ${event.reason || "règles internes"}`;
+  }
+  return [
+    classifier.classifier_provider && classifier.classifier_model
+      ? `Routeur ${classifier.classifier_provider}/${classifier.classifier_model}`
+      : "Routeur LLM",
+    classifier.workflow ? `workflow ${classifier.workflow}` : "",
+    classifier.model_tier ? `palier ${classifier.model_tier}` : "",
+    classifier.effort ? `effort ${classifier.effort}` : "",
+    Number.isFinite(classifier.confidence)
+      ? `confiance ${Number(classifier.confidence).toFixed(2)}`
+      : "",
+    classifier.latency_ms ? `${classifier.latency_ms} ms` : ""
+  ].filter(Boolean).join(" · ");
+}
+
+function primaryStageLabel(run, localAction) {
+  // Un même libellé à l'ouverture et à la clôture de l'étape, sinon le
+  // pipeline change de nom en cours de route.
+  if ((localAction || run?.localAction) === "create_skill") return "Création du skill";
+  if (run?.intent === "modify") return "Implémentation";
+  if (run?.intent === "analyze") return "Analyse";
+  return "Traitement";
+}
+
+function renderRouterDecision(event) {
+  // Rend la décision du routeur visible sur la carte de l'agent retenu, et pas
+  // seulement dans le journal brut.
+  const agent = ensureAgent(event.primary);
+  const detail = describeRouterDecision(event);
+  const signature = `routage\n${detail}`;
+  if (agent.activity.lastElementChild?.dataset.signature === signature) return;
+  const row = document.createElement("div");
+  row.className = "activity-row";
+  row.dataset.signature = signature;
+  row.innerHTML = `<i></i><div><strong>Routage</strong><span>${escapeHtml(detail)}</span></div>`;
+  agent.activity.appendChild(row);
+  while (agent.activity.children.length > 12) {
+    agent.activity.firstElementChild.remove();
+  }
 }
 
 function ensureAgent(name) {
@@ -1041,6 +1097,7 @@ function handleEvent(conversationId, event, finalBubble) {
   if (event.type === "route" && activeRun) {
     activeRun.mode = event.mode;
     activeRun.intent = event.intent;
+    activeRun.localAction = event.local_action || null;
   }
   if (event.type === "workflow_update" && activeRun) {
     event = {
@@ -1108,16 +1165,29 @@ function handleEvent(conversationId, event, finalBubble) {
   $("raw-log").textContent += `${JSON.stringify(event)}\n`;
   scrollIfFollowing(diagnostics, followDiagnostics);
   if (event.type === "route") {
-    showRoute(event.mode, event.primary, event.reviewer);
+    showRoute(event);
     loadTasks().catch(() => {});
-    ensureAgent(event.primary);
+    const primary = ensureAgent(event.primary);
+    // Renseigner la carte dès le routage : une action locale n'émet jamais de
+    // provider_start, et la carte restait donc sans modèle ni statut.
+    setAgentMeta(primary, {
+      model: event.local_action
+        ? "action locale · aucun modèle appelé"
+        : (event.model || undefined),
+      effort: event.local_action ? "" : (event.effort || undefined)
+    });
+    if (event.local_action) {
+      primary.status.textContent = "Action locale Joe";
+    }
+    renderRouterDecision(event);
     if (event.reviewer) ensureAgent(event.reviewer);
     setSummaryPending(finalBubble, true);
     finalBubble.textContent = "Synthèse finale en attente…";
     if (event.mode === "fast") {
-      const label = event.intent === "modify"
-        ? "Implémentation"
-        : event.intent === "analyze" ? "Analyse" : "Réponse";
+      const label = primaryStageLabel(
+        { intent: event.intent },
+        event.local_action
+      );
       renderWorkflowUpdate({
         mode: event.mode,
         stage: "primary",
@@ -1176,7 +1246,7 @@ function handleEvent(conversationId, event, finalBubble) {
         mode: activeRun?.mode || "fast",
         stage: "primary",
         provider: event.provider,
-        label: activeRun?.intent === "modify" ? "Implémentation" : "Traitement",
+        label: primaryStageLabel(activeRun, event.local_action),
         status: "complete"
       }, finalBubble, activeRun?.runId || "");
     }
