@@ -121,10 +121,14 @@ def select_model(provider: str, *, complex_request: bool) -> str | None:
         fast = int(bool(speed & {"fast", "quick", "mini"}))
         fast += int(any(word in identifier or word in description
                         for word in ("mini", "flash", "haiku", "sonnet", "terra", "luna")))
-        cost = item.get("cost_tier")
-        cost_value = int(cost) if isinstance(cost, (int, float)) else 99
         priority = item.get("priority")
         priority_value = int(priority) if isinstance(priority, (int, float)) else 99
+        cost = item.get("cost_tier")
+        # When a provider omits pricing, a lower catalog priority is the
+        # provider's own signal for a lighter/cheaper tier.
+        cost_value = (
+            int(cost) if isinstance(cost, (int, float)) else -priority_value
+        )
         return (-fast, cost_value, priority_value, identifier)
 
     return str(min(models, key=score).get("id"))
