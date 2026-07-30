@@ -35,6 +35,17 @@ def test_context_is_bounded_and_includes_project_instructions(tmp_path):
     assert "current request" in context
 
 
+def test_context_includes_project_shared_skills_for_all_providers(tmp_path):
+    skill = tmp_path / ".agentflow" / "skills" / "jz" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text("Use the canonical JZ wrapper.")
+
+    context = ProjectMemory(tmp_path).context("inspect the project")
+
+    assert "Shared skill: jz/SKILL.md" in context
+    assert "canonical JZ wrapper" in context
+
+
 def test_context_requires_a_clear_plan_and_result_separation(tmp_path):
     memory = ProjectMemory(tmp_path)
 

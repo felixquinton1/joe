@@ -371,6 +371,7 @@ window.createJoeConversations = function createJoeConversations({
     $("project-extra-roots").value = "";
     $("project-remote-access").checked = false;
     $("project-auto-delivery").checked = false;
+    updateAutoDeliveryHelp();
     $("project-execution-mode").value = "";
     refreshSelectMenu($("project-execution-mode"));
     $("project-context").value = "";
@@ -387,11 +388,22 @@ window.createJoeConversations = function createJoeConversations({
     $("project-extra-roots").value = (project.additional_roots || []).join("\n");
     $("project-remote-access").checked = Boolean(project.remote_access);
     $("project-auto-delivery").checked = Boolean(project.auto_commit_push);
+    updateAutoDeliveryHelp();
     $("project-execution-mode").value = project.default_execution_mode || "";
     refreshSelectMenu($("project-execution-mode"));
     $("project-context").value = project.context || "";
     $("project-dialog").showModal();
   }
+
+  function updateAutoDeliveryHelp() {
+    const help = $("project-auto-delivery-help");
+    if (!help) return;
+    help.textContent = $("project-auto-delivery").checked
+      ? "Activé : Joe committe et pousse automatiquement ; le rejet sélectif n’est plus disponible après la livraison."
+      : "Désactivé : tu peux examiner les changements et utiliser « Rejeter la sélection ».";
+  }
+
+  $("project-auto-delivery").onchange = updateAutoDeliveryHelp;
 
   async function saveProject(event) {
     event.preventDefault();

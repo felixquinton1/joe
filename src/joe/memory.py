@@ -26,6 +26,7 @@ DEFAULT_CONFIG = {
         "provider": "gemini",
         "model": "gemini-3-flash-preview",
     },
+    "shared_skill_paths": [],
     "fallbacks": {
         "codex": ["gemini", "claude", "copilot"],
         "claude": ["gemini", "codex", "copilot"],
@@ -208,10 +209,34 @@ class ProjectMemory:
 
     def _instructions(self) -> str:
         chunks = []
-        for name in ("AGENTS.md", "CLAUDE.md"):
+        for name in ("AGENTS.md", "CLAUDE.md", "CODEX.md"):
             path = self.project / name
             if path.exists():
                 chunks.append(f"## {name}\n{path.read_text(errors='replace')}")
+        skill_roots = [self.project / ".agentflow" / "skills", self.project / "skills"]
+        configured = self.config().get("shared_skill_paths", [])
+        if isinstance(configured, list):
+            skill_roots.extend(Path(str(path)).expanduser() for path in configured)
+        seen: set[Path] = set()
+        total = 0
+        for root in skill_roots:
+            root = root.resolve()
+            if root in seen or not root.is_dir():
+                continue
+            seen.add(root)
+            for path in sorted(root.rglob("*.md")):
+                if not path.is_file() or path.name.startswith("."):
+                    continue
+                try:
+                    content = path.read_text(errors="replace")
+                except OSError:
+                    continue
+                remaining = 12000 - total
+                if remaining <= 0:
+                    break
+                content = content[:remaining]
+                chunks.append(f"## Shared skill: {path.relative_to(root)}\n{content}")
+                total += len(content)
         return "\n\n".join(chunks)
 
     @staticmethod
