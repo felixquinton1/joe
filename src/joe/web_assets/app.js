@@ -1,4 +1,4 @@
-const APP_VERSION = "0.26.1";
+const APP_VERSION = "0.27.0";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -16,7 +16,10 @@ const renderMarkdown = window.JoeMarkdown.renderMarkdown;
 const joeFetch = window.JoeAuth.authenticatedFetch;
 const selectMenus = new Map();
 let knownTasks = [];
+let knownFiles = [];
+const selectedFileIds = new Set();
 const notifiedTaskConflicts = new Set();
+const observedTaskStatus = new Map();
 let language = window.JoeI18n.initialLanguage(
   window.localStorage,
   window.navigator.language
@@ -77,12 +80,34 @@ async function loadTasks() {
   if (!response.ok) return;
   knownTasks = await response.json();
   for (const task of knownTasks) {
+    const previous = observedTaskStatus.get(task.id);
     if (task.status === "conflict" && !notifiedTaskConflicts.has(task.id)) {
       notifiedTaskConflicts.add(task.id);
       notifyTaskConflict(task);
     }
+    if (
+      previous && previous !== task.status
+      && ["review", "integrated", "completed", "conflict", "failed"].includes(task.status)
+    ) {
+      notifyTaskStatus(task);
+    }
+    observedTaskStatus.set(task.id, task.status);
   }
   renderTasks();
+}
+
+function notifyTaskStatus(task) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const labels = {
+    review: "prête à valider",
+    completed: "terminée",
+    integrated: "intégrée",
+    conflict: "en conflit",
+    failed: "en échec"
+  };
+  new Notification("Joe", {
+    body: `${task.title} · ${labels[task.status] || task.status}`
+  });
 }
 
 function notifyTaskConflict(task) {
@@ -103,7 +128,12 @@ function notifyTaskConflict(task) {
 function renderTasks() {
   const target = $("tasks");
   target.replaceChildren();
-  const tasks = knownTasks.slice(0, 12);
+  const filter = $("task-filter").value;
+  const tasks = knownTasks.filter(task => {
+    if (filter === "all") return true;
+    if (filter === "attention") return ["review", "conflict", "failed"].includes(task.status);
+    return ["running", "integrating", "resolving", "review", "conflict"].includes(task.status);
+  }).slice(0, 12);
   $("task-count").textContent = String(tasks.length);
   if (!tasks.length) {
     const empty = document.createElement("span");
@@ -138,6 +168,7 @@ function renderTasks() {
       ${task.error ? `<p class="task-error">${escapeHtml(task.error)}</p>` : ""}
       <div class="task-actions"></div>`;
     const actions = card.querySelector(".task-actions");
+    actions.appendChild(taskAction("Conversation", () => selectConversation(task.conversation_id)));
     if (task.isolated && task.status !== "integrated") {
       actions.appendChild(taskAction(t("view_diff"), () => showTaskDiff(task)));
       if (["review", "conflict"].includes(task.status)) {
@@ -203,6 +234,139 @@ async function deleteTask(task) {
     return;
   }
   await loadTasks();
+}
+
+function activeProjectId() {
+  const conversation = state.conversations.find(
+    item => item.id === state.activeConversationId
+  );
+  return conversation?.project_id || state.activeProjectId || "free";
+}
+
+async function loadFiles() {
+  const response = await joeFetch(
+    `/api/files?project=${encodeURIComponent(activeProjectId())}`
+  );
+  if (!response.ok) return;
+  knownFiles = await response.json();
+  for (const id of [...selectedFileIds]) {
+    if (!knownFiles.some(item => item.id === id)) selectedFileIds.delete(id);
+  }
+  renderFileLibrary();
+  renderAttachmentChips();
+}
+
+function renderFileLibrary() {
+  const target = $("file-library");
+  target.replaceChildren();
+  if (!knownFiles.length) {
+    target.innerHTML = "<small>Aucun fichier dans ce projet.</small>";
+    return;
+  }
+  for (const file of knownFiles) {
+    const row = document.createElement("div");
+    row.className = "file-row";
+    const select = document.createElement("button");
+    select.type = "button";
+    select.className = selectedFileIds.has(file.id) ? "selected" : "";
+    select.textContent = file.name;
+    select.title = `${file.name} · ${formatBytes(file.size)}`;
+    select.onclick = () => {
+      if (selectedFileIds.has(file.id)) selectedFileIds.delete(file.id);
+      else selectedFileIds.add(file.id);
+      renderFileLibrary();
+      renderAttachmentChips();
+    };
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "file-delete";
+    remove.textContent = "×";
+    remove.title = "Supprimer ce fichier";
+    remove.onclick = async () => {
+      const response = await joeFetch(`/api/files/${encodeURIComponent(file.id)}`, {
+        method: "DELETE"
+      });
+      if (response.ok) await loadFiles();
+    };
+    row.append(select, remove);
+    target.appendChild(row);
+  }
+}
+
+function renderAttachmentChips() {
+  const target = $("attachment-chips");
+  target.replaceChildren();
+  for (const id of selectedFileIds) {
+    const file = knownFiles.find(item => item.id === id);
+    if (!file) continue;
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.title = "Retirer de cette demande";
+    chip.innerHTML = `<span>${escapeHtml(file.name)}</span><b>×</b>`;
+    chip.onclick = () => {
+      selectedFileIds.delete(id);
+      renderAttachmentChips();
+      renderFileLibrary();
+    };
+    target.appendChild(chip);
+  }
+  target.classList.toggle("hidden", !target.children.length);
+}
+
+async function uploadFiles(fileList) {
+  const projectId = activeProjectId();
+  for (const file of fileList) {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+    const response = await joeFetch("/api/files", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: projectId,
+        name: file.name,
+        content_type: file.type,
+        data: dataUrl.split(",", 2)[1] || ""
+      })
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      window.alert(payload.error || `Impossible d’ajouter ${file.name}.`);
+      continue;
+    }
+    selectedFileIds.add(payload.id);
+  }
+  await loadFiles();
+}
+
+function formatBytes(value) {
+  const size = Number(value || 0);
+  if (size < 1024) return `${size} o`;
+  return `${(size / 1024).toFixed(size < 10240 ? 1 : 0)} Kio`;
+}
+
+async function loadDoctor() {
+  if (window.localStorage.getItem("joe-onboarded-v1")) return;
+  const dialog = $("onboarding-dialog");
+  dialog.showModal();
+  const response = await joeFetch("/api/doctor");
+  if (!response.ok) {
+    $("doctor-status").innerHTML = "<p>Diagnostic indisponible.</p>";
+    return;
+  }
+  const report = await response.json();
+  $("doctor-status").innerHTML = `
+    <p class="${report.storage?.writable ? "ok" : "error"}">
+      <b>Stockage</b><span>${report.storage?.writable ? "Prêt" : "À corriger"}</span>
+    </p>
+    ${(report.providers || []).map(provider => `
+      <p class="${provider.installed ? "ok" : "muted"}">
+        <b>${escapeHtml(capitalize(provider.provider))}</b>
+        <span>${provider.installed ? escapeHtml(provider.version || "Installé") : "Non détecté"}</span>
+      </p>`).join("")}`;
 }
 
 function setupSelectMenu(select) {
@@ -450,7 +614,8 @@ function currentSettings() {
     mode: $("mode").value,
     model: $("model").value,
     effort: $("effort").value,
-    execution_mode: $("execution-mode").value
+    execution_mode: $("execution-mode").value,
+    web_access: $("tool-web-access").checked ? "on" : "off"
   };
 }
 
@@ -464,6 +629,7 @@ function applySettings(settings) {
   $("mode").value = settings.mode || "";
   $("effort").value = settings.effort || "";
   $("execution-mode").value = settings.execution_mode || "";
+  $("tool-web-access").checked = settings.web_access !== "off";
   for (const select of [
     $("agent"), $("mode"), $("model"), $("effort"), $("execution-mode")
   ]) {
@@ -1005,7 +1171,8 @@ function currentRunSettings() {
     mode: $("mode").value,
     model,
     effort: $("effort").value,
-    execution_mode: $("execution-mode").value
+    execution_mode: $("execution-mode").value,
+    attachments: [...selectedFileIds]
   };
 }
 
@@ -1064,6 +1231,12 @@ async function startRun(
 ) {
   if (!conversationId) return;
   settings = settings || currentRunSettings();
+  const mentioned = knownFiles.filter(
+    file => request.includes(`@${file.name}`)
+  ).map(file => file.id);
+  settings.attachments = [
+    ...new Set([...(settings.attachments || []), ...mentioned])
+  ];
   if (state.runs.has(conversationId)) {
     enqueueRequest(conversationId, request, settings);
     return;
@@ -1108,6 +1281,9 @@ async function startRun(
     ? addMessage("Joe · synthèse", "Routage local en cours…", "assistant")
     : null;
   const { run_id } = await response.json();
+  selectedFileIds.clear();
+  renderAttachmentChips();
+  renderFileLibrary();
   attachRun(conversationId, run_id, request, finalBubble);
   loadConversations(false);
 }
@@ -1292,6 +1468,31 @@ $("model").addEventListener("change", () => {
 $("mode").addEventListener("change", saveSettings);
 $("effort").addEventListener("change", saveSettings);
 $("execution-mode").addEventListener("change", saveSettings);
+$("tool-web-access").addEventListener("change", saveSettings);
+$("task-filter").addEventListener("change", renderTasks);
+$("attach-files").onclick = () => $("file-input").click();
+$("file-input").addEventListener("change", async event => {
+  await uploadFiles([...event.target.files]);
+  event.target.value = "";
+});
+$("refresh-files").onclick = () => loadFiles().catch(() => {});
+$("enable-notifications").onclick = async () => {
+  if (!("Notification" in window)) {
+    window.alert("Les notifications ne sont pas disponibles dans ce navigateur.");
+    return;
+  }
+  const permission = await Notification.requestPermission();
+  $("enable-notifications").textContent = permission === "granted"
+    ? "Notifications activées"
+    : "Notifications bloquées";
+};
+$("close-onboarding").onclick = () => {
+  window.localStorage.setItem("joe-onboarded-v1", "1");
+};
+window.addEventListener("joe:conversation-selected", () => {
+  selectedFileIds.clear();
+  loadFiles().catch(() => {});
+});
 document.addEventListener("click", closeSelectMenus);
 $("new-project").onclick = createProject;
 $("cancel-project").onclick = () => {
@@ -1426,6 +1627,7 @@ window.JoeAuth.pairBrowser()
     Promise.all([loadStatus(), loadActiveRuns(), loadTasks()])
       .then(() => loadConversations())
       .then(connectActiveRuns)
+      .then(loadDoctor)
       .catch(error => {
         console.error("Joe initialization failed", error);
       });

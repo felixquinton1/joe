@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from . import __version__
 from .auth import LocalAuth, auth_token_path, required_role, rotate_token
+from .doctor import doctor_report
+from .files import MAX_FILE_BYTES
 from .http_utils import RequestBodyError, read_json_body, validate_bind
 from .provider_registry import get_provider_catalog, get_provider_names
 from .skills import import_skill, list_global_skills, list_skills, promote_skill
@@ -72,6 +75,17 @@ class Handler(BaseHTTPRequestHandler):
         facade = _web_facade()
         if path == "/api/capabilities":
             return self._json(facade.provider_capabilities())
+        if path == "/api/doctor":
+            return self._json(doctor_report(self.server.manager.project))
+        if path == "/api/files":
+            project_id = parse_qs(parsed.query).get("project", ["free"])[0]
+            return self._json(self.server.manager.files.list(project_id))
+        if path.startswith("/api/files/") and path.endswith("/download"):
+            item_id = unquote(path.split("/")[-2])
+            item = self.server.manager.files.get(item_id)
+            if not item:
+                return self.send_error(HTTPStatus.NOT_FOUND)
+            return self._file(item)
         if path == "/api/usage":
             force = parse_qs(parsed.query).get("force") == ["1"]
             return self._json(facade.usage_status(force=force))
@@ -207,6 +221,29 @@ class Handler(BaseHTTPRequestHandler):
                 self.server.manager.conversations.create(payload.get("project_id")),
                 HTTPStatus.CREATED,
             )
+        if path == "/api/files":
+            payload = self._read_payload(max_bytes=MAX_FILE_BYTES * 2)
+            if payload is None:
+                return
+            project_id = str(payload.get("project_id", "free"))
+            if not self.server.manager.conversations.get_project(project_id):
+                return self._json(
+                    {"error": "Projet inconnu."},
+                    HTTPStatus.BAD_REQUEST,
+                )
+            try:
+                item = self.server.manager.files.add(
+                    project_id,
+                    str(payload.get("name", "file")),
+                    str(payload.get("content_type", "")),
+                    str(payload.get("data", "")),
+                )
+            except (OSError, ValueError) as error:
+                return self._json(
+                    {"error": str(error)},
+                    HTTPStatus.BAD_REQUEST,
+                )
+            return self._json(item, HTTPStatus.CREATED)
         if path == "/api/projects":
             payload = self._read_payload(allow_empty=True)
             if payload is None:
@@ -267,6 +304,13 @@ class Handler(BaseHTTPRequestHandler):
             model = str(payload.get("model", "")).strip() or None
             effort = str(payload.get("effort", "")).strip() or None
             execution_mode = str(payload.get("execution_mode", "")).strip() or None
+            attachments = payload.get("attachments") or []
+            if (
+                not isinstance(attachments, list)
+                or len(attachments) > 24
+                or not all(isinstance(item, str) for item in attachments)
+            ):
+                raise ValueError("invalid attachments")
             full_access_approved = payload.get("full_access_approved") is True
             if agent is not None and agent not in set(get_provider_names()):
                 raise ValueError("invalid agent")
@@ -307,6 +351,7 @@ class Handler(BaseHTTPRequestHandler):
                 model,
                 effort,
                 execution_mode,
+                attachments,
             )
         except ActiveConversationError as exc:
             return self._json({"error": str(exc)}, HTTPStatus.CONFLICT)
@@ -351,6 +396,13 @@ class Handler(BaseHTTPRequestHandler):
                     {"error": str(error)},
                     HTTPStatus.CONFLICT,
                 )
+            return self._json(
+                {"deleted": deleted},
+                HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND,
+            )
+        if path.startswith("/api/files/"):
+            item_id = unquote(path.rsplit("/", 1)[1])
+            deleted = self.server.manager.files.delete(item_id)
             return self._json(
                 {"deleted": deleted},
                 HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND,
@@ -459,16 +511,43 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return True
 
-    def _read_payload(self, *, allow_empty: bool = False) -> dict[str, Any] | None:
+    def _read_payload(
+        self,
+        *,
+        allow_empty: bool = False,
+        max_bytes: int = 1024 * 1024,
+    ) -> dict[str, Any] | None:
         try:
             return read_json_body(
                 self.headers,
                 self.rfile,
                 allow_empty=allow_empty,
+                max_bytes=max_bytes,
             )
         except RequestBodyError as exc:
             self._json({"error": str(exc)}, exc.status)
             return None
+
+    def _file(self, item: dict[str, Any]) -> None:
+        path = Path(str(item["path"]))
+        if not path.is_file():
+            return self.send_error(HTTPStatus.NOT_FOUND)
+        data = path.read_bytes()
+        content_type = str(
+            item.get("content_type")
+            or mimetypes.guess_type(str(item.get("name", "")))[0]
+            or "application/octet-stream"
+        )
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header(
+            "Content-Disposition",
+            f"attachment; filename*=UTF-8''{quote(str(item['name']))}",
+        )
+        self.send_header("Cache-Control", "private, no-store")
+        self.end_headers()
+        self.wfile.write(data)
 
     def _json(
         self,

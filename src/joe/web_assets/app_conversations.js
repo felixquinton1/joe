@@ -281,6 +281,7 @@ window.createJoeConversations = function createJoeConversations({
     const conversationViewport = document.querySelector(".conversation");
     conversationViewport.scrollTop = conversationViewport.scrollHeight;
     applySettings(conversation.settings || {});
+    window.dispatchEvent(new CustomEvent("joe:conversation-selected"));
     restoreConversationPanel(conversationId);
     const running = state.runs.has(conversationId);
     $("send").disabled = false;
@@ -393,7 +394,7 @@ window.createJoeConversations = function createJoeConversations({
     $("project-name").value = "";
     $("project-root").value = "";
     $("project-extra-roots").value = "";
-    $("project-remote-access").checked = false;
+    $("project-remote-access").checked = true;
     $("project-auto-delivery").checked = false;
     $("project-isolated-worktrees").checked = false;
     updateAutoDeliveryHelp();
@@ -415,7 +416,8 @@ window.createJoeConversations = function createJoeConversations({
     $("project-name").value = project.name;
     $("project-root").value = project.workspace_root || "";
     $("project-extra-roots").value = (project.additional_roots || []).join("\n");
-    $("project-remote-access").checked = Boolean(project.remote_access);
+    $("project-remote-access").checked = project.web_access !== false
+      && project.remote_access !== false;
     $("project-auto-delivery").checked = Boolean(project.auto_commit_push);
     $("project-isolated-worktrees").checked = Boolean(project.isolated_worktrees);
     updateAutoDeliveryHelp();
@@ -540,6 +542,7 @@ window.createJoeConversations = function createJoeConversations({
           additional_roots: $("project-extra-roots").value
             .split("\n").map(value => value.trim()).filter(Boolean),
           remote_access: $("project-remote-access").checked,
+          web_access: $("project-remote-access").checked,
           auto_commit_push: $("project-auto-delivery").checked,
           isolated_worktrees: $("project-isolated-worktrees").checked,
           default_execution_mode: $("project-execution-mode").value,

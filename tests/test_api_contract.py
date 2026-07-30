@@ -1,4 +1,5 @@
 import http.client
+import base64
 import json
 import threading
 import time
@@ -62,10 +63,60 @@ def test_contract_read_only_discovery_endpoints(tmp_path):
             "/api/conversations",
             "/api/runs/active",
             "/api/history",
+            "/api/files?project=free",
         ):
             status, payload = json_request(connection, "GET", path)
             assert status == 200
             assert payload is not None
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_contract_uploads_lists_downloads_and_deletes_project_file(tmp_path):
+    server, thread = start_server(tmp_path)
+    try:
+        connection = http.client.HTTPConnection(
+            "127.0.0.1", server.server_port, timeout=5
+        )
+        status, item = json_request(
+            connection,
+            "POST",
+            "/api/files",
+            {
+                "project_id": "free",
+                "name": "notes.md",
+                "content_type": "text/markdown",
+                "data": base64.b64encode(b"# Notes").decode(),
+            },
+        )
+        assert status == 201
+        assert item["name"] == "notes.md"
+        assert "path" not in item
+
+        status, items = json_request(
+            connection,
+            "GET",
+            "/api/files?project=free",
+        )
+        assert status == 200
+        assert items == [item]
+
+        connection.request(
+            "GET",
+            f"/api/files/{item['id']}/download",
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        assert response.read() == b"# Notes"
+
+        status, payload = json_request(
+            connection,
+            "DELETE",
+            f"/api/files/{item['id']}",
+        )
+        assert status == 200
+        assert payload == {"deleted": True}
     finally:
         server.shutdown()
         thread.join(timeout=2)

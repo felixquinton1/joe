@@ -601,8 +601,14 @@ def test_project_scope_uses_only_explicit_roots(tmp_path, monkeypatch):
 
     assert root == workspace.resolve()
     assert additional == (extra.resolve(),)
-    assert remote is False
+    assert remote is True
     assert execution_mode == "workspace-write"
+
+    manager.conversations.update(
+        conversation["id"],
+        {"settings": {"web_access": "off"}},
+    )
+    assert manager._project_scope(conversation["id"])[2] is False
 
 
 def test_only_explicit_operational_checks_use_project_validation_permission():

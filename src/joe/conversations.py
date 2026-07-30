@@ -15,11 +15,12 @@ DEFAULT_SETTINGS = {
     "model": "",
     "effort": "",
     "execution_mode": "",
+    "web_access": "on",
 }
 DEFAULT_PREFERENCES = {"agent": "", "mode": ""}
 DEFAULT_PROJECT_ID = "main"
 FREE_PROJECT_ID = "free"
-CURRENT_SCHEMA_VERSION = 6
+CURRENT_SCHEMA_VERSION = 7
 
 
 class ConversationStore:
@@ -117,7 +118,8 @@ class ConversationStore:
             "context": "",
             "workspace_root": "",
             "additional_roots": [],
-            "remote_access": False,
+            "remote_access": True,
+            "web_access": True,
             "auto_commit_push": False,
             "isolated_worktrees": False,
             "default_execution_mode": "",
@@ -153,6 +155,10 @@ class ConversationStore:
                 ][:8]
             if "remote_access" in changes:
                 project["remote_access"] = bool(changes["remote_access"])
+                project["web_access"] = project["remote_access"]
+            if "web_access" in changes:
+                project["web_access"] = bool(changes["web_access"])
+                project["remote_access"] = project["web_access"]
             if "auto_commit_push" in changes:
                 project["auto_commit_push"] = bool(changes["auto_commit_push"])
             if "isolated_worktrees" in changes:
@@ -598,7 +604,8 @@ class ConversationStore:
                     "context": "",
                     "workspace_root": "",
                     "additional_roots": [],
-                    "remote_access": False,
+                    "remote_access": True,
+                    "web_access": True,
                     "auto_commit_push": False,
                     "isolated_worktrees": False,
                     "default_execution_mode": "",
@@ -632,7 +639,9 @@ class ConversationStore:
         for project in payload["projects"]:
             project.setdefault("workspace_root", "")
             project.setdefault("additional_roots", [])
-            project.setdefault("remote_access", False)
+            if "web_access" not in project:
+                project["web_access"] = True
+            project["remote_access"] = bool(project["web_access"])
             project.setdefault("auto_commit_push", False)
             project.setdefault("isolated_worktrees", False)
             project.setdefault("default_execution_mode", "")

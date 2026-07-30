@@ -222,7 +222,7 @@ button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-v
   border-bottom: 0;
 }
 .project-group-head > strong {
-  overflow: hidden;
+  overflow: visible;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 11px;
@@ -541,8 +541,8 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
   line-height: 1.55;
 }
 .composer textarea::placeholder { color: #98a09d; }
-.composer-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px 10px 18px; }
-.composer-foot > span { color: var(--muted); font-size: 9px; }
+.composer-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px 10px 12px; }
+.composer-tools { min-width: 0; display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 9px; }
 .composer-actions { display: flex; align-items: center; gap: 7px; }
 .composer button {
   min-height: 36px;
@@ -570,6 +570,58 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 }
 .composer .stop-button { color: #874633; background: transparent; }
 .composer .stop-button:hover { color: var(--danger); background: var(--orange-soft); }
+.composer .tool-button {
+  width: 28px;
+  min-height: 28px;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 17px;
+  font-weight: 400;
+}
+.composer .tool-button:hover { color: var(--ink); background: #f3f2ed; }
+.tool-popover { position: relative; }
+.tool-popover > summary {
+  padding: 6px 7px;
+  border-radius: 8px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 9px;
+  font-weight: 650;
+}
+.tool-popover > summary::-webkit-details-marker { display: none; }
+.tool-popover[open] > summary, .tool-popover > summary:hover { color: var(--ink); background: #f3f2ed; }
+.tool-panel {
+  position: absolute;
+  z-index: 80;
+  left: 0;
+  bottom: calc(100% + 9px);
+  width: min(300px, calc(100vw - 32px));
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 13px;
+  background: var(--surface-raised);
+  box-shadow: 0 12px 34px rgba(25, 34, 30, .14);
+}
+.tool-panel .check-label { margin: 0; color: var(--ink); font-size: 10px; }
+.tool-panel > small { color: var(--muted); font-size: 8.5px; line-height: 1.4; }
+.tool-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tool-panel-head strong { font-size: 9px; }
+.tool-panel-head button { min-height: auto; padding: 3px 5px; color: var(--muted); background: transparent; font-size: 8px; }
+.file-library { max-height: 150px; display: grid; gap: 3px; overflow: auto; }
+.file-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px; }
+.file-row button { min-height: 28px; justify-content: flex-start; overflow: hidden; padding: 5px 7px; color: var(--muted); background: #f5f4ef; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.file-row button.selected { color: var(--green); background: var(--green-soft); }
+.file-row .file-delete { width: 28px; justify-content: center; color: var(--muted); background: transparent; }
+.attachment-chips { display: flex; flex-wrap: wrap; gap: 5px; padding: 9px 12px 0; }
+.attachment-chips button { min-height: 25px; max-width: 190px; padding: 4px 7px; color: var(--green); background: var(--green-soft); font-size: 9px; font-weight: 600; }
+.attachment-chips button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-chips button b { color: var(--muted); font-size: 10px; }
 .prompt-queue { max-height: 140px; display: grid; gap: 5px; overflow: auto; padding: 10px 12px; border-bottom: 1px solid var(--line); background: #f7f5ef; }
 .queue-heading, .queue-item { display: flex; align-items: center; gap: 7px; }
 .queue-heading { justify-content: space-between; color: var(--muted); font-size: 9px; }
@@ -609,6 +661,8 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
   text-align: center;
 }
 .tasks-head small, .task-empty { color: var(--muted); font-size: 8.5px; }
+.tasks-head .select-menu { width: 88px; }
+.tasks-head .select-menu-trigger { min-height: 24px; padding: 3px 7px; font-size: 8px; }
 .task-list {
   max-height: min(31vh, 270px);
   display: grid;
@@ -678,6 +732,11 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 .task-actions button:hover { color: var(--ink); background: #eceae4; }
 .task-actions button.primary { color: var(--green); background: var(--green-soft); }
 .task-actions button.danger:hover { color: var(--danger); background: #f8e5e1; }
+.doctor-status { display: grid; gap: 5px; }
+.doctor-status p { display: flex; justify-content: space-between; gap: 10px; margin: 0; padding: 7px 9px; border-radius: 8px; background: #f5f4ef; font-size: 10px; }
+.doctor-status p.ok span { color: var(--green); }
+.doctor-status p.error span { color: var(--danger); }
+.doctor-status p.muted span { color: var(--muted); }
 .preferences-dialog label small{display:block;margin-top:5px;color:var(--muted);font-size:9px;line-height:1.4}
 .setting-help { display: block; margin: -7px 0 2px 22px; color: var(--muted); font-size: 9px; line-height: 1.4; }
 .subtle-action { justify-self: start; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--muted); background: #f7f6f1; cursor: pointer; font-size: 10px; }

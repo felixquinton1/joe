@@ -12,7 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from .capabilities import cached_provider_capabilities, select_model
-from .conversations import ConversationStore
+from .conversations import ConversationStore, FREE_PROJECT_ID
+from .files import FileLibrary
 from .git_review import GitSnapshot, build_report, reject, snapshot
 from .models import Intent, Mode, Route
 from .orchestrator import Orchestrator
@@ -45,6 +46,7 @@ class LiveRun:
     isolated_worktree: bool = False
     branch: str | None = None
     base_commit: str | None = None
+    attachments: list[str] = field(default_factory=list)
     events: list[dict[str, Any]] = field(default_factory=list)
     done: bool = False
     cancel_event: threading.Event = field(default_factory=threading.Event)
@@ -82,6 +84,8 @@ class RunManager:
         self.conversations.ensure()
         self.tasks = TaskStore(self.orchestrator.memory.root)
         self.tasks.ensure()
+        self.files = FileLibrary(self.orchestrator.memory.root)
+        self.files.ensure()
         for task in self.tasks.list():
             if task.get("status") in {"integrating", "resolving"}:
                 if (
@@ -118,6 +122,7 @@ class RunManager:
         model: str | None,
         effort: str | None,
         execution_mode: str | None,
+        attachments: list[str] | None = None,
         *,
         run_id: str | None = None,
         resumed: bool = False,
@@ -149,6 +154,7 @@ class RunManager:
             isolated_worktree=isolated,
             branch=worktree.branch if worktree else None,
             base_commit=worktree.base_commit if worktree else None,
+            attachments=list(attachments or []),
             git_before=snapshot(workspace),
         )
         self.tasks.create(
@@ -275,9 +281,18 @@ class RunManager:
                 project_execution_mode,
             ) = self._project_scope(run.conversation_id)
             workspace = run.workspace or workspace
+            conversation = self.conversations.get(run.conversation_id) or {}
+            project_id = str(conversation.get("project_id", FREE_PROJECT_ID))
+            attachments = self.files.resolve(run.attachments, project_id)
+            attachment_roots = tuple(
+                sorted(
+                    {Path(item["path"]).parent for item in attachments},
+                    key=str,
+                )
+            )
             orchestrator = Orchestrator(
                 workspace,
-                additional_roots=additional_roots,
+                additional_roots=additional_roots + attachment_roots,
                 remote_access=remote_access,
             )
             routing_started = time.monotonic()
@@ -371,6 +386,7 @@ class RunManager:
                 f"The active workspace is {workspace}. Use only instructions and "
                 "skills whose repository scope matches this workspace. Never apply "
                 "a skill belonging to another project."
+                + self._attachment_context(attachments)
             )
             response, log = orchestrator.execute(
                 run.request,
@@ -647,6 +663,8 @@ class RunManager:
             raise ValueError(
                 f"Racine de projet inaccessible : {configured_workspace}"
             )
+        if str(conversation.get("project_id")) == FREE_PROJECT_ID and not workspace:
+            workspace = self._free_workspace()
         workspace = workspace or self.project
         roots_list = []
         for value in project.get("additional_roots", []):
@@ -659,7 +677,11 @@ class RunManager:
         return (
             workspace,
             roots,
-            bool(project.get("remote_access")),
+            (
+                str(conversation.get("settings", {}).get("web_access", "on"))
+                != "off"
+                and bool(project.get("web_access", True))
+            ),
             str(project.get("default_execution_mode", "")),
         )
 
@@ -667,6 +689,50 @@ class RunManager:
         conversation = self.conversations.get(conversation_id) or {}
         project = self.conversations.get_project(conversation.get("project_id", "main")) or {}
         return bool(project.get("isolated_worktrees"))
+
+    def _free_workspace(self) -> Path:
+        data_home = Path(
+            os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")
+        )
+        key = hashlib.sha256(str(self.project).encode()).hexdigest()[:16]
+        workspace = data_home / "joe" / "workspaces" / key / "free"
+        workspace.mkdir(parents=True, exist_ok=True)
+        return workspace
+
+    @staticmethod
+    def _attachment_context(items: list[dict[str, Any]]) -> str:
+        if not items:
+            return ""
+        lines = [
+            "\n\n# Attached files",
+            "The user explicitly attached these project-scoped local files:",
+        ]
+        for item in items:
+            path = Path(str(item["path"]))
+            lines.append(
+                f"- {item['name']} ({item.get('content_type')}, "
+                f"{item.get('size', 0)} bytes): {path}"
+            )
+            content_type = str(item.get("content_type", ""))
+            if (
+                content_type.startswith("text/")
+                or path.suffix.lower() in {
+                    ".md", ".txt", ".py", ".json", ".yaml", ".yml",
+                    ".toml", ".csv", ".js", ".ts", ".html", ".css",
+                }
+            ) and int(item.get("size", 0)) <= 100_000:
+                try:
+                    lines.extend(
+                        [
+                            f"\n## {item['name']}",
+                            "```",
+                            path.read_text(errors="replace"),
+                            "```",
+                        ]
+                    )
+                except OSError:
+                    lines.append("  (content unavailable; inspect the path)")
+        return "\n".join(lines)
 
     def _schedule_compaction(
         self,
@@ -746,6 +812,7 @@ class RunManager:
             "model": model,
             "effort": effort,
             "execution_mode": execution_mode,
+            "attachments": run.attachments,
         }
         _atomic_json(self.pending_path, pending)
 
@@ -774,6 +841,7 @@ class RunManager:
                 item.get("model"),
                 item.get("effort"),
                 item.get("execution_mode"),
+                item.get("attachments") or [],
                 run_id=run_id,
                 resumed=True,
             )

@@ -51,8 +51,26 @@
       </div>
       <form id="composer" class="composer">
         <div id="prompt-queue" class="prompt-queue hidden"></div>
+        <div id="attachment-chips" class="attachment-chips hidden"></div>
         <textarea id="request" rows="2" placeholder="Ex. Ajoute une option pour désactiver la loss Gamma…" data-i18n-placeholder="prompt_placeholder" required></textarea>
-        <div class="composer-foot"><span data-i18n="composer_hint">Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne</span><div class="composer-actions"><button id="stop" class="stop-button hidden" type="button"><b>■</b><span data-i18n="stop">Interrompre</span></button><button id="send" class="send-button" type="submit"><span data-i18n="send">Envoyer</span><b aria-hidden="true">↗</b></button></div></div>
+        <input id="file-input" type="file" multiple hidden>
+        <div class="composer-foot">
+          <div class="composer-tools">
+            <button id="attach-files" class="tool-button" type="button" title="Joindre des fichiers" aria-label="Joindre des fichiers">＋</button>
+            <details class="tool-popover">
+              <summary>Outils</summary>
+              <div class="tool-panel">
+                <label class="check-label"><input id="tool-web-access" type="checkbox" checked> Recherche Web</label>
+                <small>Disponible par défaut. Décoche pour travailler hors ligne dans cette conversation.</small>
+                <div class="tool-panel-head"><strong>Fichiers du projet</strong><button id="refresh-files" type="button">Actualiser</button></div>
+                <div id="file-library" class="file-library"><small>Aucun fichier joint.</small></div>
+                <button id="enable-notifications" class="subtle-action" type="button">Activer les notifications</button>
+              </div>
+            </details>
+            <span data-i18n="composer_hint">Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne</span>
+          </div>
+          <div class="composer-actions"><button id="stop" class="stop-button hidden" type="button"><b>■</b><span data-i18n="stop">Interrompre</span></button><button id="send" class="send-button" type="submit"><span data-i18n="send">Envoyer</span><b aria-hidden="true">↗</b></button></div>
+        </div>
       </form>
     </section>
     <div class="panel-resizer resize-right" data-resizer="right" title="Redimensionner le suivi"></div>
@@ -78,7 +96,7 @@
       <section class="tasks-panel">
         <div class="tasks-head">
           <div><strong data-i18n="tasks">Tâches</strong><span id="task-count">0</span></div>
-          <small data-i18n="tasks_help">Runs durables et worktrees</small>
+          <select id="task-filter" aria-label="Filtrer les tâches"><option value="active">Actives</option><option value="attention">À valider</option><option value="all">Toutes</option></select>
         </div>
         <div id="tasks" class="task-list"><span class="task-empty" data-i18n="no_tasks">Aucune tâche récente</span></div>
       </section>
@@ -120,8 +138,8 @@
       <details class="dialog-advanced">
         <summary><span>Options avancées</span><small>Accès réseau et intégrations distantes</small></summary>
         <div class="dialog-advanced-content">
-          <label class="check-label"><input id="project-remote-access" type="checkbox"> Autoriser l’accès réseau du bac à sable pour ce projet</label>
-          <small class="setting-help">À activer uniquement pour joindre un service distant. Décris les hôtes autorisés dans le contexte du projet.</small>
+          <label class="check-label"><input id="project-remote-access" type="checkbox" checked> Autoriser la recherche Web et l’accès réseau</label>
+          <small class="setting-help">Activé par défaut. Décoche pour bloquer explicitement tout accès réseau dans ce projet.</small>
         </div>
       </details>
       <div class="dialog-actions"><button id="cancel-project" type="button">Annuler</button><button id="save-project" value="default">Enregistrer</button></div>
@@ -179,6 +197,15 @@
         <button value="cancel" data-i18n="cancel">Annuler</button>
         <button id="save-preferences" value="default" data-i18n="save">Enregistrer</button>
       </div>
+    </form>
+  </dialog>
+  <dialog id="onboarding-dialog" class="project-dialog onboarding-dialog">
+    <form method="dialog">
+      <span class="eyebrow">Bienvenue dans Joe</span>
+      <h2>Tout est prêt ?</h2>
+      <p>Joe vérifie localement les fournisseurs et le stockage. Aucun prompt de test n’est envoyé.</p>
+      <div id="doctor-status" class="doctor-status"><small>Diagnostic en cours…</small></div>
+      <div class="dialog-actions"><button id="close-onboarding" value="default">Commencer</button></div>
     </form>
   </dialog>
   <script src="/i18n.js"></script>
