@@ -40,6 +40,7 @@ window.createJoeConversations = function createJoeConversations({
   function renderConversations() {
     const target = $("conversations");
     target.replaceChildren();
+    let visibleCount = 0;
     for (const project of state.projects) {
       const group = document.createElement("section");
       group.className = `project-group ${project.collapsed ? "collapsed" : ""}`;
@@ -76,6 +77,7 @@ window.createJoeConversations = function createJoeConversations({
           return text.includes(historyFilter);
         })
         .sort((left, right) => Number(right.pinned) - Number(left.pinned));
+      visibleCount += conversations.length;
       const conversationList = document.createElement("div");
       conversationList.className = "project-conversations";
       const conversationListInner = document.createElement("div");
@@ -118,6 +120,16 @@ window.createJoeConversations = function createJoeConversations({
       conversationList.appendChild(conversationListInner);
       group.appendChild(conversationList);
       target.appendChild(group);
+    }
+    const status = $("history-filter-status");
+    status.textContent = historyFilter
+      ? `${visibleCount} résultat${visibleCount === 1 ? "" : "s"}`
+      : "";
+    if (historyFilter && visibleCount === 0) {
+      const empty = document.createElement("div");
+      empty.className = "history-empty";
+      empty.innerHTML = "<strong>Aucune conversation</strong><span>Essaie un autre mot-clé.</span>";
+      target.appendChild(empty);
     }
   }
 

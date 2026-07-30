@@ -248,6 +248,7 @@ class ConversationStore:
                         "attempts": len(attempts),
                         "tokens": None,
                         "cost_usd": None,
+                        "cost_statuses": [],
                     }
                     runs.append(item)
                     mode = route.get("mode") or "unknown"
@@ -271,11 +272,23 @@ class ConversationStore:
                         stats.setdefault("cost_statuses", [])
                         stats["input_tokens"] += usage.get("input_tokens") or 0
                         stats["output_tokens"] += usage.get("output_tokens") or 0
+                        known_tokens = (
+                            (usage.get("input_tokens") or 0)
+                            + (usage.get("output_tokens") or 0)
+                            + (usage.get("cache_read_tokens") or 0)
+                            + (usage.get("cache_creation_tokens") or 0)
+                            + (usage.get("reasoning_tokens") or 0)
+                        )
+                        if known_tokens or item["tokens"] is not None:
+                            item["tokens"] = (item["tokens"] or 0) + known_tokens
                         if usage.get("cost_usd") is not None:
                             stats["cost_usd"] = (stats["cost_usd"] or 0.0) + usage["cost_usd"]
+                            item["cost_usd"] = (item["cost_usd"] or 0.0) + usage["cost_usd"]
                         status = usage.get("cost_status")
                         if status and status not in stats["cost_statuses"]:
                             stats["cost_statuses"].append(status)
+                        if status and status not in item["cost_statuses"]:
+                            item["cost_statuses"].append(status)
             return {
                 "runs": sorted(runs, key=lambda item: item.get("at") or 0, reverse=True),
                 "total_runs": len(runs),

@@ -161,7 +161,16 @@ def test_search_and_analytics_are_local_and_bounded(tmp_path):
         "run-1",
         run_summary={
             "route": {"mode": "fast", "intent": "analyze"},
-            "attempts": [{"provider": "codex", "status": "complete"}],
+            "attempts": [{
+                "provider": "codex",
+                "status": "complete",
+                "usage": {
+                    "input_tokens": 120,
+                    "output_tokens": 30,
+                    "cost_usd": 0.002,
+                    "cost_status": "estimated_api",
+                },
+            }],
         },
     )
     results = store.search("worktree")
@@ -169,7 +178,9 @@ def test_search_and_analytics_are_local_and_bounded(tmp_path):
     report = store.analytics()
     assert report["total_runs"] == 1
     assert report["by_provider"]["codex"]["successes"] == 1
-    assert report["runs"][0]["cost_usd"] is None
+    assert report["runs"][0]["tokens"] == 150
+    assert report["runs"][0]["cost_usd"] == 0.002
+    assert report["runs"][0]["cost_statuses"] == ["estimated_api"]
 
 
 def test_subproject_context_is_shared_by_its_conversations(tmp_path):

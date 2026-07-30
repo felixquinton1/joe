@@ -19,7 +19,11 @@
         <div class="joe-tagline"><span>✦</span><strong data-i18n="slogan">L’IA à la mode chez les jeunes</strong></div>
       </div>
       <div class="panel-title"><div><span class="eyebrow" data-i18n="project">Projet</span><h2 data-i18n="conversations">Conversations</h2></div><button id="new-project" class="icon-button" type="button" title="Nouveau sous-projet" aria-label="Nouveau sous-projet">＋</button></div>
-      <input id="history-search" class="history-search" type="search" placeholder="Rechercher dans l’historique…" aria-label="Rechercher dans l’historique">
+      <div class="history-search-wrap">
+        <span aria-hidden="true">⌕</span>
+        <input id="history-search" class="history-search" type="search" placeholder="Rechercher…" aria-label="Rechercher dans l’historique">
+      </div>
+      <div id="history-filter-status" class="history-filter-status" aria-live="polite"></div>
       <div id="conversations" class="history-list"></div>
     </aside>
     <div class="panel-resizer resize-left" data-resizer="left" title="Redimensionner les conversations"></div>
@@ -30,7 +34,7 @@
           <label><span data-i18n="workflow">Workflow</span><select id="mode"><option value="">Automatique</option><option value="fast">FAST</option><option value="review">REVIEW</option><option value="consensus">CONSENSUS</option></select></label>
         </div>
         <details class="advanced-config">
-          <summary><span data-i18n="configuration">Configuration</span> <span>modèle · effort · permissions</span></summary>
+          <summary><span data-i18n="configuration">Options</span><small>modèle · effort · permissions</small></summary>
           <div class="control-group provider-controls">
             <label><span data-i18n="model">Modèle</span><select id="model"><option value="">Défaut du fournisseur</option></select></label>
             <label><span data-i18n="effort">Effort</span><select id="effort"><option value="">Défaut du modèle</option></select></label>
@@ -106,9 +110,11 @@
         <div id="global-skills" class="skill-list"><small>Aucun skill commun pour l’instant.</small></div>
       </section>
       <details class="dialog-advanced">
-        <summary>Options avancées</summary>
-        <label class="check-label"><input id="project-remote-access" type="checkbox"> Autoriser l’accès réseau du bac à sable pour ce projet</label>
-        <small class="setting-help">Nécessaire uniquement si les tâches doivent atteindre un service distant. Précise les détails (hôte, cluster…) dans le contexte du projet.</small>
+        <summary><span>Options avancées</span><small>Accès réseau et intégrations distantes</small></summary>
+        <div class="dialog-advanced-content">
+          <label class="check-label"><input id="project-remote-access" type="checkbox"> Autoriser l’accès réseau du bac à sable pour ce projet</label>
+          <small class="setting-help">À activer uniquement pour joindre un service distant. Décris les hôtes autorisés dans le contexte du projet.</small>
+        </div>
       </details>
       <div class="dialog-actions"><button id="cancel-project" type="button">Annuler</button><button id="save-project" value="default">Enregistrer</button></div>
     </form>
