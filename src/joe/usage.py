@@ -404,7 +404,24 @@ def _provider_capacity(
     if status is None:
         return None, None, "quota inconnu"
     if not status.get("available"):
-        return False, 0, str(status.get("message") or "indisponible")
+        detail = str(status.get("message") or "disponibilité inconnue")
+        state = status.get("availability_state")
+        known_exhaustion = state in {
+            "quota_exhausted",
+            "temporarily_unavailable",
+        } or any(
+            marker in detail.lower()
+            for marker in (
+                "quota épuisé",
+                "limite atteinte",
+                "pause temporaire",
+                "authentication",
+                "authentification",
+            )
+        )
+        if known_exhaustion:
+            return False, 0, detail
+        return None, None, detail
     windows = status.get("windows") or []
     windows = [
         window

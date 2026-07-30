@@ -49,6 +49,9 @@ def apply_cooldowns(statuses: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if failure:
             kind, remaining = failure
             item["available"] = False
+            item["availability_state"] = (
+                "quota_exhausted" if kind == "quota" else "temporarily_unavailable"
+            )
             item["cooldown_seconds"] = remaining
             item["message"] = (
                 f"Pause temporaire après {kind} · nouvel essai dans "

@@ -251,6 +251,16 @@ def test_pasted_npm_log_does_not_trigger_review_or_high_complexity():
     assert route.reviewer is None
 
 
+def test_simple_verification_does_not_start_a_second_agent():
+    route = Router().route(
+        "Vérifie pourquoi npm install -g échoue avec une erreur EACCES."
+    )
+
+    assert route.intent is Intent.ANALYZE
+    assert route.mode is Mode.FAST
+    assert route.reviewer is None
+
+
 def test_capability_question_about_access_stays_read_only():
     route = Router().route(
         "Est-ce que tu peux modifier le code de Joe depuis cette session ?"

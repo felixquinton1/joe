@@ -126,6 +126,59 @@ def test_consensus_keeps_healthy_claude_ahead_of_unknown_gemini():
     assert notice is None
 
 
+def test_consensus_keeps_claude_when_its_measure_is_pending_refresh():
+    route = Route(Intent.ANALYZE, Mode.CONSENSUS, "codex")
+
+    admitted, notice = admit_route(
+        route,
+        [
+            status("codex", 91, 200_000),
+            {
+                "provider": "claude",
+                "available": False,
+                "windows": [],
+                "message": "Quota expiré · actualisation en attente",
+            },
+            {
+                "provider": "gemini",
+                "available": True,
+                "windows": [],
+            },
+        ],
+        now=10_000,
+    )
+
+    assert admitted.reviewer == "claude"
+    assert notice is None
+
+
+def test_consensus_replaces_claude_during_a_real_provider_cooldown():
+    route = Route(Intent.ANALYZE, Mode.CONSENSUS, "codex")
+
+    admitted, notice = admit_route(
+        route,
+        [
+            status("codex", 91, 200_000),
+            {
+                "provider": "claude",
+                "available": False,
+                "availability_state": "quota_exhausted",
+                "windows": [],
+                "message": "Pause temporaire après quota",
+            },
+            {
+                "provider": "gemini",
+                "available": True,
+                "windows": [],
+            },
+        ],
+        now=10_000,
+    )
+
+    assert admitted.reviewer == "gemini"
+    assert "claude->gemini" in notice["message"]
+
+
 def test_consensus_becomes_fast_when_only_one_provider_has_capacity():
     route = Route(Intent.ANALYZE, Mode.CONSENSUS, "codex")
     unavailable_gemini = {
@@ -162,6 +215,7 @@ def test_consensus_uses_one_affordable_provider_when_two_are_too_costly():
             {
                 "provider": "gemini",
                 "available": False,
+                "availability_state": "temporarily_unavailable",
                 "windows": [],
             },
         ],

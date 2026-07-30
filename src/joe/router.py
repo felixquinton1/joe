@@ -86,6 +86,15 @@ EXPLICIT_REVIEW_PHRASES = {
     "auditer par", "faire auditer", "fais-le auditer", "fais le auditer",
     "fait le auditer", "puis audite", "puis fais auditer",
 }
+SUBSTANTIAL_REVIEW_PHRASES = {
+    "audit global",
+    "audit complet",
+    "revue indépendante",
+    "relecture indépendante",
+    "contrôle croisé",
+    "verification croisée",
+    "vérification croisée",
+}
 ARCHITECTURE_WORDS = {"architecture", "migration", "protocole", "roadmap"}
 CODE_WORDS = {
     "bug", "debug", "python", "test", "tests", "loss", "training", "code",
@@ -226,6 +235,9 @@ class Router:
         explicit_workflow_review = any(
             phrase in lower for phrase in EXPLICIT_REVIEW_PHRASES
         )
+        substantial_review = any(
+            phrase in lower for phrase in SUBSTANTIAL_REVIEW_PHRASES
+        )
         follow_up_review = (
             bool(words & REVIEW_WORDS)
             and previous_provider
@@ -260,9 +272,7 @@ class Router:
             mode = Mode.FAST
         elif important or ambiguous_architecture:
             mode = Mode.CONSENSUS
-        elif large_implementation:
-            mode = Mode.REVIEW
-        elif words & REVIEW_WORDS:
+        elif large_implementation or substantial_review:
             mode = Mode.REVIEW
         else:
             mode = Mode.FAST
