@@ -236,6 +236,21 @@ def test_explicit_bug_explanation_remains_read_only():
     assert route.intent is not Intent.MODIFY
 
 
+def test_pasted_npm_log_does_not_trigger_review_or_high_complexity():
+    route = Router().route(
+        "J'ai eu cette erreur en voulant lancer codex en CLI :\n"
+        "npm error code EACCES\n"
+        "npm error If you believe this is a permissions issue, please "
+        "double-check permissions.\n"
+        "npm error at async Object.rename\n"
+        "Comment je règle ça ?"
+    )
+
+    assert route.intent is Intent.ANSWER
+    assert route.mode is Mode.FAST
+    assert route.reviewer is None
+
+
 def test_capability_question_about_access_stays_read_only():
     route = Router().route(
         "Est-ce que tu peux modifier le code de Joe depuis cette session ?"

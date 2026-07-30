@@ -1,4 +1,4 @@
-const APP_VERSION = "0.23.18";
+const APP_VERSION = "0.23.19";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -37,6 +37,9 @@ function applyLanguage(value) {
     $("conversation-title").textContent = t("accomplish");
   }
   updateCapabilityMenus();
+  for (const select of document.querySelectorAll("select")) {
+    refreshSelectMenu(select);
+  }
 }
 
 async function loadStatus() {
@@ -115,6 +118,7 @@ function setupSelectMenu(select) {
 function refreshSelectMenu(select) {
   const control = selectMenus.get(select);
   if (!control) return;
+  control.button.disabled = select.disabled;
   const selected = select.selectedOptions[0] || select.options[0];
   control.button.textContent = selected?.textContent || "";
   control.menu.replaceChildren();
@@ -270,6 +274,7 @@ function updateCapabilityMenus() {
   if (!capability) {
     for (const control of [$("model"), $("effort"), $("execution-mode")]) {
       control.disabled = true;
+      refreshSelectMenu(control);
     }
     return;
   }
@@ -289,6 +294,7 @@ function updateEfforts() {
   setOptions($("effort"), [{ id: "", label: selectedModel?.default_effort ? `${t("model_default")} · ${selectedModel.default_effort}` : t("model_default") }]);
   addOptions($("effort"), efforts.map(value => ({ id: value, label: value })));
   $("effort").disabled = !efforts.length;
+  refreshSelectMenu($("effort"));
 }
 
 function currentSettings() {
@@ -311,8 +317,11 @@ function applySettings(settings) {
   $("mode").value = settings.mode || "";
   $("effort").value = settings.effort || "";
   $("execution-mode").value = settings.execution_mode || "";
-  refreshSelectMenu($("agent"));
-  refreshSelectMenu($("mode"));
+  for (const select of [
+    $("agent"), $("mode"), $("model"), $("effort"), $("execution-mode")
+  ]) {
+    refreshSelectMenu(select);
+  }
 }
 
 async function saveSettings() {
@@ -330,6 +339,8 @@ async function openPreferences() {
   );
   $("preference-agent").value = preferences.agent || "";
   $("preference-mode").value = preferences.mode || "";
+  refreshSelectMenu($("preference-agent"));
+  refreshSelectMenu($("preference-mode"));
   $("preferences-dialog").showModal();
 }
 
@@ -612,6 +623,7 @@ function updateWorkflowFallback(provider, fallback) {
   renderGitReport,
   renderHistoricalRunSummary,
   applySettings,
+  refreshSelectMenu,
   renderWorkflowUpdate,
   renderPromptQueue,
   fetcher: joeFetch
@@ -1207,8 +1219,9 @@ setInterval(updateCountdowns, 1000);
 setInterval(() => loadUsage().catch(() => {}), 60000);
 setupPanelResizers();
 resizeComposer();
-setupSelectMenu($("agent"));
-setupSelectMenu($("mode"));
+for (const select of document.querySelectorAll("select")) {
+  setupSelectMenu(select);
+}
 applyLanguage(language);
 $("toggle-history").onclick = () => toggleMobilePanel(
   ".history-panel",

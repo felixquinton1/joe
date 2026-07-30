@@ -9,6 +9,7 @@ window.createJoeConversations = function createJoeConversations({
   renderGitReport,
   renderHistoricalRunSummary,
   applySettings,
+  refreshSelectMenu,
   renderWorkflowUpdate,
   renderPromptQueue,
   fetcher
@@ -371,6 +372,7 @@ window.createJoeConversations = function createJoeConversations({
     $("project-remote-access").checked = false;
     $("project-auto-delivery").checked = false;
     $("project-execution-mode").value = "";
+    refreshSelectMenu($("project-execution-mode"));
     $("project-context").value = "";
     $("project-dialog").showModal();
     requestAnimationFrame(() => $("project-name").focus());
@@ -386,6 +388,7 @@ window.createJoeConversations = function createJoeConversations({
     $("project-remote-access").checked = Boolean(project.remote_access);
     $("project-auto-delivery").checked = Boolean(project.auto_commit_push);
     $("project-execution-mode").value = project.default_execution_mode || "";
+    refreshSelectMenu($("project-execution-mode"));
     $("project-context").value = project.context || "";
     $("project-dialog").showModal();
   }

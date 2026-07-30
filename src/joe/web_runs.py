@@ -16,6 +16,7 @@ from .conversations import ConversationStore
 from .git_review import GitSnapshot, build_report, reject, snapshot
 from .models import Intent, Mode, Route
 from .orchestrator import Orchestrator
+from .router import _routing_text
 from .routing import resolve_route
 from .usage import cached_usage_status, usage_status
 
@@ -744,6 +745,7 @@ def _complex_request(request: str, route: Route) -> bool:
         "scientifique",
         "expérimental",
     }
+    request = _routing_text(request)
     words = set(request.lower().replace(",", " ").replace(".", " ").split())
     return (
         route.mode is not Mode.FAST

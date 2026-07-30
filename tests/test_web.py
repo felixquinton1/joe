@@ -222,6 +222,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b"@keyframes dropdown-in" in style
         assert b"grid-template-rows: 0fr" in style
         assert b".select-menu-options" in style
+        assert b".project-dialog .select-menu-trigger" in style
         assert b"animation: dialog-in" in style
     finally:
         server.shutdown()
@@ -843,3 +844,14 @@ def test_complex_requests_get_high_effort_defaults():
 
     assert _complex_request("Implémente cette architecture", route) is True
     assert _complex_request("Quel est ce fichier ?", route) is False
+
+
+def test_pasted_diagnostic_does_not_raise_effort():
+    route = Route(Intent.ANSWER, Mode.FAST, "codex")
+    request = (
+        "Comment je règle cette erreur ?\n"
+        "npm error please double-check permissions\n"
+        "npm error at async debug migration"
+    )
+
+    assert _complex_request(request, route) is False

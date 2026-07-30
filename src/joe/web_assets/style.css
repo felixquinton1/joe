@@ -372,6 +372,10 @@ button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-v
 }
 .select-menu-option:hover { background: #f0eee8; }
 .select-menu-option[aria-selected="true"] { color: var(--green); background: var(--green-soft); }
+.select-menu-trigger:disabled { opacity: .48; cursor: default; }
+.project-dialog .select-menu { margin-top: 0; }
+.project-dialog .select-menu-trigger { height: 40px; background: #fff; }
+.project-dialog .select-menu-options { z-index: 220; }
 .conversation { min-height: 0; overflow: auto; padding: 24px clamp(22px, 4vw, 56px); }
 .conversation-head {
   max-width: 900px;

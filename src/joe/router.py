@@ -136,6 +136,27 @@ def _tokens(text: str) -> set[str]:
     return set(re.findall(r"[\wÀ-ÿ-]+", text.lower()))
 
 
+def _routing_text(text: str) -> str:
+    """Keep user prose for routing while ignoring pasted diagnostics."""
+    kept: list[str] = []
+    in_fence = False
+    diagnostic_prefixes = (
+        "npm error", "npm warn", "traceback", "warning:", "error:",
+        "fatal:", "caused by:", "at ", "file ",
+    )
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence or not stripped:
+            continue
+        if stripped.lower().startswith(diagnostic_prefixes):
+            continue
+        kept.append(stripped)
+    return " ".join(kept) or text
+
+
 def _intent_text(text: str) -> tuple[str, bool]:
     actionable = text
     read_only = False
@@ -161,9 +182,10 @@ class Router:
         forced_mode: Mode | None = None,
         previous_provider: str | None = None,
     ) -> Route:
-        lower = request.lower()
-        words = _tokens(request)
-        intent_text, read_only_directive = _intent_text(request)
+        routing_text = _routing_text(request)
+        lower = routing_text.lower()
+        words = _tokens(routing_text)
+        intent_text, read_only_directive = _intent_text(routing_text)
         intent_words = _tokens(intent_text)
         if read_only_directive:
             intent_words -= READ_ONLY_AMBIGUOUS_MODIFY_WORDS
@@ -197,7 +219,7 @@ class Router:
             else Intent.ANALYZE
         )
         if (capability_question and not feature_request) or (
-            request.rstrip().endswith("?") and intent is not Intent.MODIFY
+            routing_text.rstrip().endswith("?") and intent is not Intent.MODIFY
         ):
             intent = Intent.ANSWER
 
@@ -210,7 +232,7 @@ class Router:
             and not explicit_workflow_review
         )
         strategic_choice = (
-            len(request) >= 140
+            len(routing_text) >= 140
             and " ou " in lower
             and len(words & STRATEGIC_CHOICE_WORDS) >= 2
         )
@@ -224,9 +246,9 @@ class Router:
         large_implementation = intent is Intent.MODIFY and (
             any(phrase in lower for phrase in LARGE_IMPLEMENTATION_PHRASES)
             or (
-                len(request) >= 240
+                len(routing_text) >= 240
                 and len(words & MODIFY_WORDS) >= 2
-                and not request.rstrip().endswith("?")
+                and not routing_text.rstrip().endswith("?")
             )
         )
 
