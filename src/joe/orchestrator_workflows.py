@@ -1,11 +1,48 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
 from .models import Intent, ProviderResult, Route
+
+
+REPORT_RULES = (
+    "\n\nReporting rules: use factual collective or impersonal phrasing. "
+    "Do not add a section called Refusé/Refused for an internal inability to "
+    "run tests, npm, git, network, or sandboxed commands. Omit that detail from "
+    "the user report; it belongs to the technical run log. Mention a validation "
+    "limitation only when it materially changes the result, in one short sentence "
+    "under Validation. Never claim a check passed unless it actually ran."
+)
+
+
+def clean_report(text: str) -> str:
+    """Remove only generic internal-validation refusal sections from agent prose."""
+    if not text:
+        return text
+    heading = re.compile(
+        r"(?ims)^(?:#{1,6}\s*|\*\*)refus(?:é|e|ed)(?:\*\*)?\s*:?\s*$"
+    )
+    internal = re.compile(
+        r"(?i)(?:sandbox|lecture seule|read-only|pytest|npm|git\s+(?:fetch|push|commit)|"
+        r"permission|répertoire temporaire|temporaire inscriptible|requires approval)"
+    )
+    matches = list(heading.finditer(text))
+    if not matches:
+        return text.strip()
+    chunks: list[str] = []
+    cursor = 0
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        body = text[match.end():end]
+        if internal.search(body):
+            chunks.append(text[cursor:match.start()].rstrip())
+            cursor = end
+    chunks.append(text[cursor:].rstrip())
+    return "\n\n".join(chunk for chunk in chunks if chunk).strip()
 
 
 def run_review_workflow(
@@ -27,6 +64,7 @@ def run_review_workflow(
         "singular. Focus on the completed result and validation. Do not invoke "
         "another AI provider or perform an independent review yourself: Joe "
         "owns the review stage after this implementation finishes."
+        + REPORT_RULES
     )
     workflow_event(
         on_event,
@@ -141,6 +179,7 @@ def run_consensus_workflow(
         "intentionally read-only: do not attempt test suites, git fetch, or "
         "authentication probes, and do not add a generic Refusé section merely "
         "because those operational checks belong to a REVIEW workflow."
+        + REPORT_RULES
     )
     first, second = participants
     for provider in participants:
@@ -293,6 +332,8 @@ def run_consensus_workflow(
         "Write in a factual collective voice using 'nous' or impersonal phrasing; "
         "never use an ambiguous first-person singular. Clearly separate agreements, "
         "material disagreements, arbitration, and the final recommendation.\n\n"
+        + REPORT_RULES
+        + "\n\n"
         + json.dumps(
             {
                 f"{first}_proposal": first_proposal.stdout,
@@ -328,7 +369,7 @@ def run_consensus_workflow(
         "Synthèse du consensus",
         "complete",
     )
-    final = synthesis.stdout.strip()
+    final = clean_report(synthesis.stdout)
     if degraded_providers:
         replacements = ", ".join(
             f"{role.capitalize()} indisponible, relais par {provider.capitalize()}"
@@ -386,6 +427,7 @@ def review_prompt(context: str, candidate: str) -> str:
         "Say explicitly if no justified issue exists.\n\n<CANDIDATE>\n"
         + candidate
         + "\n</CANDIDATE>"
+        + REPORT_RULES
     )
 
 
@@ -407,6 +449,7 @@ def correction_prompt(context: str, implementation: str, review: str) -> str:
         + "\n</IMPLEMENTATION>\n\n<REVIEW>\n"
         + review
         + "\n</REVIEW>"
+        + REPORT_RULES
     )
 
 
@@ -415,7 +458,9 @@ def review_final(
     review: ProviderResult,
     correction: ProviderResult | None,
 ) -> str:
-    result = correction.stdout.strip() if correction else primary.stdout.strip()
+    result = clean_report(
+        correction.stdout if correction else primary.stdout
+    )
     status = (
         "Les corrections justifiées ont été appliquées et vérifiées."
         if correction

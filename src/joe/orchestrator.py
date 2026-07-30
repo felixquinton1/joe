@@ -11,6 +11,7 @@ from .capabilities import provider_defaults
 from .memory import ProjectMemory
 from .models import Intent, Mode, ProviderResult, Route
 from .orchestrator_workflows import (
+    clean_report,
     run_consensus_workflow,
     run_review_workflow,
 )
@@ -91,7 +92,7 @@ class Orchestrator:
                 timeout_override=30 if health_check else None,
                 allow_fallback=not health_check,
             )
-            final = result.stdout.strip()
+            final = clean_report(result.stdout)
             final_provider = result.provider
         elif route.mode is Mode.REVIEW:
             final, final_provider = run_review_workflow(

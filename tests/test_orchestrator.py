@@ -3,6 +3,7 @@ import time
 
 from joe.models import Intent, Mode, ProviderResult, Route
 from joe.orchestrator import OrchestrationError, Orchestrator
+from joe.orchestrator_workflows import clean_report
 from joe.provider_health import clear_cooldowns, record_result
 
 
@@ -478,3 +479,22 @@ def test_health_check_skips_project_context_and_uses_short_timeout(tmp_path):
     assert "SECRET CONVERSATION CONTEXT" not in prompt
     assert "17 × 23" in prompt
     assert timeout == 30
+
+
+def test_clean_report_omits_internal_validation_refusal_section():
+    report = (
+        "## Résultat\nTout est prêt.\n\n"
+        "## Refusé\nLa suite pytest est refusée par le sandbox."
+    )
+
+    cleaned = clean_report(report)
+
+    assert "## Résultat" in cleaned
+    assert "Refusé" not in cleaned
+    assert "pytest" not in cleaned
+
+
+def test_clean_report_preserves_functional_refusal():
+    report = "## Refusé\nLe projet n'est pas accessible en écriture."
+
+    assert clean_report(report) == report
