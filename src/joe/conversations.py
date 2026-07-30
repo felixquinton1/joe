@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import threading
 import time
 import uuid
@@ -547,6 +548,7 @@ class ConversationStore:
 
     def _write(self, payload: dict[str, Any]) -> None:
         content = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+        self._snapshot_before_write()
         self._daily_backup(content)
         for path in (self.path, self.backup_path):
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -555,6 +557,20 @@ class ConversationStore:
             tmp.write_text(content)
             tmp.chmod(0o600)
             os.replace(tmp, path)
+
+    def _snapshot_before_write(self) -> None:
+        """Keep recent recoverable history before every replacement."""
+        if not self.path.exists():
+            return
+        snapshots = self.backup_path.parent / "snapshots"
+        snapshots.mkdir(parents=True, exist_ok=True)
+        snapshots.chmod(0o700)
+        target = snapshots / f"conversations-{time.time_ns()}.json"
+        shutil.copy2(self.path, target)
+        target.chmod(0o600)
+        files = sorted(snapshots.glob("conversations-*.json"), key=lambda item: item.stat().st_mtime)
+        for old in files[:-20]:
+            old.unlink(missing_ok=True)
 
     def _daily_backup(self, content: str) -> None:
         daily = self.backup_path.parent / "daily"
