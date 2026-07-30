@@ -27,6 +27,12 @@
       preferred_agent_help: "Joe privilégie cet agent, puis utilise un fallback si nécessaire.",
       default_workflow: "Workflow par défaut",
       default_workflow_help: "En automatique, Joe adapte le nombre d’agents à la demande.",
+      tasks: "Tâches", tasks_help: "Runs durables et worktrees",
+      no_tasks: "Aucune tâche récente", current_workspace: "Workspace courant",
+      review_task: "À examiner", integrated: "Intégrée", cancelled: "Interrompue",
+      view_diff: "Voir le diff", integrate: "Intégrer", delete: "Supprimer",
+      isolated_worktree: "Worktree isolé", task_changes: "Modifications de la tâche",
+      close: "Fermer",
       cancel: "Annuler", save: "Enregistrer"
     },
     en: {
@@ -52,6 +58,12 @@
       preferred_agent_help: "Joe prioritizes this agent, then falls back when needed.",
       default_workflow: "Default workflow",
       default_workflow_help: "In automatic mode, Joe adapts the number of agents to the request.",
+      tasks: "Tasks", tasks_help: "Durable runs and worktrees",
+      no_tasks: "No recent tasks", current_workspace: "Current workspace",
+      review_task: "Review needed", integrated: "Integrated", cancelled: "Cancelled",
+      view_diff: "View diff", integrate: "Integrate", delete: "Delete",
+      isolated_worktree: "Isolated worktree", task_changes: "Task changes",
+      close: "Close",
       cancel: "Cancel", save: "Save"
     }
   };

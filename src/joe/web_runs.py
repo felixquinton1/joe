@@ -18,8 +18,9 @@ from .models import Intent, Mode, Route
 from .orchestrator import Orchestrator
 from .router import _routing_text
 from .routing import resolve_route
+from .tasks import TaskStore
 from .usage import cached_usage_status, usage_status
-from .worktrees import WorktreeManager
+from .worktrees import Worktree, WorktreeError, WorktreeManager
 
 
 class ActiveConversationError(RuntimeError):
@@ -42,6 +43,8 @@ class LiveRun:
     workspace: Path | None = None
     base_workspace: Path | None = None
     isolated_worktree: bool = False
+    branch: str | None = None
+    base_commit: str | None = None
     events: list[dict[str, Any]] = field(default_factory=list)
     done: bool = False
     cancel_event: threading.Event = field(default_factory=threading.Event)
@@ -77,6 +80,8 @@ class RunManager:
             backup_path=_conversation_backup_path(self.project),
         )
         self.conversations.ensure()
+        self.tasks = TaskStore(self.orchestrator.memory.root)
+        self.tasks.ensure()
         self.live: dict[str, LiveRun] = {}
         self.git_rejections: dict[str, dict[str, Any]] = {}
         self.lock = threading.Lock()
@@ -101,8 +106,20 @@ class RunManager:
         workspace, _, _, _ = self._project_scope(conversation_id)
         base_workspace = workspace
         isolated = self._project_uses_worktree(conversation_id)
+        with self.lock:
+            self._prune_live_locked()
+            if any(
+                active.conversation_id == conversation_id and not active.done
+                for active in self.live.values()
+            ):
+                raise ActiveConversationError(
+                    "Une tâche est déjà active dans cette conversation."
+                )
+        worktree = None
         if isolated:
-            workspace = WorktreeManager(workspace).create(run_id)
+            worktree = WorktreeManager(workspace).create(run_id)
+            workspace = worktree.path
+        conversation = self.conversations.get(conversation_id) or {}
         run = LiveRun(
             run_id,
             request,
@@ -110,7 +127,20 @@ class RunManager:
             workspace=workspace,
             base_workspace=base_workspace,
             isolated_worktree=isolated,
+            branch=worktree.branch if worktree else None,
+            base_commit=worktree.base_commit if worktree else None,
             git_before=snapshot(workspace),
+        )
+        self.tasks.create(
+            run_id,
+            request,
+            conversation_id,
+            str(conversation.get("project_id", "main")),
+            workspace=workspace,
+            base_workspace=base_workspace,
+            isolated=isolated,
+            branch=run.branch,
+            base_commit=run.base_commit,
         )
         with self.lock:
             self._prune_live_locked()
@@ -119,7 +149,8 @@ class RunManager:
                 for active in self.live.values()
             ):
                 if isolated:
-                    WorktreeManager(base_workspace).remove(workspace)
+                    WorktreeManager(base_workspace).remove(worktree)
+                self.tasks.delete(run_id)
                 raise ActiveConversationError(
                     "Une tâche est déjà active dans cette conversation."
                 )
@@ -142,8 +173,9 @@ class RunManager:
                 )
             except Exception:
                 self.live.pop(run.run_id, None)
-                if isolated:
-                    WorktreeManager(base_workspace).remove(workspace)
+                if isolated and not resumed:
+                    WorktreeManager(base_workspace).remove(worktree)
+                self.tasks.update(run_id, status="failed")
                 if not resumed:
                     self.conversations.remove_run(conversation_id, run.run_id)
                 raise
@@ -165,8 +197,16 @@ class RunManager:
             with self.lock:
                 self.live.pop(run.run_id, None)
             self._remove_pending(run.run_id)
-            if run.isolated_worktree and run.base_workspace and run.workspace:
-                WorktreeManager(run.base_workspace).remove(run.workspace)
+            if (
+                not resumed
+                and run.isolated_worktree
+                and run.base_workspace
+                and run.workspace
+            ):
+                WorktreeManager(run.base_workspace).remove(
+                    self._task_worktree(self.tasks.get(run.run_id) or {})
+                )
+            self.tasks.update(run.run_id, status="failed")
             if not resumed:
                 self.conversations.remove_run(conversation_id, run.run_id)
             raise
@@ -275,6 +315,12 @@ class RunManager:
                     "profile": self.profile,
                 }
             )
+            self.tasks.update(
+                run.run_id,
+                provider=route.primary,
+                model=model,
+                mode=route.mode.value,
+            )
             if quota_admission:
                 run.emit({"type": "quota_admission", **quota_admission})
                 if quota_admission.get("blocked"):
@@ -317,6 +363,7 @@ class RunManager:
                 on_event=lambda event: self._emit_run_event(run, event),
             )
             git_report = self._capture_git_report(run)
+            self._update_task_git(run, git_report)
             self._deliver_if_enabled(run, git_report)
             self.conversations.append_message(
                 run.conversation_id,
@@ -336,14 +383,24 @@ class RunManager:
                 }
             )
             self._schedule_compaction(run.conversation_id, orchestrator)
+            self.tasks.update(
+                run.run_id,
+                status=(
+                    "review"
+                    if run.isolated_worktree and git_report.get("files")
+                    else "completed"
+                ),
+            )
         except Exception as exc:
             git_report = self._capture_git_report(run)
+            self._update_task_git(run, git_report)
             if run.cancel_event.is_set():
                 self.conversations.remove_run(run.conversation_id, run.run_id)
                 run.emit(
                     {"type": "git_report", "run_id": run.run_id, **git_report}
                 )
                 run.emit({"type": "cancelled"})
+                self.tasks.update(run.run_id, status="cancelled")
                 return
             self.conversations.append_message(
                 run.conversation_id,
@@ -355,6 +412,7 @@ class RunManager:
             )
             run.emit({"type": "git_report", "run_id": run.run_id, **git_report})
             run.emit({"type": "error", "message": str(exc)})
+            self.tasks.update(run.run_id, status="failed", error=str(exc))
         finally:
             self._remove_pending(run.run_id)
             with run.condition:
@@ -726,6 +784,78 @@ class RunManager:
             return json.loads(path.read_text())
         except (OSError, json.JSONDecodeError):
             return None
+
+    def list_tasks(self) -> list[dict[str, Any]]:
+        return self.tasks.list()
+
+    def task_diff(self, task_id: str) -> dict[str, Any] | None:
+        task = self.tasks.get(task_id)
+        if not task:
+            return None
+        if not task.get("isolated"):
+            return {
+                "files": [],
+                "insertions": task.get("insertions", 0),
+                "deletions": task.get("deletions", 0),
+                "patch_preview": "",
+                "message": "Cette tâche n’utilise pas de worktree isolé.",
+            }
+        return WorktreeManager(Path(task["base_workspace"])).diff(
+            self._task_worktree(task)
+        )
+
+    def integrate_task(self, task_id: str) -> dict[str, Any]:
+        task = self.tasks.get(task_id)
+        if not task:
+            raise KeyError(task_id)
+        if task.get("status") == "running":
+            raise WorktreeError("La tâche est encore en cours.")
+        if not task.get("isolated"):
+            raise WorktreeError("Cette tâche n’utilise pas de worktree isolé.")
+        commit = WorktreeManager(Path(task["base_workspace"])).integrate(
+            self._task_worktree(task),
+            f"chore: integrate Joe task {task['title']}",
+        )
+        updated = self.tasks.update(
+            task_id,
+            status="integrated",
+            integrated_commit=commit,
+            workspace=None,
+        )
+        return updated or task
+
+    def delete_task(self, task_id: str) -> bool:
+        task = self.tasks.get(task_id)
+        if not task:
+            return False
+        if task.get("status") == "running":
+            raise WorktreeError("Interromps la tâche avant de la supprimer.")
+        if task.get("isolated") and task.get("workspace"):
+            WorktreeManager(Path(task["base_workspace"])).remove(
+                self._task_worktree(task)
+            )
+        return self.tasks.delete(task_id)
+
+    def _update_task_git(
+        self,
+        run: LiveRun,
+        report: dict[str, Any],
+    ) -> None:
+        files = report.get("files") or []
+        self.tasks.update(
+            run.run_id,
+            files=len(files),
+            insertions=report.get("insertions", 0),
+            deletions=report.get("deletions", 0),
+        )
+
+    @staticmethod
+    def _task_worktree(task: dict[str, Any]) -> Worktree:
+        return Worktree(
+            Path(str(task["workspace"])),
+            str(task["branch"]),
+            str(task["base_commit"]),
+        )
 
 
 def build_quota_notice(

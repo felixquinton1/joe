@@ -117,6 +117,24 @@ Le zoom natif de VS Code s’applique à la vue Joe :
 - macOS : `Cmd++`, `Cmd+-`, `Cmd+0` ;
 - palette : `Joe: Zoomer`, `Joe: Dézoomer`, `Joe: Réinitialiser le zoom`.
 
+## Tâches et worktrees
+
+Chaque run crée une tâche durable visible dans le panneau de suivi. Elle
+conserve son état, son fournisseur, son modèle et le résumé de ses
+modifications sans dupliquer la conversation.
+
+Lorsqu’un projet active « Isoler les modifications dans un worktree Git »,
+Joe crée une branche `joe/<id>` et travaille hors du checkout principal. À la
+fin du run :
+
+- **Voir le diff** affiche les fichiers et le patch ;
+- **Intégrer** committe les changements puis fusionne la branche, uniquement
+  si le dépôt principal est propre ;
+- **Supprimer** abandonne explicitement le worktree et sa branche.
+
+Un conflit d’intégration est annulé automatiquement et laisse le worktree
+disponible pour examen.
+
 ## Capacités et sécurité
 
 L’extension publique adopte des valeurs prudentes :

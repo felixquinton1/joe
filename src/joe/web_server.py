@@ -14,6 +14,7 @@ from .http_utils import RequestBodyError, read_json_body, validate_bind
 from .provider_registry import get_provider_catalog, get_provider_names
 from .skills import import_skill, list_global_skills, list_skills, promote_skill
 from .web_runs import ActiveConversationError, RunManager, _existing_directory
+from .worktrees import WorktreeError
 
 _ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
@@ -96,6 +97,21 @@ class Handler(BaseHTTPRequestHandler):
                     for run in self.server.manager.active_runs()
                 ]
             )
+        if path == "/api/tasks":
+            return self._json(self.server.manager.list_tasks())
+        if path.startswith("/api/tasks/") and path.endswith("/diff"):
+            task_id = unquote(path.split("/")[-2])
+            try:
+                report = self.server.manager.task_diff(task_id)
+            except WorktreeError as error:
+                return self._json(
+                    {"error": str(error)},
+                    HTTPStatus.CONFLICT,
+                )
+            return self._json(
+                report,
+                HTTPStatus.OK if report is not None else HTTPStatus.NOT_FOUND,
+            )
         if path == "/api/projects":
             return self._json(self.server.manager.conversations.list_projects())
         if path == "/api/skills/global":
@@ -142,6 +158,18 @@ class Handler(BaseHTTPRequestHandler):
             token = rotate_token(self.server.auth_path)
             self.server.auth = LocalAuth(token, self.server.auth.role, True)
             return self._json({"rotated": True})
+        if path.startswith("/api/tasks/") and path.endswith("/integrate"):
+            task_id = unquote(path.split("/")[-2])
+            try:
+                task = self.server.manager.integrate_task(task_id)
+            except KeyError:
+                return self._json({}, HTTPStatus.NOT_FOUND)
+            except WorktreeError as error:
+                return self._json(
+                    {"error": str(error)},
+                    HTTPStatus.CONFLICT,
+                )
+            return self._json(task)
         if path.startswith("/api/runs/") and path.endswith("/reject"):
             run_id = unquote(path.split("/")[-2])
             payload = self._read_payload(allow_empty=True)
@@ -314,6 +342,19 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if not self._authorize(required_role("DELETE", path)):
             return
+        if path.startswith("/api/tasks/"):
+            task_id = unquote(path.rsplit("/", 1)[1])
+            try:
+                deleted = self.server.manager.delete_task(task_id)
+            except WorktreeError as error:
+                return self._json(
+                    {"error": str(error)},
+                    HTTPStatus.CONFLICT,
+                )
+            return self._json(
+                {"deleted": deleted},
+                HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND,
+            )
         if not path.startswith("/api/conversations/"):
             return self.send_error(HTTPStatus.NOT_FOUND)
         conversation_id = unquote(path.rsplit("/", 1)[1])

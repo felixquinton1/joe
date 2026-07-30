@@ -581,6 +581,90 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 
 /* Activity and usage */
 .activity-tools { flex: 0 0 auto; display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin: 0 4px 20px; }
+.tasks-panel {
+  flex: 0 0 auto;
+  min-height: 0;
+  margin: 0 0 14px;
+  padding: 10px;
+  border: 1px solid rgba(203, 199, 188, .72);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .62);
+}
+.tasks-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+.tasks-head > div { display: flex; align-items: center; gap: 6px; }
+.tasks-head strong { font-size: 11px; }
+.tasks-head span {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 99px;
+  color: var(--green);
+  background: var(--green-soft);
+  font-size: 8px;
+  text-align: center;
+}
+.tasks-head small, .task-empty { color: var(--muted); font-size: 8.5px; }
+.task-list {
+  max-height: min(31vh, 270px);
+  display: grid;
+  gap: 5px;
+  overflow: auto;
+}
+.task-card {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: rgba(247, 246, 242, .86);
+}
+.task-card.review { border-color: #d9b394; background: #fff8f1; }
+.task-card.running { border-color: #a9c7bc; background: #f3faf7; }
+.task-card-head, .task-meta, .task-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+}
+.task-card-head strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+.task-card-head b {
+  flex: none;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 650;
+}
+.task-card.review .task-card-head b { color: var(--orange); }
+.task-card.running .task-card-head b { color: var(--green); }
+.task-meta { margin-top: 4px; color: var(--muted); font-size: 8px; }
+.task-meta span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-actions { justify-content: flex-end; margin-top: 7px; }
+.task-actions button {
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 8px;
+}
+.task-actions button:hover { color: var(--ink); background: #eceae4; }
+.task-actions button.primary { color: var(--green); background: var(--green-soft); }
+.task-actions button.danger:hover { color: var(--danger); background: #f8e5e1; }
 .preferences-dialog label small{display:block;margin-top:5px;color:var(--muted);font-size:9px;line-height:1.4}
 .setting-help { display: block; margin: -7px 0 2px 22px; color: var(--muted); font-size: 9px; line-height: 1.4; }
 .subtle-action { justify-self: start; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--muted); background: #f7f6f1; cursor: pointer; font-size: 10px; }
@@ -852,6 +936,41 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 .dialog-actions button { padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; cursor: pointer; }
 .dialog-actions button:last-child { border-color: var(--green); color: #fff; background: var(--green); }
 .dialog-actions .danger-button:last-child { border-color: var(--danger); background: var(--danger); }
+.task-diff-dialog { width: min(760px, calc(100vw - 24px)); }
+.task-diff-stats { margin: 0; color: var(--muted); font-size: 10px; }
+.task-diff-files {
+  max-height: 150px;
+  display: grid;
+  gap: 3px;
+  overflow: auto;
+}
+.task-diff-files > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 7px;
+  border-radius: 6px;
+  background: #f5f4ef;
+  font-size: 9px;
+}
+.task-diff-files b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-diff-files small { flex: none; color: var(--muted); }
+.task-diff-preview {
+  max-height: 42vh;
+  overflow: auto;
+  margin: 0;
+  padding: 11px;
+  border-radius: 9px;
+  color: #e8eee9;
+  background: #17211f;
+  font: 9px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre;
+}
 @keyframes dropdown-in {
   from { opacity: 0; transform: translateY(-3px); }
   to { opacity: 1; transform: translateY(0); }

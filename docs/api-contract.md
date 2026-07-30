@@ -53,6 +53,15 @@ local reste refusé sans option explicite.
 Les endpoints de revue Git (`reject`) restent utilisés par le client Web mais
 ne font pas partie du premier client VS Code en lecture seule.
 
+### Tâches durables
+
+| Méthode | Route | Rôle | Résultat |
+|---|---|---|---|
+| `GET` | `/api/tasks` | viewer | Tâches récentes |
+| `GET` | `/api/tasks/{id}/diff` | viewer | Diff du worktree |
+| `POST` | `/api/tasks/{id}/integrate` | maintainer | Branche intégrée |
+| `DELETE` | `/api/tasks/{id}` | maintainer | Tâche et worktree supprimés |
+
 ## Schémas minimaux
 
 ### Statut

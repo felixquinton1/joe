@@ -74,6 +74,13 @@
         </details>
       </div>
       <div class="panel-title"><div><span class="eyebrow" data-i18n="live">Temps réel</span><h2 data-i18n="agents">Agents</h2></div><span id="run-state" class="run-state idle" data-i18n="ready">Prêt</span></div>
+      <section class="tasks-panel">
+        <div class="tasks-head">
+          <div><strong data-i18n="tasks">Tâches</strong><span id="task-count">0</span></div>
+          <small data-i18n="tasks_help">Runs durables et worktrees</small>
+        </div>
+        <div id="tasks" class="task-list"><span class="task-empty" data-i18n="no_tasks">Aucune tâche récente</span></div>
+      </section>
       <div id="agents" class="agent-stack"></div>
       <div class="diagnostic-store hidden" aria-hidden="true">
         <div id="evidence-log" class="evidence-log"></div>
@@ -133,6 +140,16 @@
       <h2>Autoriser l’accès complet ?</h2>
       <p>Cette tâche pourra modifier le projet, lancer ses tests et utiliser le réseau. L’autorisation vaut uniquement pour ce run.</p>
       <div class="dialog-actions"><button value="cancel">Annuler</button><button id="confirm-full-access" value="default">Autoriser une fois</button></div>
+    </form>
+  </dialog>
+  <dialog id="task-diff-dialog" class="project-dialog task-diff-dialog">
+    <form method="dialog">
+      <span class="eyebrow" data-i18n="isolated_worktree">Worktree isolé</span>
+      <h2 id="task-diff-title" data-i18n="task_changes">Modifications de la tâche</h2>
+      <p id="task-diff-stats" class="task-diff-stats"></p>
+      <div id="task-diff-files" class="task-diff-files"></div>
+      <pre id="task-diff-preview" class="task-diff-preview"></pre>
+      <div class="dialog-actions"><button value="cancel" data-i18n="close">Fermer</button></div>
     </form>
   </dialog>
   <dialog id="preferences-dialog" class="project-dialog preferences-dialog">

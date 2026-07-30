@@ -1,4 +1,4 @@
-const APP_VERSION = "0.24.3";
+const APP_VERSION = "0.25.0";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -15,6 +15,7 @@ const $ = id => document.getElementById(id);
 const renderMarkdown = window.JoeMarkdown.renderMarkdown;
 const joeFetch = window.JoeAuth.authenticatedFetch;
 const selectMenus = new Map();
+let knownTasks = [];
 let language = window.JoeI18n.initialLanguage(
   window.localStorage,
   window.navigator.language
@@ -40,6 +41,7 @@ function applyLanguage(value) {
   for (const select of document.querySelectorAll("select")) {
     refreshSelectMenu(select);
   }
+  if (knownTasks.length) renderTasks();
 }
 
 async function loadStatus() {
@@ -67,6 +69,115 @@ function updateProviderMenu(providers) {
   if ([...$("agent").options].some(option => option.value === selected)) {
     $("agent").value = selected;
   }
+}
+
+async function loadTasks() {
+  const response = await joeFetch("/api/tasks");
+  if (!response.ok) return;
+  knownTasks = await response.json();
+  renderTasks();
+}
+
+function renderTasks() {
+  const target = $("tasks");
+  target.replaceChildren();
+  const tasks = knownTasks.slice(0, 12);
+  $("task-count").textContent = String(tasks.length);
+  if (!tasks.length) {
+    const empty = document.createElement("span");
+    empty.className = "task-empty";
+    empty.textContent = t("no_tasks");
+    target.appendChild(empty);
+    return;
+  }
+  const statusLabels = {
+    running: t("running"),
+    review: t("review_task"),
+    completed: t("done"),
+    integrated: t("integrated"),
+    failed: t("failed"),
+    cancelled: t("cancelled")
+  };
+  for (const task of tasks) {
+    const card = document.createElement("article");
+    card.className = `task-card ${task.status}`;
+    const branch = task.branch
+      ? `<span title="${escapeHtml(task.branch)}">${escapeHtml(task.branch)}</span>`
+      : `<span>${escapeHtml(t("current_workspace"))}</span>`;
+    card.innerHTML = `
+      <div class="task-card-head">
+        <strong title="${escapeHtml(task.request)}">${escapeHtml(task.title)}</strong>
+        <b>${escapeHtml(statusLabels[task.status] || task.status)}</b>
+      </div>
+      <div class="task-meta">${branch}<span>${Number(task.files || 0)} fichier${Number(task.files || 0) === 1 ? "" : "s"} · +${Number(task.insertions || 0)} −${Number(task.deletions || 0)}</span></div>
+      <div class="task-actions"></div>`;
+    const actions = card.querySelector(".task-actions");
+    if (task.isolated && task.status !== "integrated") {
+      actions.appendChild(taskAction(t("view_diff"), () => showTaskDiff(task)));
+      if (task.status === "review") {
+        actions.appendChild(taskAction(t("integrate"), () => integrateTask(task), "primary"));
+      }
+      if (task.status !== "running" && task.status !== "integrated") {
+        actions.appendChild(taskAction(t("delete"), () => deleteTask(task), "danger"));
+      }
+    }
+    if (!actions.children.length) actions.remove();
+    target.appendChild(card);
+  }
+}
+
+function taskAction(label, action, kind = "") {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = kind;
+  button.textContent = label;
+  button.onclick = action;
+  return button;
+}
+
+async function showTaskDiff(task) {
+  const response = await joeFetch(`/api/tasks/${encodeURIComponent(task.id)}/diff`);
+  const report = await response.json();
+  if (!response.ok) {
+    window.alert(report.error || "Diff indisponible.");
+    return;
+  }
+  $("task-diff-title").textContent = task.title;
+  $("task-diff-stats").textContent = `${report.files.length} fichier${report.files.length === 1 ? "" : "s"} · +${report.insertions} −${report.deletions}`;
+  $("task-diff-files").innerHTML = report.files.map(file => (
+    `<span><b>${escapeHtml(file.path)}</b><small>+${file.insertions} −${file.deletions}</small></span>`
+  )).join("") || "<small>Aucune modification.</small>";
+  $("task-diff-preview").textContent = report.patch_preview || "Aucun diff textuel disponible.";
+  $("task-diff-dialog").showModal();
+}
+
+async function integrateTask(task) {
+  if (!window.confirm(`Intégrer la branche ${task.branch} dans le dépôt principal ?`)) return;
+  const response = await joeFetch(`/api/tasks/${encodeURIComponent(task.id)}/integrate`, {
+    method: "POST"
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    window.alert(payload.error || "Intégration impossible.");
+    return;
+  }
+  await loadTasks();
+  await loadConversations(false);
+}
+
+async function deleteTask(task) {
+  if (!window.confirm(
+    `Supprimer la tâche et abandonner les modifications de ${task.branch} ?`
+  )) return;
+  const response = await joeFetch(`/api/tasks/${encodeURIComponent(task.id)}`, {
+    method: "DELETE"
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    window.alert(payload.error || "Suppression impossible.");
+    return;
+  }
+  await loadTasks();
 }
 
 function setupSelectMenu(select) {
@@ -711,6 +822,7 @@ function handleEvent(conversationId, event, finalBubble) {
     if (event.type === "complete" || event.type === "error" || event.type === "cancelled") {
       state.runs.delete(conversationId);
       loadConversations(false);
+      loadTasks().catch(() => {});
       launchNextQueued(conversationId);
     }
     return;
@@ -725,6 +837,7 @@ function handleEvent(conversationId, event, finalBubble) {
   scrollIfFollowing(diagnostics, followDiagnostics);
   if (event.type === "route") {
     showRoute(event.mode, event.primary, event.reviewer);
+    loadTasks().catch(() => {});
     ensureAgent(event.primary);
     if (event.reviewer) ensureAgent(event.reviewer);
     setSummaryPending(finalBubble, true);
@@ -823,18 +936,21 @@ function handleEvent(conversationId, event, finalBubble) {
     renderMarkdown(finalBubble, event.response);
     finishRun(conversationId, true);
     loadConversations(false);
+    loadTasks().catch(() => {});
     launchNextQueued(conversationId);
   } else if (event.type === "error") {
     setSummaryPending(finalBubble, false);
     failRunningWorkflow();
     finalBubble.textContent = `Erreur : ${event.message}`;
     finishRun(conversationId, false);
+    loadTasks().catch(() => {});
     loadConversations(false).then(() => selectConversation(conversationId));
   } else if (event.type === "cancelled") {
     setSummaryPending(finalBubble, false);
     failRunningWorkflow();
     const prompt = state.runs.get(conversationId)?.request || "";
     finishRun(conversationId, false);
+    loadTasks().catch(() => {});
     $("request").value = prompt;
     resizeComposer();
     $("run-state").textContent = "Interrompu";
@@ -1264,6 +1380,7 @@ function toggleMobilePanel(panelSelector, buttonId) {
 
 setInterval(updateCountdowns, 1000);
 setInterval(() => loadUsage().catch(() => {}), 60000);
+setInterval(() => loadTasks().catch(() => {}), 10000);
 setupPanelResizers();
 resizeComposer();
 for (const select of document.querySelectorAll("select")) {
@@ -1281,7 +1398,7 @@ $("toggle-activity").onclick = () => toggleMobilePanel(
 
 window.JoeAuth.pairBrowser()
   .then(() => {
-    Promise.all([loadStatus(), loadActiveRuns()])
+    Promise.all([loadStatus(), loadActiveRuns(), loadTasks()])
       .then(() => loadConversations())
       .then(connectActiveRuns)
       .catch(error => {

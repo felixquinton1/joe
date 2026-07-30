@@ -236,6 +236,43 @@ def test_contract_cancels_an_active_run(tmp_path):
         thread.join(timeout=2)
 
 
+def test_contract_exposes_and_deletes_durable_tasks(tmp_path):
+    server, thread = start_server(tmp_path)
+    conversation = server.manager.conversations.create()
+    server.manager.tasks.create(
+        "task1",
+        "Analyse le projet",
+        conversation["id"],
+        conversation["project_id"],
+        workspace=tmp_path,
+        base_workspace=tmp_path,
+        isolated=False,
+    )
+    try:
+        connection = http.client.HTTPConnection(
+            "127.0.0.1", server.server_port, timeout=5
+        )
+        status, tasks = json_request(connection, "GET", "/api/tasks")
+        assert status == 200
+        assert tasks[0]["id"] == "task1"
+
+        status, report = json_request(
+            connection, "GET", "/api/tasks/task1/diff"
+        )
+        assert status == 200
+        assert report["message"].startswith("Cette tâche")
+
+        server.manager.tasks.update("task1", status="completed")
+        status, deleted = json_request(
+            connection, "DELETE", "/api/tasks/task1"
+        )
+        assert status == 200
+        assert deleted == {"deleted": True}
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
 def test_contract_exposes_persisted_run_history(tmp_path):
     server, thread = start_server(tmp_path)
     run_payload = {
