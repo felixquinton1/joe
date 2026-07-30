@@ -83,7 +83,11 @@ class Orchestrator:
         )
         if extra_context and not health_check:
             context += "\n\n" + extra_context
-        if not health_check:
+        if not health_check and (
+            "external-research" in route.reason
+            or "http://" in request.lower()
+            or "https://" in request.lower()
+        ):
             external = _external_reference_context(request)
             if external:
                 context += "\n\n" + external
