@@ -10,6 +10,7 @@ from typing import Callable
 
 from .capabilities import provider_defaults
 from .external_sources import collect_sources
+from .usage_tracking import parse_provider_usage
 from .memory import ProjectMemory
 from .models import Intent, Mode, ProviderResult, Route
 from .orchestrator_workflows import (
@@ -280,6 +281,9 @@ class Orchestrator:
             )
             results.append(result)
             record_result(result)
+            usage = parse_provider_usage(name, result.stdout, selected_model)
+            if usage and on_event:
+                on_event({"type": "usage", **usage})
             if result.error_kind == "cancelled":
                 raise OrchestrationError("Exécution interrompue")
             if on_event:

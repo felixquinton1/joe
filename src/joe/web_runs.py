@@ -883,6 +883,18 @@ def _run_summary(run: LiveRun) -> dict[str, Any]:
                 ):
                     item["model"] = event.get("model")
                     item["effort"] = event.get("effort")
+        elif event_type == "usage":
+            for attempt in reversed(attempts):
+                if attempt.get("provider") == event.get("provider") and attempt.get("status") == "running":
+                    attempt["usage"] = {
+                        key: event.get(key)
+                        for key in (
+                            "input_tokens", "output_tokens", "cache_read_tokens",
+                            "cache_creation_tokens", "reasoning_tokens", "cost_usd",
+                            "cost_status", "source",
+                        )
+                    }
+                    break
         elif event_type == "provider_end":
             for attempt in reversed(attempts):
                 if (

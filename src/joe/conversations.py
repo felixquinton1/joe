@@ -259,6 +259,23 @@ class ConversationStore:
                             stats["successes"] += 1
                         else:
                             stats["failures"] += 1
+                    for attempt in attempts:
+                        usage = attempt.get("usage") or {}
+                        provider = attempt.get("provider")
+                        if not provider or not usage:
+                            continue
+                        stats = by_provider.setdefault(provider, {"runs": 0, "successes": 0, "failures": 0})
+                        stats.setdefault("input_tokens", 0)
+                        stats.setdefault("output_tokens", 0)
+                        stats.setdefault("cost_usd", None)
+                        stats.setdefault("cost_statuses", [])
+                        stats["input_tokens"] += usage.get("input_tokens") or 0
+                        stats["output_tokens"] += usage.get("output_tokens") or 0
+                        if usage.get("cost_usd") is not None:
+                            stats["cost_usd"] = (stats["cost_usd"] or 0.0) + usage["cost_usd"]
+                        status = usage.get("cost_status")
+                        if status and status not in stats["cost_statuses"]:
+                            stats["cost_statuses"].append(status)
             return {
                 "runs": sorted(runs, key=lambda item: item.get("at") or 0, reverse=True),
                 "total_runs": len(runs),
