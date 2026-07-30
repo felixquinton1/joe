@@ -1,4 +1,4 @@
-const APP_VERSION = "0.26.0";
+const APP_VERSION = "0.26.1";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -16,6 +16,7 @@ const renderMarkdown = window.JoeMarkdown.renderMarkdown;
 const joeFetch = window.JoeAuth.authenticatedFetch;
 const selectMenus = new Map();
 let knownTasks = [];
+const notifiedTaskConflicts = new Set();
 let language = window.JoeI18n.initialLanguage(
   window.localStorage,
   window.navigator.language
@@ -75,7 +76,28 @@ async function loadTasks() {
   const response = await joeFetch("/api/tasks");
   if (!response.ok) return;
   knownTasks = await response.json();
+  for (const task of knownTasks) {
+    if (task.status === "conflict" && !notifiedTaskConflicts.has(task.id)) {
+      notifiedTaskConflicts.add(task.id);
+      notifyTaskConflict(task);
+    }
+  }
   renderTasks();
+}
+
+function notifyTaskConflict(task) {
+  const toast = document.createElement("aside");
+  toast.className = "task-toast";
+  toast.innerHTML = `
+    <div><strong>${escapeHtml(t("integration_failed"))}</strong>
+    <span>${escapeHtml(task.title)}</span></div>
+    <div class="task-toast-actions"></div>`;
+  const actions = toast.querySelector(".task-toast-actions");
+  actions.appendChild(taskAction(t("view_diff"), () => showTaskDiff(task)));
+  const close = taskAction("×", () => toast.remove());
+  close.setAttribute("aria-label", t("close"));
+  actions.appendChild(close);
+  $("toast-region").appendChild(toast);
 }
 
 function renderTasks() {

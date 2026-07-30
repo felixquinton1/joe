@@ -1012,6 +1012,50 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
   font-size: 11px;
   text-align: center;
 }
+.toast-region {
+  position: fixed;
+  z-index: 180;
+  right: 16px;
+  bottom: 16px;
+  width: min(360px, calc(100vw - 32px));
+  display: grid;
+  gap: 8px;
+  pointer-events: none;
+}
+.task-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 12px;
+  border: 1px solid #d9a398;
+  border-radius: 12px;
+  color: var(--ink);
+  background: #fff8f5;
+  box-shadow: var(--shadow-lg);
+  animation: dropdown-in .15s ease-out;
+  pointer-events: auto;
+}
+.task-toast > div:first-child { min-width: 0; display: grid; gap: 2px; }
+.task-toast strong { color: var(--danger); font-size: 10px; }
+.task-toast span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-toast-actions { flex: none; display: flex; align-items: center; gap: 3px; }
+.task-toast-actions button {
+  padding: 5px 7px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 9px;
+}
+.task-toast-actions button:hover { color: var(--ink); background: #f3e5df; }
 .mobile-panel-tools { display: none; }
 .evidence-log { display: grid; gap: 4px; margin: 7px 0; }
 .evidence-row { display: grid; grid-template-columns: 48px 1fr; gap: 6px; font-size: 8px; }
