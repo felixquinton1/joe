@@ -123,6 +123,14 @@ Chaque run crée une tâche durable visible dans le panneau de suivi. Elle
 conserve son état, son fournisseur, son modèle et le résumé de ses
 modifications sans dupliquer la conversation.
 
+Le panneau montre aussi le pipeline compact « Demande → Réalisation →
+Validation → Diff → Livraison ». Une conversation affiche « En cours » pendant
+le run, puis « Terminée » jusqu’à sa prochaine ouverture.
+
+Les autorisations en attente restent visibles dans ce même panneau après un
+rechargement. Elles peuvent être acceptées ou refusées plus tard ; une
+autorisation acceptée ne vaut que pour la demande enregistrée.
+
 Lorsqu’un projet active « Isoler les modifications dans un worktree Git »,
 Joe crée une branche `joe/<id>` et travaille hors du checkout principal. À la
 fin du run :
@@ -137,6 +145,18 @@ déclenche une résolution bornée par l’agent de la tâche, avec conservation
 deux objectifs et tests ciblés demandés. Si la résolution échoue ou laisse des
 marqueurs, le rebase est annulé et le worktree reste disponible pour examen et
 nouvelle tentative.
+
+## Fichiers et recherche
+
+Le bouton `+` ou un glisser-déposer sur le compositeur ajoute un fichier à la
+bibliothèque du projet. Le menu **Outils** permet de le joindre à une demande,
+de l’ouvrir ou de le supprimer. `@nom-du-fichier` joint également le fichier
+correspondant. Joe affiche les pièces jointes réellement transmises avant
+l’envoi.
+
+La recherche de la colonne de gauche couvre les conversations, les tâches et
+les noms de fichiers de tous les projets. Les résultats restent entièrement
+locaux.
 
 ## Capacités et sécurité
 

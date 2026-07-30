@@ -94,7 +94,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/search":
             query = parse_qs(parsed.query).get("q", [""])[0]
             project_id = parse_qs(parsed.query).get("project", [None])[0]
-            return self._json(self.server.manager.conversations.search(query, project_id))
+            return self._json(
+                self.server.manager.search(query, project_id)
+            )
         if path == "/api/analytics":
             project_id = parse_qs(parsed.query).get("project", [None])[0]
             return self._json(self.server.manager.conversations.analytics(project_id))
@@ -113,6 +115,10 @@ class Handler(BaseHTTPRequestHandler):
             )
         if path == "/api/tasks":
             return self._json(self.server.manager.list_tasks())
+        if path == "/api/approvals":
+            return self._json(
+                self.server.manager.approvals.list(status="pending")
+            )
         if path.startswith("/api/tasks/") and path.endswith("/diff"):
             task_id = unquote(path.split("/")[-2])
             try:
@@ -312,6 +318,7 @@ class Handler(BaseHTTPRequestHandler):
             ):
                 raise ValueError("invalid attachments")
             full_access_approved = payload.get("full_access_approved") is True
+            approval_id = str(payload.get("approval_id", "")).strip()
             if agent is not None and agent not in set(get_provider_names()):
                 raise ValueError("invalid agent")
             if mode not in {None, "fast", "review", "consensus"}:
@@ -330,7 +337,32 @@ class Handler(BaseHTTPRequestHandler):
                 {"error": "Le profil maintainer est requis pour cet accès."},
                 HTTPStatus.FORBIDDEN,
             )
-        if needs_full_access and not full_access_approved:
+        approved = full_access_approved or (
+            bool(approval_id)
+            and self.server.manager.approvals.allows(
+                approval_id,
+                conversation_id,
+                request,
+            )
+        )
+        if needs_full_access and not approved:
+            conversation = self.server.manager.conversations.get(
+                conversation_id
+            ) or {}
+            approval = self.server.manager.approvals.create(
+                "full-access",
+                conversation_id,
+                str(conversation.get("project_id", "free")),
+                {
+                    key: value
+                    for key, value in payload.items()
+                    if key not in {"full_access_approved", "approval_id"}
+                },
+                (
+                    "Cette tâche demande l’accès complet aux racines "
+                    "déclarées du projet."
+                ),
+            )
             return self._json(
                 {
                     "error": (
@@ -339,6 +371,7 @@ class Handler(BaseHTTPRequestHandler):
                         "ce run."
                     ),
                     "approval": "full-access",
+                    "approval_id": approval["id"],
                 },
                 HTTPStatus.PRECONDITION_REQUIRED,
             )
@@ -355,6 +388,12 @@ class Handler(BaseHTTPRequestHandler):
             )
         except ActiveConversationError as exc:
             return self._json({"error": str(exc)}, HTTPStatus.CONFLICT)
+        if approval_id:
+            self.server.manager.approvals.consume(
+                approval_id,
+                conversation_id,
+                request,
+            )
         self._json({"run_id": run.run_id}, HTTPStatus.ACCEPTED)
 
     def do_PATCH(self) -> None:
@@ -367,6 +406,24 @@ class Handler(BaseHTTPRequestHandler):
                 return
             return self._json(
                 self.server.manager.conversations.update_preferences(payload)
+            )
+        if path.startswith("/api/approvals/"):
+            payload = self._read_payload()
+            if payload is None:
+                return
+            try:
+                item = self.server.manager.approvals.decide(
+                    unquote(path.rsplit("/", 1)[1]),
+                    str(payload.get("decision", "")),
+                )
+            except ValueError as error:
+                return self._json(
+                    {"error": str(error)},
+                    HTTPStatus.BAD_REQUEST,
+                )
+            return self._json(
+                item or {},
+                HTTPStatus.OK if item else HTTPStatus.NOT_FOUND,
             )
         is_conversation = path.startswith("/api/conversations/")
         is_project = path.startswith("/api/projects/")

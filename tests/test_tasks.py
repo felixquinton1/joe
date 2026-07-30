@@ -1,7 +1,7 @@
 import time
 
 from joe.tasks import TaskStore
-from joe.web_runs import RunManager
+from joe.web_runs import RunManager, _task_pipeline
 from joe.worktrees import WorktreeError, WorktreeManager
 
 
@@ -50,6 +50,20 @@ def test_task_store_recovers_from_atomic_backup(tmp_path):
     store.path.write_text("{broken")
 
     assert TaskStore(tmp_path).get("run1")["id"] == "run1"
+
+
+def test_task_pipeline_exposes_delivery_progress():
+    review = _task_pipeline({"status": "review", "files": 2})
+    integrated = _task_pipeline({"status": "integrated", "files": 2})
+
+    assert [stage["status"] for stage in review] == [
+        "complete",
+        "complete",
+        "complete",
+        "waiting",
+        "pending",
+    ]
+    assert integrated[-1]["status"] == "complete"
 
 
 def test_run_manager_integrates_task_in_background(tmp_path, monkeypatch):

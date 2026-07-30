@@ -62,6 +62,9 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert "reconcileRun(conversationId, runId)" in app
         assert "message.run_id === previousRunId" in app
         assert "renderHistoricalRunSummary(completed" in app
+        assert "renderApproval(approval)" in app
+        assert "task.pipeline" in app
+        assert "dragging-files" in app
         assert f'const APP_VERSION = "{__version__}";' in app
         assert "window.location.reload()" not in app
 

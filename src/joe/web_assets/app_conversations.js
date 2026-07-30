@@ -16,11 +16,49 @@ window.createJoeConversations = function createJoeConversations({
 }) {
   let draggedItem = null;
   let historyFilter = "";
+  let searchTimer = null;
 
   $("history-search").addEventListener("input", event => {
     historyFilter = event.target.value.trim().toLocaleLowerCase();
     renderConversations();
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(loadGlobalSearch, 180);
   });
+
+  async function loadGlobalSearch() {
+    const target = $("global-search-results");
+    if (!historyFilter) {
+      target.replaceChildren();
+      target.classList.add("hidden");
+      return;
+    }
+    const response = await fetcher(
+      `/api/search?q=${encodeURIComponent(historyFilter)}`
+    );
+    if (!response.ok) return;
+    const results = await response.json();
+    target.replaceChildren();
+    for (const result of results.slice(0, 12)) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "global-search-item";
+      button.innerHTML = `
+        <small>${escapeHtml(result.type || "conversation")}</small>
+        <strong>${escapeHtml(result.title)}</strong>
+        <span>${escapeHtml(result.snippet || "")}</span>`;
+      if (result.conversation_id) {
+        button.onclick = () => selectConversation(result.conversation_id);
+      } else if (result.file_id) {
+        button.onclick = () => window.open(
+          `/api/files/${encodeURIComponent(result.file_id)}/download`,
+          "_blank",
+          "noopener"
+        );
+      }
+      target.appendChild(button);
+    }
+    target.classList.toggle("hidden", !target.children.length);
+  }
 
   async function loadConversations(selectFirst = true) {
     [state.conversations, state.projects] = await Promise.all([
@@ -84,7 +122,18 @@ window.createJoeConversations = function createJoeConversations({
       conversationListInner.className = "project-conversations-inner";
       for (const conversation of conversations) {
         const row = document.createElement("div");
-        row.className = `conversation-item ${conversation.id === state.activeConversationId ? "active" : ""}`;
+        const running = state.runs.has(conversation.id);
+        const completed = (
+          conversation.unread_completion
+          && !running
+          && conversation.id !== state.activeConversationId
+        );
+        row.className = [
+          "conversation-item",
+          conversation.id === state.activeConversationId ? "active" : "",
+          running ? "running" : "",
+          completed ? "completed-unread" : ""
+        ].filter(Boolean).join(" ");
         row.dataset.conversationId = conversation.id;
         row.ondragover = allowDrop;
         row.ondrop = event => dropOnConversation(event, conversation);
@@ -97,7 +146,12 @@ window.createJoeConversations = function createJoeConversations({
         const button = document.createElement("button");
         button.className = "history-item";
         const date = formatLastCall(conversation.last_call_at);
-        button.innerHTML = `<strong>${escapeHtml(conversation.title)}</strong><span title="${escapeHtml(date.exact)}">${state.runs.has(conversation.id) ? "● En cours" : `${conversation.messages.length} messages`} · ${escapeHtml(date.short)}</span>`;
+        const stateLabel = running
+          ? '<b class="conversation-status running">En cours</b>'
+          : completed
+          ? '<b class="conversation-status complete">Terminée</b>'
+          : `${conversation.messages.length} messages`;
+        button.innerHTML = `<strong>${escapeHtml(conversation.title)}</strong><span title="${escapeHtml(date.exact)}">${stateLabel} · ${escapeHtml(date.short)}</span>`;
         button.onclick = () => selectConversation(conversation.id);
         const pin = document.createElement("button");
         pin.className = `pin-button ${conversation.pinned ? "pinned" : ""}`;
@@ -262,6 +316,16 @@ window.createJoeConversations = function createJoeConversations({
     const conversation = await fetcher(`/api/conversations/${conversationId}`).then(response => response.json());
     state.activeConversationId = conversationId;
     state.activeProjectId = conversation.project_id || "free";
+    if (conversation.unread_completion) {
+      conversation.unread_completion = false;
+      const cached = state.conversations.find(item => item.id === conversationId);
+      if (cached) cached.unread_completion = false;
+      fetcher(`/api/conversations/${conversationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unread_completion: false })
+      }).catch(() => {});
+    }
     renderConversations();
     clearConversation();
     $("conversation-title").textContent = conversation.title;

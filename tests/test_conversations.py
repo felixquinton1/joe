@@ -314,6 +314,20 @@ def test_conversation_can_be_deleted(tmp_path):
     assert store.delete(conversation["id"]) is False
 
 
+def test_assistant_completion_is_unread_until_conversation_is_opened(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+    conversation = store.create()
+
+    store.append_message(conversation["id"], "assistant", "Terminé")
+
+    assert store.get(conversation["id"])["unread_completion"] is True
+    store.update(conversation["id"], {"unread_completion": False})
+    assert store.get(conversation["id"])["unread_completion"] is False
+
+
 def test_history_recovers_from_atomic_backup(tmp_path):
     root = tmp_path / ".agentflow"
     runs = root / "runs"

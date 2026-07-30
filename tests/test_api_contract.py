@@ -102,6 +102,17 @@ def test_contract_uploads_lists_downloads_and_deletes_project_file(tmp_path):
         assert status == 200
         assert items == [item]
 
+        status, results = json_request(
+            connection,
+            "GET",
+            "/api/search?q=notes",
+        )
+        assert status == 200
+        assert any(
+            result["type"] == "file" and result["file_id"] == item["id"]
+            for result in results
+        )
+
         connection.request(
             "GET",
             f"/api/files/{item['id']}/download",
@@ -148,6 +159,7 @@ def test_contract_requires_confirmation_for_full_access(tmp_path):
 
         assert status == 428
         assert payload["approval"] == "full-access"
+        assert payload["approval_id"]
         assert not server.manager.conversations.get(
             conversation["id"]
         )["messages"]
@@ -169,6 +181,67 @@ def test_contract_requires_confirmation_for_full_access(tmp_path):
         )
         assert status == 202
         assert payload["run_id"] == "approved"
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_contract_persists_and_consumes_full_access_approval(tmp_path):
+    server, thread = start_server(tmp_path)
+    try:
+        server.manager.conversations.update_project(
+            "main",
+            {"default_execution_mode": "danger-full-access"},
+        )
+        conversation = server.manager.conversations.create("main")
+        connection = http.client.HTTPConnection(
+            "127.0.0.1", server.server_port, timeout=5
+        )
+        request = {
+            "conversation_id": conversation["id"],
+            "request": "Implémente la correction",
+            "agent": "codex",
+            "mode": "fast",
+        }
+        status, pending = json_request(
+            connection,
+            "POST",
+            "/api/runs",
+            request,
+        )
+        assert status == 428
+
+        status, approvals = json_request(
+            connection,
+            "GET",
+            "/api/approvals",
+        )
+        assert status == 200
+        assert approvals[0]["id"] == pending["approval_id"]
+
+        status, approval = json_request(
+            connection,
+            "PATCH",
+            f"/api/approvals/{pending['approval_id']}",
+            {"decision": "approved"},
+        )
+        assert status == 200
+        assert approval["status"] == "approved"
+
+        server.manager.start = lambda *args, **kwargs: SimpleNamespace(
+            run_id="approved-persistently"
+        )
+        status, payload = json_request(
+            connection,
+            "POST",
+            "/api/runs",
+            {**request, "approval_id": pending["approval_id"]},
+        )
+        assert status == 202
+        assert payload["run_id"] == "approved-persistently"
+        assert server.manager.approvals.get(
+            pending["approval_id"]
+        )["status"] == "consumed"
     finally:
         server.shutdown()
         thread.join(timeout=2)

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .capabilities import cached_provider_capabilities, select_model
+from .approvals import ApprovalStore
 from .conversations import ConversationStore, FREE_PROJECT_ID
 from .files import FileLibrary
 from .git_review import GitSnapshot, build_report, reject, snapshot
@@ -86,6 +87,8 @@ class RunManager:
         self.tasks.ensure()
         self.files = FileLibrary(self.orchestrator.memory.root)
         self.files.ensure()
+        self.approvals = ApprovalStore(self.orchestrator.memory.root)
+        self.approvals.ensure()
         for task in self.tasks.list():
             if task.get("status") in {"integrating", "resolving"}:
                 if (
@@ -874,7 +877,68 @@ class RunManager:
             return None
 
     def list_tasks(self) -> list[dict[str, Any]]:
-        return self.tasks.list()
+        return [
+            {**task, "pipeline": _task_pipeline(task)}
+            for task in self.tasks.list()
+        ]
+
+    def search(
+        self,
+        query: str,
+        project_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        needle = " ".join(query.casefold().split())
+        if not needle:
+            return []
+        results = [
+            {**item, "type": "conversation"}
+            for item in self.conversations.search(query, project_id)
+        ]
+        for task in self.tasks.list():
+            if project_id and task.get("project_id") != project_id:
+                continue
+            haystack = f"{task.get('title', '')}\n{task.get('request', '')}"
+            if needle in haystack.casefold():
+                results.append(
+                    {
+                        "type": "task",
+                        "task_id": task["id"],
+                        "conversation_id": task["conversation_id"],
+                        "project_id": task["project_id"],
+                        "title": task["title"],
+                        "snippet": task["request"][:300],
+                        "updated_at": task["updated_at"],
+                    }
+                )
+        project_ids = (
+            [project_id]
+            if project_id
+            else [
+                str(project["id"])
+                for project in self.conversations.list_projects()
+            ]
+        )
+        for identifier in project_ids:
+            for item in self.files.list(identifier):
+                if needle in str(item["name"]).casefold():
+                    results.append(
+                        {
+                            "type": "file",
+                            "file_id": item["id"],
+                            "project_id": identifier,
+                            "title": item["name"],
+                            "snippet": (
+                                f"{item.get('content_type')} · "
+                                f"{item.get('size', 0)} octets"
+                            ),
+                            "updated_at": item["created_at"],
+                        }
+                    )
+        return sorted(
+            results,
+            key=lambda item: float(item.get("updated_at", 0)),
+            reverse=True,
+        )[:100]
 
     def task_diff(self, task_id: str) -> dict[str, Any] | None:
         task = self.tasks.get(task_id)
@@ -1254,6 +1318,55 @@ def _run_summary(run: LiveRun) -> dict[str, Any]:
         "workspace": str(run.workspace) if run.workspace else None,
         "base_workspace": str(run.base_workspace) if run.base_workspace else None,
     }
+
+
+def _task_pipeline(task: dict[str, Any]) -> list[dict[str, str]]:
+    status = str(task.get("status", "running"))
+    integrated = status == "integrated"
+    failed = status in {"failed", "conflict", "cancelled"}
+    return [
+        {"id": "request", "label": "Demande", "status": "complete"},
+        {
+            "id": "implementation",
+            "label": "Réalisation",
+            "status": (
+                "failed"
+                if failed and status != "conflict"
+                else "running"
+                if status == "running"
+                else "complete"
+            ),
+        },
+        {
+            "id": "validation",
+            "label": "Validation",
+            "status": (
+                "running"
+                if status in {"integrating", "resolving"}
+                else "failed"
+                if status == "conflict"
+                else "complete"
+                if status in {"review", "completed", "integrated"}
+                else "pending"
+            ),
+        },
+        {
+            "id": "review",
+            "label": "Diff",
+            "status": (
+                "complete"
+                if integrated or status == "completed"
+                else "waiting"
+                if status in {"review", "conflict"}
+                else "pending"
+            ),
+        },
+        {
+            "id": "delivery",
+            "label": "Livraison",
+            "status": "complete" if integrated else "pending",
+        },
+    ]
 
 
 def _operational_validation(request: str) -> bool:

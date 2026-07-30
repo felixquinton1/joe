@@ -55,6 +55,8 @@ def test_capability_matrix_is_centralized():
     assert required_role("POST", "/api/runs/id/reject") == "maintainer"
     assert required_role("POST", "/api/auth/rotate") == "maintainer"
     assert required_role("GET", "/api/projects") == "maintainer"
+    assert required_role("PATCH", "/api/approvals/id") == "maintainer"
+    assert required_role("GET", "/api/approvals") == "viewer"
 
 
 def test_status_is_public_but_api_requires_a_token(tmp_path):

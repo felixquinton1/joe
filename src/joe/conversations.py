@@ -20,7 +20,7 @@ DEFAULT_SETTINGS = {
 DEFAULT_PREFERENCES = {"agent": "", "mode": ""}
 DEFAULT_PROJECT_ID = "main"
 FREE_PROJECT_ID = "free"
-CURRENT_SCHEMA_VERSION = 7
+CURRENT_SCHEMA_VERSION = 8
 
 
 class ConversationStore:
@@ -324,6 +324,7 @@ class ConversationStore:
                 "position": None,
                 "settings": settings,
                 "messages": [],
+                "unread_completion": False,
             }
             payload["conversations"].append(conversation)
             self._write(payload)
@@ -357,6 +358,10 @@ class ConversationStore:
                     if key in DEFAULT_SETTINGS
                 }
                 conversation["settings"].update(allowed)
+            if "unread_completion" in changes:
+                conversation["unread_completion"] = bool(
+                    changes["unread_completion"]
+                )
             conversation["updated_at"] = time.time()
             self._write(payload)
             return conversation
@@ -402,6 +407,8 @@ class ConversationStore:
             if run_summary:
                 message["run_summary"] = run_summary
             conversation["messages"].append(message)
+            if role == "assistant":
+                conversation["unread_completion"] = True
             conversation["last_call_at"] = message["at"]
             if role == "user" and conversation["title"] == "Nouvelle conversation":
                 conversation["title"] = content.strip().splitlines()[0][:64]
@@ -636,6 +643,7 @@ class ConversationStore:
             conversation.setdefault("position", None)
             conversation.setdefault("context_summary", "")
             conversation.setdefault("summarized_message_count", 0)
+            conversation.setdefault("unread_completion", False)
         for project in payload["projects"]:
             project.setdefault("workspace_root", "")
             project.setdefault("additional_roots", [])

@@ -1,4 +1,4 @@
-const APP_VERSION = "0.27.1";
+const APP_VERSION = "0.28.0";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -16,6 +16,7 @@ const renderMarkdown = window.JoeMarkdown.renderMarkdown;
 const joeFetch = window.JoeAuth.authenticatedFetch;
 const selectMenus = new Map();
 let knownTasks = [];
+let knownApprovals = [];
 let knownFiles = [];
 const selectedFileIds = new Set();
 const notifiedTaskConflicts = new Set();
@@ -76,9 +77,15 @@ function updateProviderMenu(providers) {
 }
 
 async function loadTasks() {
-  const response = await joeFetch("/api/tasks");
-  if (!response.ok) return;
-  knownTasks = await response.json();
+  const [tasksResponse, approvalsResponse] = await Promise.all([
+    joeFetch("/api/tasks"),
+    joeFetch("/api/approvals")
+  ]);
+  if (!tasksResponse.ok) return;
+  knownTasks = await tasksResponse.json();
+  knownApprovals = approvalsResponse.ok
+    ? await approvalsResponse.json()
+    : [];
   for (const task of knownTasks) {
     const previous = observedTaskStatus.get(task.id);
     if (task.status === "conflict" && !notifiedTaskConflicts.has(task.id)) {
@@ -134,8 +141,11 @@ function renderTasks() {
     if (filter === "attention") return ["review", "conflict", "failed"].includes(task.status);
     return ["running", "integrating", "resolving", "review", "conflict"].includes(task.status);
   }).slice(0, 12);
-  $("task-count").textContent = String(tasks.length);
-  if (!tasks.length) {
+  $("task-count").textContent = String(tasks.length + knownApprovals.length);
+  for (const approval of knownApprovals) {
+    target.appendChild(renderApproval(approval));
+  }
+  if (!tasks.length && !knownApprovals.length) {
     const empty = document.createElement("span");
     empty.className = "task-empty";
     empty.textContent = t("no_tasks");
@@ -165,6 +175,9 @@ function renderTasks() {
         <b>${escapeHtml(statusLabels[task.status] || task.status)}</b>
       </div>
       <div class="task-meta">${branch}<span>${Number(task.files || 0)} fichier${Number(task.files || 0) === 1 ? "" : "s"} · +${Number(task.insertions || 0)} −${Number(task.deletions || 0)}</span></div>
+      <div class="task-pipeline">${(task.pipeline || []).map(stage => (
+        `<span class="${escapeHtml(stage.status)}"><i></i>${escapeHtml(stage.label)}</span>`
+      )).join("")}</div>
       ${task.error ? `<p class="task-error">${escapeHtml(task.error)}</p>` : ""}
       <div class="task-actions"></div>`;
     const actions = card.querySelector(".task-actions");
@@ -181,6 +194,43 @@ function renderTasks() {
     if (!actions.children.length) actions.remove();
     target.appendChild(card);
   }
+}
+
+function renderApproval(approval) {
+  const card = document.createElement("article");
+  card.className = "task-card approval";
+  card.innerHTML = `
+    <div class="task-card-head"><strong>Autorisation demandée</strong><b>À valider</b></div>
+    <p class="task-error">${escapeHtml(approval.message)}</p>
+    <div class="task-meta"><span>${escapeHtml(approval.payload?.request || "")}</span></div>
+    <div class="task-actions"></div>`;
+  const actions = card.querySelector(".task-actions");
+  actions.append(
+    taskAction("Refuser", () => decideApproval(approval, "refused"), "danger"),
+    taskAction("Autoriser", () => decideApproval(approval, "approved"), "primary")
+  );
+  return card;
+}
+
+async function decideApproval(approval, decision) {
+  const response = await joeFetch(
+    `/api/approvals/${encodeURIComponent(approval.id)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision })
+    }
+  );
+  if (!response.ok) return;
+  if (decision === "approved") {
+    const payload = approval.payload || {};
+    await startRun(
+      payload.request,
+      payload.conversation_id,
+      { ...payload, approval_id: approval.id }
+    );
+  }
+  await loadTasks();
 }
 
 function taskAction(label, action, kind = "") {
@@ -288,7 +338,17 @@ function renderFileLibrary() {
       });
       if (response.ok) await loadFiles();
     };
-    row.append(select, remove);
+    const download = document.createElement("button");
+    download.type = "button";
+    download.className = "file-download";
+    download.textContent = "↗";
+    download.title = "Ouvrir ou télécharger";
+    download.onclick = () => window.open(
+      `/api/files/${encodeURIComponent(file.id)}/download`,
+      "_blank",
+      "noopener"
+    );
+    row.append(select, download, remove);
     target.appendChild(row);
   }
 }
@@ -1159,6 +1219,17 @@ function finishRun(conversationId, ok) {
   $("stop").querySelector("span").textContent = t("stop");
   $("run-state").textContent = t(ok ? "done" : "failed");
   $("run-state").className = `run-state ${ok ? "done" : "idle"}`;
+  if (conversationId === state.activeConversationId) {
+    const conversation = state.conversations.find(
+      item => item.id === conversationId
+    );
+    if (conversation) conversation.unread_completion = false;
+    joeFetch(`/api/conversations/${encodeURIComponent(conversationId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ unread_completion: false })
+    }).catch(() => {});
+  }
 }
 
 function currentRunSettings() {
@@ -1252,12 +1323,21 @@ async function startRun(
     body: JSON.stringify(payload)
   });
   if (response.status === 428) {
+    const pending = await response.json();
     const approved = await confirmFullAccess();
-    if (!approved) return;
+    if (!approved) {
+      await loadTasks();
+      return;
+    }
+    await joeFetch(`/api/approvals/${encodeURIComponent(pending.approval_id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision: "approved" })
+    });
     response = await joeFetch("/api/runs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...payload, full_access_approved: true })
+      body: JSON.stringify({ ...payload, approval_id: pending.approval_id })
     });
   }
   if (!response.ok) {
@@ -1474,6 +1554,22 @@ $("attach-files").onclick = () => $("file-input").click();
 $("file-input").addEventListener("change", async event => {
   await uploadFiles([...event.target.files]);
   event.target.value = "";
+});
+for (const eventName of ["dragenter", "dragover"]) {
+  $("composer").addEventListener(eventName, event => {
+    event.preventDefault();
+    $("composer").classList.add("dragging-files");
+  });
+}
+for (const eventName of ["dragleave", "drop"]) {
+  $("composer").addEventListener(eventName, event => {
+    event.preventDefault();
+    $("composer").classList.remove("dragging-files");
+  });
+}
+$("composer").addEventListener("drop", async event => {
+  const files = [...(event.dataTransfer?.files || [])];
+  if (files.length) await uploadFiles(files);
 });
 $("refresh-files").onclick = () => loadFiles().catch(() => {});
 $("enable-notifications").onclick = async () => {
