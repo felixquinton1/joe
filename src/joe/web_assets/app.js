@@ -1,4 +1,4 @@
-const APP_VERSION = "0.23.27";
+const APP_VERSION = "0.23.28";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -1153,6 +1153,20 @@ $("refresh-usage").onclick = () => loadUsage(true);
 $("open-preferences").onclick = () => openPreferences().catch(
   error => window.alert(error.message)
 );
+$("open-project-skills").onclick = () => {
+  const conversation = state.conversations.find(
+    item => item.id === state.activeConversationId
+  );
+  const project = state.projects.find(
+    item => item.id === conversation?.project_id
+  );
+  if (!project) {
+    window.alert("Sélectionne d’abord une conversation liée à un projet.");
+    return;
+  }
+  $("preferences-dialog").close();
+  openProject(project);
+};
 $("save-preferences").onclick = savePreferences;
 for (const button of document.querySelectorAll("[data-language]")) {
   button.addEventListener("click", () => applyLanguage(button.dataset.language));
