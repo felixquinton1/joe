@@ -5,6 +5,63 @@ from pathlib import Path
 from typing import Any
 
 
+_CREATE_REQUEST = re.compile(
+    r"\b(?:cr[eé]e(?:r)?|ajoute(?:r)?)\s+(?:moi\s+)?(?:un\s+)?skill\b(?P<tail>.*)",
+    re.IGNORECASE,
+)
+
+
+def parse_skill_request(request: str) -> dict[str, str] | None:
+    """Recognize explicit skill creation requests without involving a provider."""
+    match = _CREATE_REQUEST.search(request.strip())
+    if not match:
+        return None
+    tail = match.group("tail").strip(" .")
+    global_scope = bool(
+        re.search(r"\b(?:commun|global|tous les projets)\b", tail, re.IGNORECASE)
+    )
+    tail = re.sub(
+        r"^(?:commun|global|de projet|pour ce projet)\b",
+        "",
+        tail,
+        flags=re.IGNORECASE,
+    ).strip()
+    tail = re.sub(
+        r"^(?:appel[eé]|nomm[eé])\s+",
+        "",
+        tail,
+        flags=re.IGNORECASE,
+    )
+    quoted = re.match(r"""["“'«]\s*(?P<name>[^"”'»]+?)\s*["”'»](?P<rest>.*)""", tail)
+    if quoted:
+        name = quoted.group("name").strip()
+        rest = quoted.group("rest").strip()
+    else:
+        named = re.match(r"(?P<name>[A-Za-z0-9_-]+)(?P<rest>.*)", tail)
+        if not named:
+            return {"name": "", "instructions": "", "scope": "global" if global_scope else "project"}
+        name = named.group("name").strip()
+        rest = named.group("rest").strip()
+    instructions = ""
+    instruction_match = re.search(
+        r"(?:^:|^qui\s+|^avec\s+(?:les\s+)?instructions?\s*:?)\s*(?P<body>.+)",
+        rest,
+        re.IGNORECASE,
+    )
+    if instruction_match:
+        instructions = instruction_match.group("body").strip()
+    elif "test" in name.lower():
+        instructions = (
+            "Lorsque l’utilisateur demande de vérifier ce skill, répondre avec "
+            "le marqueur exact `SKILL_TEST_ACTIF`."
+        )
+    return {
+        "name": name,
+        "instructions": instructions,
+        "scope": "global" if global_scope else "project",
+    }
+
+
 def global_skills_root() -> Path:
     """Directory holding skills shared by every project of this Joe install."""
     return Path.home() / ".joe" / "global-skills"

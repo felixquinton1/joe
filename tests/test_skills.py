@@ -8,8 +8,33 @@ from joe.skills import (
     import_skill,
     list_global_skills,
     list_skills,
+    parse_skill_request,
     promote_skill,
 )
+
+
+@pytest.mark.parametrize(
+    ("prompt", "name", "scope", "has_instructions"),
+    [
+        ("crée un skill test", "test", "project", True),
+        ("Crée un skill commun test", "test", "global", True),
+        (
+            "créer un skill « revue-python » qui vérifie les tests",
+            "revue-python",
+            "project",
+            True,
+        ),
+        ("explique les skills", None, None, False),
+    ],
+)
+def test_parse_skill_creation_request(prompt, name, scope, has_instructions):
+    parsed = parse_skill_request(prompt)
+    if name is None:
+        assert parsed is None
+        return
+    assert parsed["name"] == name
+    assert parsed["scope"] == scope
+    assert bool(parsed["instructions"]) is has_instructions
 
 
 def test_create_project_skill_from_instructions(tmp_path):

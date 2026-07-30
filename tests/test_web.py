@@ -386,6 +386,61 @@ def test_skills_can_be_created_or_imported_at_both_scopes(tmp_path, monkeypatch)
         thread.join(timeout=2)
 
 
+def test_explicit_skill_prompt_is_handled_locally_without_provider(tmp_path):
+    server, thread = start_server(tmp_path)
+    try:
+        conversation = server.manager.conversations.create("main")
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/api/runs",
+            body=json.dumps({
+                "request": "crée un skill test",
+                "conversation_id": conversation["id"],
+            }),
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        payload = json.loads(response.read())
+        assert response.status == 202
+        run = server.manager.live.get(payload["run_id"])
+        assert run is not None
+        assert run.done is True
+        assert run.events[0]["primary"] == "joe"
+        skill = tmp_path / ".agentflow/skills/test/SKILL.md"
+        assert skill.exists()
+        assert "SKILL_TEST_ACTIF" in skill.read_text()
+        messages = server.manager.conversations.get(conversation["id"])["messages"]
+        assert messages[-1]["provider"] == "joe"
+        assert "créé comme skill du projet" in messages[-1]["content"]
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_underspecified_skill_prompt_returns_actionable_error(tmp_path):
+    server, thread = start_server(tmp_path)
+    try:
+        conversation = server.manager.conversations.create("main")
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/api/runs",
+            body=json.dumps({
+                "request": "crée un skill qualité",
+                "conversation_id": conversation["id"],
+            }),
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        payload = json.loads(response.read())
+        assert response.status == 400
+        assert "nom et les instructions" in payload["error"]
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
 def test_web_rejects_empty_requests(tmp_path):
     server, thread = start_server(tmp_path)
     try:

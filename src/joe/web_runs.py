@@ -20,6 +20,7 @@ from .models import Intent, Mode, Route
 from .orchestrator import Orchestrator
 from .router import _routing_text
 from .routing import resolve_route
+from .skills import create_skill
 from .tasks import TaskStore
 from .usage import cached_usage_status, usage_status
 from .worktrees import Worktree, WorktreeError, WorktreeManager
@@ -239,6 +240,98 @@ class RunManager:
             if not resumed:
                 self.conversations.remove_run(conversation_id, run.run_id)
             raise
+        return run
+
+    def start_local_skill(
+        self,
+        request: str,
+        conversation_id: str,
+        *,
+        name: str,
+        instructions: str,
+        global_scope: bool,
+    ) -> LiveRun:
+        """Create a skill as a local Joe action, without calling a provider."""
+        run_id = uuid.uuid4().hex
+        workspace, _, _, _ = self._project_scope(conversation_id)
+        conversation = self.conversations.get(conversation_id) or {}
+        with self.lock:
+            self._prune_live_locked()
+            if any(
+                active.conversation_id == conversation_id and not active.done
+                for active in self.live.values()
+            ):
+                raise ActiveConversationError(
+                    "Une tâche est déjà active dans cette conversation."
+                )
+            run = LiveRun(
+                run_id,
+                request,
+                conversation_id,
+                workspace=workspace,
+                base_workspace=workspace,
+            )
+            self.live[run_id] = run
+        self.tasks.create(
+            run_id,
+            request,
+            conversation_id,
+            str(conversation.get("project_id", "main")),
+            workspace=workspace,
+            base_workspace=workspace,
+            isolated=False,
+        )
+        self.conversations.append_message(
+            conversation_id, "user", request, run_id
+        )
+        run.emit({
+            "type": "route",
+            "mode": "fast",
+            "intent": "modify",
+            "primary": "joe",
+            "reviewer": None,
+            "reason": "Création locale de skill",
+            "model": None,
+            "effort": None,
+            "execution_mode": "workspace-write",
+            "routing_ms": 0,
+            "profile": self.profile,
+        })
+        try:
+            created = create_skill(
+                None if global_scope else workspace,
+                name,
+                instructions,
+                global_scope=global_scope,
+            )
+            scope = "commun" if global_scope else "du projet"
+            response = (
+                f"Skill **{created['name']}** créé comme skill {scope}.\n\n"
+                f"`{created['path']}`"
+            )
+            self.tasks.update(run_id, status="completed", provider="joe", mode="fast")
+        except (OSError, ValueError) as error:
+            response = f"Le skill n’a pas été créé : {error}"
+            self.tasks.update(run_id, status="failed", provider="joe", mode="fast", error=str(error))
+        self.conversations.append_message(
+            conversation_id,
+            "assistant",
+            response,
+            run_id,
+            provider="joe",
+        )
+        run.emit({"type": "complete", "response": response, "log": ""})
+        with run.condition:
+            run.done = True
+            run.finished_at = time.time()
+            run.condition.notify_all()
+        cleanup = threading.Timer(
+            self.LIVE_RUN_TTL_SECONDS,
+            self._expire_live_run,
+            args=(run.run_id, run.finished_at),
+        )
+        cleanup.daemon = True
+        cleanup.start()
         return run
 
     def requires_full_access_approval(

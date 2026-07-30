@@ -21,6 +21,7 @@ from .skills import (
     import_skill,
     list_global_skills,
     list_skills,
+    parse_skill_request,
     promote_skill,
 )
 from .web_runs import ActiveConversationError, RunManager, _existing_directory
@@ -394,6 +395,35 @@ class Handler(BaseHTTPRequestHandler):
             mode,
             execution_mode,
         )
+        skill_request = parse_skill_request(request)
+        if skill_request is not None:
+            if not self.server.auth.allows("maintainer"):
+                return self._json(
+                    {"error": "Le profil maintainer est requis pour créer un skill."},
+                    HTTPStatus.FORBIDDEN,
+                )
+            if not skill_request["name"] or not skill_request["instructions"]:
+                return self._json(
+                    {
+                        "error": (
+                            "Précise le nom et les instructions du skill, par "
+                            "exemple : crée un skill « revue-python » qui vérifie "
+                            "les tests et la lisibilité."
+                        )
+                    },
+                    HTTPStatus.BAD_REQUEST,
+                )
+            try:
+                run = self.server.manager.start_local_skill(
+                    request,
+                    conversation_id,
+                    name=skill_request["name"],
+                    instructions=skill_request["instructions"],
+                    global_scope=skill_request["scope"] == "global",
+                )
+            except ActiveConversationError as exc:
+                return self._json({"error": str(exc)}, HTTPStatus.CONFLICT)
+            return self._json({"run_id": run.run_id}, HTTPStatus.ACCEPTED)
         if needs_full_access and not self.server.auth.allows("maintainer"):
             return self._json(
                 {"error": "Le profil maintainer est requis pour cet accès."},
