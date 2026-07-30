@@ -1,5 +1,5 @@
 import joe.capabilities as capabilities_module
-from joe.capabilities import provider_capabilities, provider_defaults
+from joe.capabilities import provider_capabilities, provider_defaults, select_model
 
 
 def test_capabilities_have_safe_defaults_and_provider_specific_controls():
@@ -50,3 +50,25 @@ def test_provider_defaults_load_capabilities_when_cache_is_empty(monkeypatch):
     )
 
     assert provider_defaults("codex") == ("gpt-5.6-sol", "low")
+
+
+def test_simple_selection_prefers_declared_fast_lower_cost_model(monkeypatch):
+    monkeypatch.setattr(
+        capabilities_module,
+        "_cache",
+        (0, {"codex": {"models": [
+            {"id": "frontier", "priority": 1},
+            {"id": "terra", "priority": 2, "speed_tiers": ["fast"], "cost_tier": 1},
+        ]}}),
+    )
+
+    assert select_model("codex", complex_request=False) == "terra"
+    assert select_model("codex", complex_request=True) == "frontier"
+
+
+def test_claude_uses_sonnet_for_simple_and_opus_for_complex_requests(monkeypatch):
+    monkeypatch.setattr(capabilities_module, "_cache", None)
+    capabilities = provider_capabilities(refresh=True)
+
+    assert select_model("claude", complex_request=False) == "sonnet"
+    assert select_model("claude", complex_request=True) == "opus"

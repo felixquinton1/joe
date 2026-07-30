@@ -19,7 +19,7 @@ def provider_capabilities(refresh: bool = False) -> dict[str, Any]:
         "codex": _codex,
         "claude": {
             "available": bool(shutil.which("claude")),
-            "models": _models("sonnet", "opus", "fable"),
+            "models": _models("opus", "sonnet", "fable"),
             "efforts": ["low", "medium", "high", "xhigh", "max"],
             "execution_modes": [
                 _mode("auto", "Automatique"),
@@ -105,6 +105,31 @@ def provider_defaults(
     return selected_model, selected_effort
 
 
+def select_model(provider: str, *, complex_request: bool) -> str | None:
+    """Choose from published capabilities without assuming model names."""
+    capabilities = cached_provider_capabilities() or provider_capabilities()
+    models = list(capabilities.get(provider, {}).get("models", []))
+    if not models:
+        return None
+    if complex_request:
+        return str(models[0].get("id"))
+
+    def score(item: dict[str, Any]) -> tuple[int, int, int, str]:
+        identifier = str(item.get("id", "")).lower()
+        speed = {str(value).lower() for value in item.get("speed_tiers", [])}
+        description = str(item.get("description", "")).lower()
+        fast = int(bool(speed & {"fast", "quick", "mini"}))
+        fast += int(any(word in identifier or word in description
+                        for word in ("mini", "flash", "haiku", "sonnet", "terra", "luna")))
+        cost = item.get("cost_tier")
+        cost_value = int(cost) if isinstance(cost, (int, float)) else 99
+        priority = item.get("priority")
+        priority_value = int(priority) if isinstance(priority, (int, float)) else 99
+        return (-fast, cost_value, priority_value, identifier)
+
+    return str(min(models, key=score).get("id"))
+
+
 def _codex() -> dict[str, Any]:
     models = []
     if shutil.which("codex"):
@@ -126,6 +151,9 @@ def _codex() -> dict[str, Any]:
                         "id": item["slug"],
                         "label": item.get("display_name", item["slug"]),
                         "default_effort": item.get("default_reasoning_level"),
+                        "description": item.get("description", ""),
+                        "priority": item.get("priority"),
+                        "speed_tiers": item.get("additional_speed_tiers", []),
                         "efforts": [
                             level["effort"]
                             for level in item.get("supported_reasoning_levels", [])
@@ -151,7 +179,15 @@ def _codex() -> dict[str, Any]:
 
 
 def _models(*names: str) -> list[dict[str, Any]]:
-    return [{"id": name, "label": name} for name in names]
+    return [
+        {
+            "id": name,
+            "label": name,
+            "cost_tier": index + 1,
+            "speed_tiers": ["fast"] if name in {"sonnet", "fable"} else [],
+        }
+        for index, name in enumerate(names)
+    ]
 
 
 def _mode(identifier: str, label: str) -> dict[str, str]:

@@ -17,6 +17,7 @@ from .models import Mode
 from .orchestrator import OrchestrationError, Orchestrator
 from .provider_registry import get_provider_names
 from .routing import resolve_route
+from .skills import import_skill, list_skills
 from .usage import usage_status
 
 def parser() -> argparse.ArgumentParser:
@@ -51,6 +52,7 @@ def main(argv: list[str] | None = None) -> int:
         "auth": _auth,
         "doctor": _doctor,
         "kill": _kill,
+        "skills": _skills,
         "restart": _restart,
         "stop": _stop,
         "sync": _sync,
@@ -437,6 +439,33 @@ def _url(argv: list[str]) -> int:
     else:
         webbrowser.open(pairing_url)
         print("Joe : URL d’appairage ouverte dans le navigateur.")
+    return 0
+
+
+def _skills(argv: list[str]) -> int:
+    skills_parser = argparse.ArgumentParser(
+        prog="joe skills",
+        description="List or import project skills shared by all providers.",
+    )
+    skills_parser.add_argument("action", choices=("list", "import"))
+    skills_parser.add_argument("source", nargs="?", type=Path)
+    skills_parser.add_argument("-C", "--project", type=Path, default=Path.cwd())
+    skills_parser.add_argument("--name")
+    skills_parser.add_argument("--provider", default="unknown")
+    args = skills_parser.parse_args(argv)
+    project = args.project.resolve()
+    if args.action == "list":
+        print(json.dumps(list_skills(project), ensure_ascii=False, indent=2))
+        return 0
+    if args.source is None:
+        skills_parser.error("skills import nécessite un chemin source")
+    result = import_skill(
+        project,
+        args.source,
+        name=args.name,
+        source_provider=args.provider,
+    )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
 

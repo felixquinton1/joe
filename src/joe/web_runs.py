@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .capabilities import cached_provider_capabilities
+from .capabilities import cached_provider_capabilities, select_model
 from .conversations import ConversationStore
 from .git_review import GitSnapshot, build_report, reject, snapshot
 from .models import Intent, Mode, Route
@@ -232,10 +232,10 @@ class RunManager:
             )
             if _complex_request(run.request, route):
                 effort = effort or "high"
-                model = model or _latest_model(route.primary)
-            elif route.mode is Mode.FAST and route.intent is Intent.ANSWER:
+                model = model or select_model(route.primary, complex_request=True)
+            elif route.mode is Mode.FAST:
                 effort = effort or "low"
-                model = model or _latest_model(route.primary)
+                model = model or select_model(route.primary, complex_request=False)
             if "health-check" in route.reason:
                 effort = effort or "low"
                 if route.primary == "gemini":
