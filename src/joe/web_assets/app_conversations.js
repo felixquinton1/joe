@@ -377,6 +377,8 @@ window.createJoeConversations = function createJoeConversations({
     $("project-context").value = "";
     $("project-skills").innerHTML = "<small>Enregistre le projet pour ajouter des skills.</small>";
     $("import-skill").disabled = true;
+    $("skill-source").disabled = true;
+    loadGlobalSkills();
     $("project-dialog").showModal();
     requestAnimationFrame(() => $("project-name").focus());
   }
@@ -395,23 +397,75 @@ window.createJoeConversations = function createJoeConversations({
     refreshSelectMenu($("project-execution-mode"));
     $("project-context").value = project.context || "";
     $("import-skill").disabled = false;
+    $("skill-source").disabled = false;
     loadProjectSkills(project.id).catch(() => {});
+    loadGlobalSkills();
     $("project-dialog").showModal();
   }
 
-  async function loadProjectSkills(projectId) {
-    const skills = await fetcher(`/api/projects/${projectId}/skills`).then(response => response.json());
-    const target = $("project-skills");
+  const SKILL_SCOPE_LABELS = { project: "projet", configured: "configuré", global: "commun" };
+
+  function renderSkillList(target, skills, { emptyText, promotable = false }) {
     target.replaceChildren();
     if (!skills.length) {
-      target.innerHTML = "<small>Aucun skill partagé détecté.</small>";
+      const empty = document.createElement("small");
+      empty.textContent = emptyText;
+      target.appendChild(empty);
       return;
     }
     for (const skill of skills) {
       const row = document.createElement("span");
-      row.innerHTML = `<b>${escapeHtml(skill.name)}</b><small>${escapeHtml(skill.scope || "projet")}</small>`;
+      const name = document.createElement("b");
+      name.textContent = skill.name;
+      const meta = document.createElement("small");
+      const scope = SKILL_SCOPE_LABELS[skill.scope] || skill.scope || "projet";
+      meta.textContent = skill.active ? `actif · ${scope}` : scope;
+      row.append(name, meta);
+      if (promotable && skill.scope === "project") {
+        const promote = document.createElement("button");
+        promote.type = "button";
+        promote.className = "skill-promote";
+        promote.textContent = "Rendre commun";
+        promote.title = "Proposer ce skill à tous les projets";
+        promote.onclick = () => promoteSkill(skill.name);
+        row.appendChild(promote);
+      }
       target.appendChild(row);
     }
+  }
+
+  async function loadProjectSkills(projectId) {
+    const skills = await fetcher(`/api/projects/${projectId}/skills`).then(response => response.json());
+    renderSkillList($("project-skills"), skills, {
+      emptyText: "Aucun skill de projet détecté.",
+      promotable: true,
+    });
+  }
+
+  async function loadGlobalSkills() {
+    try {
+      const skills = await fetcher("/api/skills/global").then(response => response.json());
+      renderSkillList($("global-skills"), skills, {
+        emptyText: "Aucun skill commun pour l’instant.",
+      });
+    } catch {
+      /* liste facultative : on ignore les erreurs réseau */
+    }
+  }
+
+  async function promoteSkill(name) {
+    if (!state.editingProjectId) return;
+    const response = await fetcher(`/api/projects/${state.editingProjectId}/skills/promote`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      window.alert(payload.message || "Promotion du skill impossible.");
+      return;
+    }
+    await loadGlobalSkills();
   }
 
   $("import-skill").onclick = async () => {

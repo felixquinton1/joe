@@ -1,3 +1,3 @@
 """Joe, a lightweight local multi-AI orchestrator."""
 
-__version__ = "0.23.28"
+__version__ = "0.24.0"

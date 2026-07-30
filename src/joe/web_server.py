@@ -12,7 +12,7 @@ from . import __version__
 from .auth import LocalAuth, auth_token_path, required_role, rotate_token
 from .http_utils import RequestBodyError, read_json_body, validate_bind
 from .provider_registry import get_provider_catalog, get_provider_names
-from .skills import import_skill, list_skills
+from .skills import import_skill, list_global_skills, list_skills, promote_skill
 from .web_runs import ActiveConversationError, RunManager, _existing_directory
 
 _ASSETS = {
@@ -91,6 +91,8 @@ class Handler(BaseHTTPRequestHandler):
             )
         if path == "/api/projects":
             return self._json(self.server.manager.conversations.list_projects())
+        if path == "/api/skills/global":
+            return self._json(list_global_skills())
         if path.startswith("/api/projects/") and path.endswith("/skills"):
             project_id = unquote(path.split("/")[-2])
             project = self.server.manager.conversations.get_project(project_id)
@@ -199,6 +201,20 @@ class Handler(BaseHTTPRequestHandler):
             except (OSError, ValueError) as error:
                 return self._json({"message": str(error)}, HTTPStatus.BAD_REQUEST)
             return self._json(imported, HTTPStatus.CREATED)
+        if path.startswith("/api/projects/") and path.endswith("/skills/promote"):
+            project_id = unquote(path.split("/")[-3])
+            project = self.server.manager.conversations.get_project(project_id)
+            if not project:
+                return self._json({}, HTTPStatus.NOT_FOUND)
+            payload = self._read_payload(allow_empty=True)
+            if payload is None:
+                return
+            workspace = _existing_directory(project.get("workspace_root")) or self.server.manager.project
+            try:
+                promoted = promote_skill(workspace, str(payload.get("name", "")).strip())
+            except (OSError, ValueError) as error:
+                return self._json({"message": str(error)}, HTTPStatus.BAD_REQUEST)
+            return self._json(promoted, HTTPStatus.CREATED)
         if path != "/api/runs":
             return self.send_error(HTTPStatus.NOT_FOUND)
         try:

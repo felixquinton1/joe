@@ -45,6 +45,10 @@ local reste refusé sans option explicite.
 | POST | `/api/runs/{run_id}/cancel` | 202 | 404 | annulation |
 | GET | `/api/history` | 200 | — | liste des journaux persistants |
 | GET | `/api/history/{run_id}` | 200 | 404 | journal persistant complet |
+| GET | `/api/projects/{id}/skills` | 200 | 404 | skills du projet (avec indicateur `active` et `scope`) |
+| POST | `/api/projects/{id}/skills/import` | 201 | 400, 404 | import d’un skill partagé par tous les fournisseurs |
+| POST | `/api/projects/{id}/skills/promote` | 201 | 400, 404 | promotion d’un skill du projet en skill commun |
+| GET | `/api/skills/global` | 200 | — | skills communs à tous les projets |
 
 Les endpoints de revue Git (`reject`) restent utilisés par le client Web mais
 ne font pas partie du premier client VS Code en lecture seule.

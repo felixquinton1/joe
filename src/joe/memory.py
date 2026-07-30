@@ -213,10 +213,13 @@ class ProjectMemory:
             path = self.project / name
             if path.exists():
                 chunks.append(f"## {name}\n{path.read_text(errors='replace')}")
+        from .skills import global_skills_root
+
         skill_roots = [self.project / ".agentflow" / "skills", self.project / "skills"]
         configured = self.config().get("shared_skill_paths", [])
         if isinstance(configured, list):
             skill_roots.extend(Path(str(path)).expanduser() for path in configured)
+        skill_roots.append(global_skills_root())
         seen: set[Path] = set()
         total = 0
         for root in skill_roots:

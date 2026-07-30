@@ -46,6 +46,21 @@ def test_context_includes_project_shared_skills_for_all_providers(tmp_path):
     assert "canonical JZ wrapper" in context
 
 
+def test_context_includes_global_skills_shared_across_projects(tmp_path, monkeypatch):
+    from joe import skills
+
+    global_root = tmp_path / "global-skills"
+    skill = global_root / "conventions" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text("Toujours écrire des tests ciblés.")
+    monkeypatch.setattr(skills, "global_skills_root", lambda: global_root)
+
+    project = tmp_path / "project"
+    context = ProjectMemory(project).context("inspect the project")
+
+    assert "tests ciblés" in context
+
+
 def test_context_requires_a_clear_plan_and_result_separation(tmp_path):
     memory = ProjectMemory(tmp_path)
 

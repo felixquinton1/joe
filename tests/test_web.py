@@ -168,6 +168,11 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b'class="activity-tools"' in page
         assert b'id="preferences-dialog"' in page
         assert b'id="open-preferences"' in page
+        assert b'id="global-skills"' in page
+        assert b'class="dialog-advanced"' in page
+        assert b'class="dialog-section"' in page
+        assert "Skills communs à tous les projets".encode() in page
+        assert "SSH/Jean Zay".encode() not in page
         assert b'id="project"' not in page
         assert b'<span class="brand-mark">J</span>' in page
         assert b"<option>codex</option>" not in page
@@ -200,6 +205,14 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b"updateProviderMenu" in script
         assert b"lastEventId" in script
         assert b"setupSelectMenu" in script
+        assert b"setAgentMeta" in script
+
+        connection.request("GET", "/app_conversations.js")
+        response = connection.getresponse()
+        conversations_script = response.read()
+        assert response.status == 200
+        assert b"loadGlobalSkills" in conversations_script
+        assert b"promoteSkill" in conversations_script
 
         connection.request("GET", "/style.css")
         response = connection.getresponse()
@@ -224,9 +237,74 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b".select-menu-options" in style
         assert b".project-dialog .select-menu-trigger" in style
         assert b"animation: dialog-in" in style
+        assert b".agent-meta" in style
+        assert b".skill-promote" in style
+        assert b".dialog-advanced" in style
     finally:
         server.shutdown()
         thread.join(timeout=2)
+        thread.join(timeout=2)
+
+
+def test_skills_import_promote_and_global_listing(tmp_path, monkeypatch):
+    from joe import skills
+
+    global_root = tmp_path / "global-skills"
+    monkeypatch.setattr(skills, "global_skills_root", lambda: global_root)
+    source = tmp_path / "conventions"
+    source.mkdir()
+    (source / "SKILL.md").write_text("Toujours écrire des tests ciblés.")
+
+    server, thread = start_server(tmp_path)
+    try:
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port)
+
+        connection.request(
+            "POST",
+            "/api/projects",
+            body=json.dumps({"name": "Phase D"}),
+            headers={"Content-Type": "application/json"},
+        )
+        project = json.loads(connection.getresponse().read())
+
+        connection.request(
+            "POST",
+            f"/api/projects/{project['id']}/skills/import",
+            body=json.dumps({"source": str(source), "name": "conventions"}),
+            headers={"Content-Type": "application/json"},
+        )
+        assert connection.getresponse().status == 201
+
+        connection.request("GET", f"/api/projects/{project['id']}/skills")
+        listed = json.loads(connection.getresponse().read())
+        assert [item["name"] for item in listed] == ["conventions"]
+        assert listed[0]["active"] is True
+
+        connection.request("GET", "/api/skills/global")
+        assert json.loads(connection.getresponse().read()) == []
+
+        connection.request(
+            "POST",
+            f"/api/projects/{project['id']}/skills/promote",
+            body=json.dumps({"name": "conventions"}),
+            headers={"Content-Type": "application/json"},
+        )
+        assert connection.getresponse().status == 201
+
+        connection.request("GET", "/api/skills/global")
+        common = json.loads(connection.getresponse().read())
+        assert [item["name"] for item in common] == ["conventions"]
+        assert common[0]["scope"] == "global"
+
+        connection.request(
+            "POST",
+            f"/api/projects/{project['id']}/skills/promote",
+            body=json.dumps({"name": "absent"}),
+            headers={"Content-Type": "application/json"},
+        )
+        assert connection.getresponse().status == 400
+    finally:
+        server.shutdown()
         thread.join(timeout=2)
 
 

@@ -327,6 +327,27 @@ def test_claude_json_stream_exposes_file_tool_and_result():
     assert _final_output("claude", f"{tool}\n{result}\n") == "Analyse terminée."
 
 
+def test_claude_system_event_exposes_precise_model_without_ready_line():
+    with_model = _activity(
+        "claude",
+        "stdout",
+        '{"type":"system","subtype":"init","model":"claude-sonnet-4-5-20250929"}',
+    )
+    assert with_model == {
+        "kind": "model",
+        "label": "claude-sonnet-4-5-20250929",
+        "detail": "",
+    }
+    # No precise model advertised → no "Session prête" noise is emitted.
+    assert _activity("claude", "stdout", '{"type":"system","subtype":"init"}') is None
+
+
+def test_gemini_init_event_exposes_precise_model():
+    activity = _activity("gemini", "stdout", '{"type":"init","model":"gemini-3-pro"}')
+    assert activity == {"kind": "model", "label": "gemini-3-pro", "detail": ""}
+    assert _activity("gemini", "stdout", '{"type":"init"}') is None
+
+
 def test_final_output_keeps_only_the_structured_result():
     result = (
         '{"type":"result","result":"Ce que je vais faire :\\nAnalyser.\\n\\n'

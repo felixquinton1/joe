@@ -464,17 +464,29 @@ function ensureAgent(name) {
   if (state.agents.has(name)) return state.agents.get(name);
   const card = document.createElement("div");
   card.className = "agent-card";
-  card.innerHTML = `<div class="agent-head"><span class="agent-name">${escapeHtml(name)}</span><span class="agent-status">En attente</span></div><p class="agent-heartbeat hidden"></p><div class="agent-activity"></div><pre class="agent-output"></pre>`;
+  card.innerHTML = `<div class="agent-head"><span class="agent-name">${escapeHtml(name)}</span><span class="agent-meta hidden"></span><span class="agent-status">En attente</span></div><p class="agent-heartbeat hidden"></p><div class="agent-activity"></div><pre class="agent-output"></pre>`;
   $("agents").appendChild(card);
   const agent = {
     card,
     status: card.querySelector(".agent-status"),
+    meta: card.querySelector(".agent-meta"),
     heartbeat: card.querySelector(".agent-heartbeat"),
     activity: card.querySelector(".agent-activity"),
-    output: card.querySelector(".agent-output")
+    output: card.querySelector(".agent-output"),
+    model: "",
+    effort: ""
   };
   state.agents.set(name, agent);
   return agent;
+}
+
+function setAgentMeta(agent, { model, effort } = {}) {
+  if (model !== undefined) agent.model = model;
+  if (effort !== undefined) agent.effort = effort;
+  const parts = [agent.model, agent.effort ? `effort ${agent.effort}` : ""].filter(Boolean);
+  agent.meta.textContent = parts.join(" · ");
+  agent.meta.classList.toggle("hidden", parts.length === 0);
+  return parts.join(" · ");
 }
 
 function renderWorkflowUpdate(event, finalBubble, runId) {
@@ -735,20 +747,19 @@ function handleEvent(conversationId, event, finalBubble) {
     agent.status.textContent = "En cours";
     agent.heartbeat.textContent = "";
     agent.heartbeat.classList.add("hidden");
-    const metadata = [
-      event.model || "modèle par défaut",
-      `effort ${event.effort || "défaut"}`
-    ].filter(Boolean).join(" · ");
-    const row = document.createElement("div");
-    row.className = "activity-row provider-metadata";
-    row.innerHTML = `<i></i><div><strong>${escapeHtml(capitalize(event.provider))}</strong><span>${escapeHtml(metadata)}</span></div>`;
-    agent.activity.appendChild(row);
+    const metadata = setAgentMeta(agent, {
+      model: event.model || "modèle par défaut",
+      effort: event.effort || "défaut"
+    });
     updateWorkflowProviderMetadata(event.provider, metadata);
   } else if (event.type === "activity") {
     const agent = ensureAgent(event.provider);
     if (event.kind === "heartbeat") {
       agent.heartbeat.textContent = event.detail || event.label;
       agent.heartbeat.classList.remove("hidden");
+    } else if (event.kind === "model") {
+      const metadata = setAgentMeta(agent, { model: event.label });
+      updateWorkflowProviderMetadata(event.provider, metadata);
     } else {
       const signature = `${event.label}\n${event.detail || ""}`;
       const previous = agent.activity.lastElementChild;

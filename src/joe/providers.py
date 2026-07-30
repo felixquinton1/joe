@@ -489,7 +489,10 @@ def _activity(
                     "detail": detail,
                 }
         if event.get("type") == "system":
-            return {"kind": "status", "label": "Session Claude prête", "detail": ""}
+            model = _event_model(event)
+            if model:
+                return {"kind": "model", "label": model, "detail": ""}
+            return None
     if provider == "gemini":
         event_type = event.get("type")
         if event_type in {"tool_use", "tool_call"}:
@@ -499,7 +502,25 @@ def _activity(
                 "detail": _tool_detail(event.get("parameters") or event.get("args")),
             }
         if event_type == "init":
-            return {"kind": "status", "label": "Session Gemini prête", "detail": ""}
+            model = _event_model(event)
+            if model:
+                return {"kind": "model", "label": model, "detail": ""}
+            return None
+    return None
+
+
+def _event_model(event: dict[str, object]) -> str | None:
+    """Best-effort extraction of the precise model id from a CLI init event."""
+    candidates = (
+        event.get("model"),
+        (event.get("data") if isinstance(event.get("data"), dict) else {}).get("model"),
+        (event.get("session") if isinstance(event.get("session"), dict) else {}).get(
+            "model"
+        ),
+    )
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
     return None
 
 

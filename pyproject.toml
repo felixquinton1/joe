@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "joe-orchestrator"
-version = "0.23.28"
+version = "0.24.0"
 description = "Lightweight local multi-AI CLI orchestrator"
 readme = "README.md"
 requires-python = ">=3.10"
