@@ -439,6 +439,15 @@ class RunManager:
         ) or {}
         if not project.get("auto_commit_push"):
             return
+        if run.isolated_worktree:
+            report["delivery"] = {
+                "status": "blocked",
+                "message": (
+                    "Livraison automatique suspendue : ce run est dans un worktree "
+                    "isolé. Examine ou fusionne le worktree explicitement."
+                ),
+            }
+            return
         workspace = run.workspace or self.project
         delivery = _web_facade().deliver(
             workspace,
