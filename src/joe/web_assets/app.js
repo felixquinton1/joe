@@ -1,4 +1,4 @@
-const APP_VERSION = "0.28.0";
+const APP_VERSION = "0.28.1";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -20,7 +20,6 @@ let knownApprovals = [];
 let knownFiles = [];
 const selectedFileIds = new Set();
 const notifiedTaskConflicts = new Set();
-const observedTaskStatus = new Map();
 let language = window.JoeI18n.initialLanguage(
   window.localStorage,
   window.navigator.language
@@ -87,34 +86,12 @@ async function loadTasks() {
     ? await approvalsResponse.json()
     : [];
   for (const task of knownTasks) {
-    const previous = observedTaskStatus.get(task.id);
     if (task.status === "conflict" && !notifiedTaskConflicts.has(task.id)) {
       notifiedTaskConflicts.add(task.id);
       notifyTaskConflict(task);
     }
-    if (
-      previous && previous !== task.status
-      && ["review", "integrated", "completed", "conflict", "failed"].includes(task.status)
-    ) {
-      notifyTaskStatus(task);
-    }
-    observedTaskStatus.set(task.id, task.status);
   }
   renderTasks();
-}
-
-function notifyTaskStatus(task) {
-  if (!("Notification" in window) || Notification.permission !== "granted") return;
-  const labels = {
-    review: "prête à valider",
-    completed: "terminée",
-    integrated: "intégrée",
-    conflict: "en conflit",
-    failed: "en échec"
-  };
-  new Notification("Joe", {
-    body: `${task.title} · ${labels[task.status] || task.status}`
-  });
 }
 
 function notifyTaskConflict(task) {
@@ -1572,16 +1549,6 @@ $("composer").addEventListener("drop", async event => {
   if (files.length) await uploadFiles(files);
 });
 $("refresh-files").onclick = () => loadFiles().catch(() => {});
-$("enable-notifications").onclick = async () => {
-  if (!("Notification" in window)) {
-    window.alert("Les notifications ne sont pas disponibles dans ce navigateur.");
-    return;
-  }
-  const permission = await Notification.requestPermission();
-  $("enable-notifications").textContent = permission === "granted"
-    ? "Notifications activées"
-    : "Notifications bloquées";
-};
 $("close-onboarding").onclick = () => {
   window.localStorage.setItem("joe-onboarded-v1", "1");
 };
