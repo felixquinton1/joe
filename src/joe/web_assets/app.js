@@ -1,4 +1,4 @@
-const APP_VERSION = "0.25.0";
+const APP_VERSION = "0.26.0";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -95,6 +95,9 @@ function renderTasks() {
     review: t("review_task"),
     completed: t("done"),
     integrated: t("integrated"),
+    integrating: t("integrating"),
+    resolving: t("resolving"),
+    conflict: t("conflict"),
     failed: t("failed"),
     cancelled: t("cancelled")
   };
@@ -110,14 +113,15 @@ function renderTasks() {
         <b>${escapeHtml(statusLabels[task.status] || task.status)}</b>
       </div>
       <div class="task-meta">${branch}<span>${Number(task.files || 0)} fichier${Number(task.files || 0) === 1 ? "" : "s"} · +${Number(task.insertions || 0)} −${Number(task.deletions || 0)}</span></div>
+      ${task.error ? `<p class="task-error">${escapeHtml(task.error)}</p>` : ""}
       <div class="task-actions"></div>`;
     const actions = card.querySelector(".task-actions");
     if (task.isolated && task.status !== "integrated") {
       actions.appendChild(taskAction(t("view_diff"), () => showTaskDiff(task)));
-      if (task.status === "review") {
+      if (["review", "conflict"].includes(task.status)) {
         actions.appendChild(taskAction(t("integrate"), () => integrateTask(task), "primary"));
       }
-      if (task.status !== "running" && task.status !== "integrated") {
+      if (!["running", "integrating", "resolving", "integrated"].includes(task.status)) {
         actions.appendChild(taskAction(t("delete"), () => deleteTask(task), "danger"));
       }
     }
@@ -162,7 +166,6 @@ async function integrateTask(task) {
     return;
   }
   await loadTasks();
-  await loadConversations(false);
 }
 
 async function deleteTask(task) {

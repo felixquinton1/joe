@@ -71,3 +71,38 @@ def test_worktree_diff_and_integration(tmp_path):
         check=True,
     )
     assert ".agentflow/session.md" not in tracked.stdout
+
+
+def test_worktree_resolves_conflict_against_latest_main(tmp_path):
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=tmp_path,
+        check=True,
+    )
+    target = tmp_path / "value.txt"
+    target.write_text("base\n")
+    subprocess.run(["git", "add", "value.txt"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-qm", "base"], cwd=tmp_path, check=True)
+    manager = WorktreeManager(tmp_path)
+    worktree = manager.create("conflicting-run")
+    (worktree.path / "value.txt").write_text("task change\n")
+
+    target.write_text("main change\n")
+    subprocess.run(["git", "add", "value.txt"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-qm", "main change"], cwd=tmp_path, check=True)
+    seen = []
+
+    def resolve(current, conflicts, attempt):
+        seen.append((conflicts, attempt))
+        (current.path / "value.txt").write_text("main change\ntask change\n")
+
+    manager.integrate(worktree, "test: resolved task", resolver=resolve)
+
+    assert seen == [(["value.txt"], 1)]
+    assert target.read_text() == "main change\ntask change\n"

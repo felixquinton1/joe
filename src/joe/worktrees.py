@@ -3,6 +3,7 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 
 class WorktreeError(RuntimeError):
@@ -91,7 +92,12 @@ class WorktreeManager:
             "patch_preview": preview[:50_000],
         }
 
-    def integrate(self, worktree: Worktree, message: str) -> str:
+    def integrate(
+        self,
+        worktree: Worktree,
+        message: str,
+        resolver: Callable[[Worktree, list[str], int], None] | None = None,
+    ) -> str:
         if not worktree.path.exists():
             raise WorktreeError("Le worktree de cette tâche n’existe plus.")
         if self._dirty(self.repository):
@@ -117,17 +123,67 @@ class WorktreeManager:
                 )
         if self._value("rev-list", "--count", f"HEAD..{worktree.branch}") == "0":
             raise WorktreeError("Cette tâche ne contient aucune modification à intégrer.")
-        merged = self._git(
-            "merge", "--no-ff", "--no-edit", worktree.branch,
-        )
+        self._synchronize(worktree, resolver)
+        merged = self._git("merge", "--ff-only", worktree.branch)
         if merged.returncode:
-            self._git("merge", "--abort")
             raise WorktreeError(
-                "L’intégration produit un conflit. Le dépôt principal a été restauré."
+                "La branche principale a changé pendant l’intégration. "
+                "Relance l’opération."
             )
         commit = self._value("rev-parse", "HEAD")
         self.remove(worktree, delete_branch=True)
         return commit
+
+    def _synchronize(
+        self,
+        worktree: Worktree,
+        resolver: Callable[[Worktree, list[str], int], None] | None,
+    ) -> None:
+        if self._git(
+            "merge-base", "--is-ancestor", "HEAD", worktree.branch
+        ).returncode == 0:
+            return
+        rebased = self._run_at(
+            worktree.path,
+            "rebase",
+            self._value("rev-parse", "HEAD"),
+        )
+        attempt = 0
+        while rebased.returncode:
+            conflicts = self._unmerged(worktree.path)
+            if not conflicts or resolver is None or attempt >= 3:
+                self._run_at(worktree.path, "rebase", "--abort")
+                raise WorktreeError(
+                    "Conflit avec les changements déjà intégrés. "
+                    "Le worktree a été conservé."
+                )
+            attempt += 1
+            try:
+                resolver(worktree, conflicts, attempt)
+                if self._contains_conflict_markers(worktree.path, conflicts):
+                    raise WorktreeError(
+                        "La résolution contient encore des marqueurs de conflit."
+                    )
+                staged = self._run_at(
+                    worktree.path,
+                    "add",
+                    "-A",
+                    "--",
+                    ".",
+                    ":(exclude).agentflow/**",
+                )
+                if staged.returncode:
+                    raise WorktreeError(staged.stderr.strip())
+                rebased = self._run_at(
+                    worktree.path,
+                    "-c",
+                    "core.editor=true",
+                    "rebase",
+                    "--continue",
+                )
+            except Exception:
+                self._run_at(worktree.path, "rebase", "--abort")
+                raise
 
     def remove(self, worktree: Worktree, *, delete_branch: bool = True) -> None:
         result = self._git("worktree", "remove", "--force", str(worktree.path))
@@ -137,6 +193,11 @@ class WorktreeManager:
             )
         if delete_branch:
             self._git("branch", "-D", worktree.branch)
+
+    def abort_rebase(self, worktree: Worktree) -> None:
+        """Restore a recoverable branch after a server interruption."""
+        if worktree.path.exists():
+            self._run_at(worktree.path, "rebase", "--abort")
 
     def _git(self, *arguments: str) -> subprocess.CompletedProcess[str]:
         return self._run_at(self.repository, *arguments)
@@ -167,6 +228,24 @@ class WorktreeManager:
                 for line in result.stdout.splitlines()
             )
         )
+
+    @classmethod
+    def _unmerged(cls, path: Path) -> list[str]:
+        result = cls._run_at(
+            path, "diff", "--name-only", "--diff-filter=U",
+        )
+        return [item for item in result.stdout.splitlines() if item]
+
+    @staticmethod
+    def _contains_conflict_markers(path: Path, conflicts: list[str]) -> bool:
+        for relative in conflicts:
+            try:
+                content = (path / relative).read_text(errors="replace")
+            except OSError:
+                continue
+            if "<<<<<<< " in content or ">>>>>>> " in content:
+                return True
+        return False
 
 
 def _line_count(path: Path) -> int:

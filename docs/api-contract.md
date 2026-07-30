@@ -59,7 +59,7 @@ ne font pas partie du premier client VS Code en lecture seule.
 |---|---|---|---|
 | `GET` | `/api/tasks` | viewer | Tâches récentes |
 | `GET` | `/api/tasks/{id}/diff` | viewer | Diff du worktree |
-| `POST` | `/api/tasks/{id}/integrate` | maintainer | Branche intégrée |
+| `POST` | `/api/tasks/{id}/integrate` | maintainer | Intégration asynchrone acceptée (`202`) |
 | `DELETE` | `/api/tasks/{id}` | maintainer | Tâche et worktree supprimés |
 
 ## Schémas minimaux

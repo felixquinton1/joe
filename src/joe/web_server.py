@@ -169,7 +169,7 @@ class Handler(BaseHTTPRequestHandler):
                     {"error": str(error)},
                     HTTPStatus.CONFLICT,
                 )
-            return self._json(task)
+            return self._json(task, HTTPStatus.ACCEPTED)
         if path.startswith("/api/runs/") and path.endswith("/reject"):
             run_id = unquote(path.split("/")[-2])
             payload = self._read_payload(allow_empty=True)

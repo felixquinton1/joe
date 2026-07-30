@@ -132,8 +132,11 @@ fin du run :
   si le dépôt principal est propre ;
 - **Supprimer** abandonne explicitement le worktree et sa branche.
 
-Un conflit d’intégration est annulé automatiquement et laisse le worktree
-disponible pour examen.
+Si la branche principale a avancé, Joe rebase d’abord la tâche. Un conflit
+déclenche une résolution bornée par l’agent de la tâche, avec conservation des
+deux objectifs et tests ciblés demandés. Si la résolution échoue ou laisse des
+marqueurs, le rebase est annulé et le worktree reste disponible pour examen et
+nouvelle tentative.
 
 ## Capacités et sécurité
 

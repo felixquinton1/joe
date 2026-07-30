@@ -82,9 +82,29 @@ class RunManager:
         self.conversations.ensure()
         self.tasks = TaskStore(self.orchestrator.memory.root)
         self.tasks.ensure()
+        for task in self.tasks.list():
+            if task.get("status") in {"integrating", "resolving"}:
+                if (
+                    task.get("isolated")
+                    and task.get("workspace")
+                    and task.get("branch")
+                    and task.get("base_commit")
+                ):
+                    WorktreeManager(Path(task["base_workspace"])).abort_rebase(
+                        self._task_worktree(task)
+                    )
+                self.tasks.update(
+                    task["id"],
+                    status="conflict",
+                    error=(
+                        "Intégration interrompue par un redémarrage. "
+                        "Relance-la depuis le panneau des tâches."
+                    ),
+                )
         self.live: dict[str, LiveRun] = {}
         self.git_rejections: dict[str, dict[str, Any]] = {}
         self.lock = threading.Lock()
+        self.integrating: set[str] = set()
         self.compacting: set[str] = set()
         self.pending_path = self.orchestrator.memory.root / "pending_runs.json"
         self._recover_pending()
@@ -812,29 +832,150 @@ class RunManager:
             raise WorktreeError("La tâche est encore en cours.")
         if not task.get("isolated"):
             raise WorktreeError("Cette tâche n’utilise pas de worktree isolé.")
-        commit = WorktreeManager(Path(task["base_workspace"])).integrate(
-            self._task_worktree(task),
-            f"chore: integrate Joe task {task['title']}",
-        )
+        if task.get("status") == "integrated" or not task.get("workspace"):
+            raise WorktreeError("Cette tâche est déjà intégrée.")
+        with self.lock:
+            if task_id in self.integrating:
+                raise WorktreeError("L’intégration de cette tâche est déjà en cours.")
+            self.integrating.add(task_id)
         updated = self.tasks.update(
             task_id,
-            status="integrated",
-            integrated_commit=commit,
-            workspace=None,
+            status="integrating",
+            error=None,
         )
+        thread = threading.Thread(
+            target=self._integrate_task_worker,
+            args=(task_id,),
+            daemon=True,
+        )
+        try:
+            thread.start()
+        except Exception:
+            with self.lock:
+                self.integrating.discard(task_id)
+            self.tasks.update(
+                task_id,
+                status="conflict",
+                error="Impossible de démarrer l’intégration.",
+            )
+            raise
         return updated or task
 
     def delete_task(self, task_id: str) -> bool:
         task = self.tasks.get(task_id)
         if not task:
             return False
-        if task.get("status") == "running":
+        if task.get("status") in {"running", "integrating", "resolving"}:
             raise WorktreeError("Interromps la tâche avant de la supprimer.")
         if task.get("isolated") and task.get("workspace"):
             WorktreeManager(Path(task["base_workspace"])).remove(
                 self._task_worktree(task)
             )
         return self.tasks.delete(task_id)
+
+    def _integrate_task_worker(self, task_id: str) -> None:
+        try:
+            task = self.tasks.get(task_id)
+            if not task:
+                return
+            manager = WorktreeManager(Path(task["base_workspace"]))
+            commit = manager.integrate(
+                self._task_worktree(task),
+                f"chore: integrate Joe task {task['title']}",
+                resolver=lambda worktree, conflicts, attempt: (
+                    self._resolve_task_conflicts(
+                        task_id,
+                        worktree,
+                        conflicts,
+                        attempt,
+                    )
+                ),
+            )
+            self.tasks.update(
+                task_id,
+                status="integrated",
+                integrated_commit=commit,
+                workspace=None,
+                error=None,
+            )
+        except Exception as error:
+            self.tasks.update(
+                task_id,
+                status="conflict",
+                error=str(error),
+            )
+        finally:
+            with self.lock:
+                self.integrating.discard(task_id)
+
+    def _resolve_task_conflicts(
+        self,
+        task_id: str,
+        worktree: Worktree,
+        conflicts: list[str],
+        attempt: int,
+    ) -> None:
+        task = self.tasks.get(task_id)
+        if not task:
+            raise WorktreeError("Tâche introuvable pendant la résolution.")
+        self.tasks.update(
+            task_id,
+            status="resolving",
+            error=(
+                f"Résolution automatique {attempt}/3 : "
+                + ", ".join(conflicts)
+            ),
+        )
+        conversation_id = str(task["conversation_id"])
+        _, additional_roots, remote_access, _ = self._project_scope(
+            conversation_id
+        )
+        orchestrator = Orchestrator(
+            worktree.path,
+            additional_roots=additional_roots,
+            remote_access=remote_access,
+        )
+        provider = str(task.get("provider") or "codex")
+        route = Route(
+            Intent.MODIFY,
+            Mode.FAST,
+            provider,
+            reason="worktree-conflict-resolution",
+        )
+        prompt = (
+            "Résous les conflits Git actuellement présents dans ce worktree. "
+            "Préserve à la fois les changements déjà intégrés dans la branche "
+            "principale et l’objectif de la tâche ci-dessous. Inspecte chaque "
+            "fichier en conflit, retire tous les marqueurs, puis lance les tests "
+            "ciblés pertinents. Ne lance ni git rebase, ni git commit, ni git "
+            "merge : Joe terminera l’opération. Modifie uniquement les fichiers "
+            "nécessaires.\n\n"
+            f"Objectif de la tâche :\n{task['request']}\n\n"
+            "Fichiers en conflit :\n- "
+            + "\n- ".join(conflicts)
+        )
+
+        def on_event(event: dict[str, Any]) -> None:
+            if event.get("type") == "provider_start":
+                self.tasks.update(
+                    task_id,
+                    provider=event.get("provider"),
+                    model=event.get("model"),
+                )
+
+        orchestrator.execute(
+            prompt,
+            route,
+            effort="high",
+            execution_mode="workspace-write",
+            extra_context=(
+                "This is a bounded conflict-resolution pass. A successful "
+                "answer requires actual edits in the conflicted worktree and "
+                "relevant validation, not a proposed plan."
+            ),
+            on_event=on_event,
+        )
+        self.tasks.update(task_id, status="integrating", error=None)
 
     def _update_task_git(
         self,

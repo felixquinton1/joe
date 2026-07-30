@@ -624,6 +624,8 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 }
 .task-card.review { border-color: #d9b394; background: #fff8f1; }
 .task-card.running { border-color: #a9c7bc; background: #f3faf7; }
+.task-card.integrating, .task-card.resolving { border-color: #a9c7bc; background: #f3faf7; }
+.task-card.conflict { border-color: #d9a398; background: #fff5f2; }
 .task-card-head, .task-meta, .task-actions {
   display: flex;
   align-items: center;
@@ -645,12 +647,23 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 }
 .task-card.review .task-card-head b { color: var(--orange); }
 .task-card.running .task-card-head b { color: var(--green); }
+.task-card.integrating .task-card-head b,
+.task-card.resolving .task-card-head b { color: var(--green); }
+.task-card.conflict .task-card-head b { color: var(--danger); }
 .task-meta { margin-top: 4px; color: var(--muted); font-size: 8px; }
 .task-meta span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.task-error {
+  overflow: hidden;
+  margin: 5px 0 0;
+  color: var(--danger);
+  font-size: 8px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
 }
 .task-actions { justify-content: flex-end; margin-top: 7px; }
 .task-actions button {
