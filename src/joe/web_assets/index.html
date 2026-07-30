@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Joe — L’IA à la mode chez les jeunes</title>
+  <title>Joe</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -17,9 +17,8 @@
     <aside class="history-panel">
       <div class="sidebar-brand">
         <div class="brand"><span class="brand-mark">J</span><div><strong>Joe</strong><small>AI control room · <span id="version">…</span></small></div></div>
-        <div class="joe-tagline"><span>✦</span><strong data-i18n="slogan">L’IA à la mode chez les jeunes</strong></div>
       </div>
-      <div class="panel-title"><div><span class="eyebrow" data-i18n="project">Projet</span><h2 data-i18n="conversations">Conversations</h2></div><button id="new-project" class="icon-button" type="button" title="Nouveau sous-projet" aria-label="Nouveau sous-projet">＋</button></div>
+      <div class="panel-title"><h2 data-i18n="conversations">Conversations</h2><button id="new-project" class="icon-button" type="button" title="Nouveau projet" aria-label="Nouveau projet">＋</button></div>
       <div class="history-search-wrap">
         <span aria-hidden="true">⌕</span>
         <input id="history-search" class="history-search" type="search" placeholder="Rechercher…" aria-label="Rechercher dans l’historique">
@@ -110,7 +109,7 @@
   <dialog id="project-dialog" class="project-dialog">
     <form method="dialog">
       <span class="eyebrow">Contexte partagé</span>
-      <h2 id="project-dialog-title">Sous-projet</h2>
+      <h2 id="project-dialog-title">Projet</h2>
       <fieldset class="dialog-section">
         <legend>Général</legend>
         <label>Nom<input id="project-name" maxlength="64" required placeholder="Ex. Phase D, Ablations, Documentation…"></label>
@@ -121,19 +120,23 @@
         <legend>Exécution &amp; livraison</legend>
         <label>Permission des validations opérationnelles<select id="project-execution-mode"><option value="">Automatique (lecture seule)</option><option value="workspace-write">Écriture dans le projet</option><option value="danger-full-access">Accès complet</option></select></label>
         <label class="check-label"><input id="project-auto-delivery" type="checkbox"> Commit et push automatiques après une modification validée</label>
-        <label class="check-label"><input id="project-isolated-worktrees" type="checkbox"> Isoler les modifications dans un worktree Git</label>
         <small id="project-auto-delivery-help" class="setting-help">Désactivé : tu peux examiner les changements et utiliser « Rejeter la sélection ».</small>
+        <label class="check-label"><input id="project-isolated-worktrees" type="checkbox"> Isoler les modifications dans un worktree Git</label>
+        <small class="setting-help">Recommandé pour exécuter plusieurs tâches sans mélanger leurs fichiers.</small>
       </fieldset>
       <fieldset class="dialog-section">
         <legend>Contexte</legend>
         <label>Contexte transmis à toutes ses conversations<textarea id="project-context" rows="8" placeholder="Objectif, conventions, décisions stables… (ex. accès SSH d’un cluster de calcul)"></textarea></label>
       </fieldset>
       <section class="skill-manager" aria-label="Skills">
-        <div class="skill-manager-head"><span>Skills de ce projet</span><small>Actifs pour tous les fournisseurs · Claude · Codex · Gemini · Copilot</small></div>
-        <div id="project-skills" class="skill-list"><small>Enregistre le projet pour ajouter des skills.</small></div>
-        <div class="skill-import-row"><input id="skill-source" placeholder="Chemin vers SKILL.md ou son dossier"><select id="skill-provider"><option value="unknown">Source inconnue</option><option value="claude">Claude</option><option value="codex">Codex</option><option value="gemini">Gemini</option><option value="copilot">Copilot</option></select><button id="import-skill" type="button">Importer</button></div>
-        <div class="skill-manager-head"><span>Skills communs à tous les projets</span><small>Règles appliquées partout · ex. conventions à suivre</small></div>
-        <div id="global-skills" class="skill-list"><small>Aucun skill commun pour l’instant.</small></div>
+        <div class="skill-manager-head"><span>Skills du projet</span><small>Utilisés par Claude, Codex, Gemini et Copilot</small></div>
+        <div id="project-skills" class="skill-list"><small>Enregistre le projet pour ajouter un skill.</small></div>
+        <div class="skill-import-help"><strong>Ajouter un skill existant</strong><small>Indique un fichier <code>SKILL.md</code> ou son dossier. Pour en créer un, prépare d’abord ce fichier puis ajoute-le ici.</small></div>
+        <div class="skill-import-row"><input id="skill-source" placeholder="Chemin vers SKILL.md ou son dossier"><select id="skill-provider" aria-label="Format d’origine"><option value="unknown">Auto-détecté</option><option value="claude">Claude</option><option value="codex">Codex</option><option value="gemini">Gemini</option><option value="copilot">Copilot</option></select><button id="import-skill" type="button">Ajouter</button></div>
+        <div class="skill-global">
+          <div class="skill-manager-head"><span>Skills communs</span><small>Appliqués à tous les projets</small></div>
+          <div id="global-skills" class="skill-list"><small>Aucun skill commun. Ajoute un skill au projet, puis choisis « Rendre commun ».</small></div>
+        </div>
       </section>
       <details class="dialog-advanced">
         <summary><span>Options avancées</span><small>Accès réseau et intégrations distantes</small></summary>

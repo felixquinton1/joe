@@ -162,7 +162,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert response.status == 200
         page = response.read()
         assert b"AI control room" in page
-        assert "L’IA à la mode chez les jeunes".encode() in page
+        assert "L’IA à la mode chez les jeunes".encode() not in page
         assert b'id="cancel-project"' in page
         assert b'id="prompt-queue"' in page
         assert b'data-resizer="left"' in page
@@ -174,7 +174,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b'id="language"' in page
         assert page.index(b'id="language-en"') < page.index(b'id="language-fr"')
         assert b"<select id=\"language\"" not in page
-        assert b'data-i18n="slogan"' in page
+        assert b'data-i18n="slogan"' not in page
         assert b'class="topbar"' not in page
         assert b'class="raw-panel"' not in page
         assert b'class="activity-tools"' in page
@@ -183,7 +183,9 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b'id="global-skills"' in page
         assert b'class="dialog-advanced"' in page
         assert b'class="dialog-section"' in page
-        assert "Skills communs à tous les projets".encode() in page
+        assert "Skills communs".encode() in page
+        assert "Auto-détecté".encode() in page
+        assert "Pour en créer un".encode() in page
         assert "SSH/Jean Zay".encode() not in page
         assert b'id="project"' not in page
         assert b'<span class="brand-mark">J</span>' in page
@@ -194,7 +196,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         translations = response.read()
         assert response.status == 200
         assert b"initialLanguage" in translations
-        assert b"cool kids" in translations
+        assert b"cool kids" not in translations
 
         connection.request("GET", "/app.js")
         response = connection.getresponse()

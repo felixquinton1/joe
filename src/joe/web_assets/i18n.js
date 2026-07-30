@@ -5,7 +5,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   const translations = {
     fr: {
-      language: "Langue", slogan: "L’IA à la mode chez les jeunes",
+      language: "Langue",
       conversations: "Conversations", activity: "Activité",
       loading: "Chargement…", quotas: "Quotas", project: "Projet",
       agent: "Agent", workflow: "Workflow", automatic: "Automatique",
@@ -38,7 +38,7 @@
       cancel: "Annuler", save: "Enregistrer"
     },
     en: {
-      language: "Language", slogan: "AI, the way the cool kids do it",
+      language: "Language",
       conversations: "Conversations", activity: "Activity",
       loading: "Loading…", quotas: "Quotas", project: "Project",
       agent: "Agent", workflow: "Workflow", automatic: "Automatic",

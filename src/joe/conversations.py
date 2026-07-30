@@ -110,11 +110,11 @@ class ConversationStore:
         with self.lock:
             return self._find_project(self._read(), project_id)
 
-    def create_project(self, name: str = "Nouveau sous-projet") -> dict[str, Any]:
+    def create_project(self, name: str = "Nouveau projet") -> dict[str, Any]:
         existing = self.list_projects()
         project = {
             "id": uuid.uuid4().hex,
-            "name": name.strip()[:64] or "Nouveau sous-projet",
+            "name": name.strip()[:64] or "Nouveau projet",
             "context": "",
             "workspace_root": "",
             "additional_roots": [],

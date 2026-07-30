@@ -1,4 +1,4 @@
-const APP_VERSION = "0.28.3";
+const APP_VERSION = "0.28.4";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -162,6 +162,18 @@ function renderTasks() {
   for (const task of tasks) {
     const card = document.createElement("article");
     card.className = `task-card ${task.status}`;
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
+    card.title = "Ouvrir le prompt de cette tâche";
+    const openConversation = () => selectConversation(task.conversation_id, task.id);
+    card.onclick = event => {
+      if (!event.target.closest("button")) openConversation();
+    };
+    card.onkeydown = event => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openConversation();
+    };
     const branch = task.branch
       ? `<span title="${escapeHtml(task.branch)}">${escapeHtml(task.branch)}</span>`
       : `<span>${escapeHtml(t("current_workspace"))}</span>`;
@@ -177,7 +189,7 @@ function renderTasks() {
       ${task.error ? `<p class="task-error">${escapeHtml(task.error)}</p>` : ""}
       <div class="task-actions"></div>`;
     const actions = card.querySelector(".task-actions");
-    actions.appendChild(taskAction("Conversation", () => selectConversation(task.conversation_id)));
+    actions.appendChild(taskAction("Conversation", openConversation));
     if (task.isolated && task.status !== "integrated") {
       actions.appendChild(taskAction(t("view_diff"), () => showTaskDiff(task)));
       if (["review", "conflict"].includes(task.status)) {
@@ -234,7 +246,10 @@ function taskAction(label, action, kind = "") {
   button.type = "button";
   button.className = kind;
   button.textContent = label;
-  button.onclick = action;
+  button.onclick = event => {
+    event.stopPropagation();
+    action();
+  };
   return button;
 }
 

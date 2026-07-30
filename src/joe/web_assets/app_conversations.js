@@ -106,8 +106,8 @@ window.createJoeConversations = function createJoeConversations({
         project.collapsed ? "Déplier les conversations" : "Replier les conversations",
         () => toggleProjectCollapsed(project, group, collapse)
       );
-      const editProject = smallButton("⚙", "Modifier le contexte du sous-projet", () => openProject(project));
-      const addConversation = smallButton("＋", "Nouvelle conversation dans ce sous-projet", () => createConversation(true, project.id));
+      const editProject = smallButton("⚙", "Modifier le contexte du projet", () => openProject(project));
+      const addConversation = smallButton("＋", "Nouvelle conversation dans ce projet", () => createConversation(true, project.id));
       projectActions.append(collapse, editProject, addConversation);
       header.appendChild(projectActions);
       header.ondragover = allowDrop;
@@ -317,7 +317,7 @@ window.createJoeConversations = function createJoeConversations({
     return button;
   }
 
-  async function selectConversation(conversationId) {
+  async function selectConversation(conversationId, runId = "") {
     preserveActivePanel();
     closeMobilePanels();
     const conversation = await fetcher(`/api/conversations/${conversationId}`).then(response => response.json());
@@ -327,30 +327,43 @@ window.createJoeConversations = function createJoeConversations({
       conversation.unread_completion = false;
       const cached = state.conversations.find(item => item.id === conversationId);
       if (cached) cached.unread_completion = false;
-      fetcher(`/api/conversations/${conversationId}`, {
+      await fetcher(`/api/conversations/${conversationId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ unread_completion: false })
-      }).catch(() => {});
+      }).catch(() => null);
     }
     renderConversations();
     clearConversation();
     $("conversation-title").textContent = conversation.title;
+    let requestedMessage = null;
     for (const message of conversation.messages) {
+      let bubble;
       if (message.role === "user") {
-        addMessage("Toi", message.content, "user");
+        bubble = addMessage("Toi", message.content, "user");
       } else {
-        const bubble = addMessage("Joe · synthèse", "", "assistant");
+        bubble = addMessage("Joe · synthèse", "", "assistant");
         renderHistoricalRunSummary(message, bubble);
         renderMarkdown(bubble, message.content);
         if (message.git_report) renderGitReport(message.git_report, message.run_id);
+      }
+      const wrapper = bubble.closest(".message");
+      if (message.run_id) wrapper.dataset.runId = message.run_id;
+      if (!requestedMessage && runId && message.run_id === runId) {
+        requestedMessage = wrapper;
       }
     }
     if (!conversation.messages.length) {
       $("messages").innerHTML = '<div class="empty-state"><span class="empty-mark">J</span><h3>Nouvelle conversation</h3><p>Les réglages et l’historique de cette conversation resteront indépendants.</p></div>';
     }
     const conversationViewport = document.querySelector(".conversation");
-    conversationViewport.scrollTop = conversationViewport.scrollHeight;
+    if (requestedMessage) {
+      requestedMessage.scrollIntoView({ block: "center", behavior: "smooth" });
+      requestedMessage.classList.add("task-focus");
+      window.setTimeout(() => requestedMessage.classList.remove("task-focus"), 1800);
+    } else {
+      conversationViewport.scrollTop = conversationViewport.scrollHeight;
+    }
     applySettings(conversation.settings || {});
     window.dispatchEvent(new CustomEvent("joe:conversation-selected"));
     restoreConversationPanel(conversationId);
@@ -460,7 +473,7 @@ window.createJoeConversations = function createJoeConversations({
 
   function createProject() {
     state.editingProjectId = null;
-    $("project-dialog-title").textContent = "Nouveau sous-projet";
+    $("project-dialog-title").textContent = "Nouveau projet";
     $("save-project").textContent = "Créer";
     $("project-name").value = "";
     $("project-root").value = "";
@@ -482,7 +495,7 @@ window.createJoeConversations = function createJoeConversations({
 
   function openProject(project) {
     state.editingProjectId = project.id;
-    $("project-dialog-title").textContent = "Modifier le sous-projet";
+    $("project-dialog-title").textContent = "Modifier le projet";
     $("save-project").textContent = "Enregistrer";
     $("project-name").value = project.name;
     $("project-root").value = project.workspace_root || "";

@@ -267,7 +267,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             return self._json(
                 self.server.manager.conversations.create_project(
-                    str(payload.get("name", "Nouveau sous-projet"))
+                    str(payload.get("name", "Nouveau projet"))
                 ),
                 HTTPStatus.CREATED,
             )
