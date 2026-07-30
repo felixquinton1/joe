@@ -720,6 +720,12 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 .tasks-head small, .task-empty { color: var(--muted); font-size: 8.5px; }
 .tasks-head .select-menu { width: 88px; }
 .tasks-head .select-menu-trigger { min-height: 24px; padding: 3px 7px; font-size: 8px; }
+.tasks-head .select-menu-options {
+  right: 0;
+  left: auto;
+  width: max(100%, 132px);
+  min-width: 0;
+}
 .task-list {
   max-height: min(31vh, 270px);
   display: grid;
