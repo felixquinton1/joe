@@ -109,6 +109,14 @@ LARGE_IMPLEMENTATION_PHRASES = {
     "gros travail", "implémentation complète", "implementation complete",
     "de bout en bout", "plusieurs fichiers", "refonte", "refactor complet",
 }
+# « go » ne peut pas être cherché en sous-chaîne : il apparaît dans
+# « algorithme », « catégorie », « ergonomie », « négociation », « Django »…
+# On ne le reconnaît que comme demande entière, ponctuation et politesses
+# usuelles admises.
+GO_CONTINUATION_FILLERS = {
+    "ok", "okay", "oui", "allez", "allez-y", "stp", "svp", "please",
+    "merci", "go",
+}
 EXTERNAL_RESEARCH_PHRASES = {
     "compare", "comparaison", "comparer", "outils similaires", "produits similaires",
     "sites existants", "solutions existantes", "benchmark", "état des sources",
@@ -170,6 +178,12 @@ def _routing_text(text: str) -> str:
     return " ".join(kept) or text
 
 
+def _is_go_continuation(text: str) -> bool:
+    """Recognize a bare « go » request, punctuation and fillers allowed."""
+    words = re.findall(r"[\w'’-]+", text.casefold())
+    return bool(words) and "go" in words and set(words) <= GO_CONTINUATION_FILLERS
+
+
 def _intent_text(text: str) -> tuple[str, bool]:
     actionable = text
     read_only = False
@@ -224,7 +238,7 @@ class Router:
             if (
                 intent_words & MODIFY_WORDS
                 or any(phrase in intent_text.lower() for phrase in MODIFY_PHRASES)
-                or intent_text.strip().lower() == "go"
+                or _is_go_continuation(intent_text)
                 or feature_request
                 or defect_report
             )

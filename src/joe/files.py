@@ -88,23 +88,34 @@ class FileLibrary:
                 and item.get("project_id") == project_id
             ]
 
-    def get(self, item_id: str) -> dict[str, Any] | None:
+    def get(
+        self,
+        item_id: str,
+        project_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Return one attachment, scoped to its project when one is given."""
         with self.lock:
             item = next(
                 (
                     item
                     for item in self._read()
                     if item.get("id") == item_id
+                    and (project_id is None or item.get("project_id") == project_id)
                 ),
                 None,
             )
             return dict(item) if item else None
 
-    def delete(self, item_id: str) -> bool:
+    def delete(self, item_id: str, project_id: str | None = None) -> bool:
         with self.lock:
             items = self._read()
             item = next(
-                (item for item in items if item.get("id") == item_id),
+                (
+                    item
+                    for item in items
+                    if item.get("id") == item_id
+                    and (project_id is None or item.get("project_id") == project_id)
+                ),
                 None,
             )
             if not item:

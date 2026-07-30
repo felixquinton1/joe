@@ -99,7 +99,7 @@ export class JoeClient {
     conversationId: string,
     request: string,
     executionMode?: "read-only",
-    fullAccessApproved = false
+    approvalId?: string
   ): Promise<string> {
     const payload: Record<string, string | boolean> = {
       conversation_id: conversationId,
@@ -108,8 +108,10 @@ export class JoeClient {
     if (executionMode) {
       payload.execution_mode = executionMode;
     }
-    if (fullAccessApproved) {
-      payload.full_access_approved = true;
+    // Un accès complet ne s'obtient qu'avec une approbation validée côté
+    // serveur : aucun drapeau posé par le client ne vaut autorisation.
+    if (approvalId) {
+      payload.approval_id = approvalId;
     }
     const result = await this.request<{ run_id: string }>(
       "POST",

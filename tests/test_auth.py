@@ -54,7 +54,8 @@ def test_capability_matrix_is_centralized():
     assert required_role("POST", "/api/projects") == "maintainer"
     assert required_role("POST", "/api/runs/id/reject") == "maintainer"
     assert required_role("POST", "/api/auth/rotate") == "maintainer"
-    assert required_role("GET", "/api/projects") == "maintainer"
+    # Lire les projets reste accessible : Joe Web en a besoin pour se rendre.
+    assert required_role("GET", "/api/projects") == "viewer"
     assert required_role("PATCH", "/api/approvals/id") == "maintainer"
     assert required_role("GET", "/api/approvals") == "viewer"
 
@@ -241,6 +242,158 @@ def test_operator_cannot_approve_a_project_default_full_access(tmp_path):
         assert status == 403
         assert "maintainer" in payload["error"]
         assert not server.manager.conversations.get(conversation["id"])["messages"]
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_full_access_flag_in_the_body_never_authorizes_a_run(tmp_path):
+    """Seule une approbation durable et validée autorise un accès complet."""
+    server, thread = start_server(tmp_path, "maintainer")
+    try:
+        project = server.manager.conversations.create_project("Pilote")
+        server.manager.conversations.update_project(
+            project["id"],
+            {"default_execution_mode": "danger-full-access"},
+        )
+        conversation = server.manager.conversations.create(project["id"])
+        body = {
+            "conversation_id": conversation["id"],
+            "request": "Corrige le bug",
+            "full_access_approved": True,
+        }
+
+        status, payload, _ = request(
+            server, "POST", "/api/runs", body, token="test-token"
+        )
+
+        assert status == 428
+        assert payload["approval"] == "full-access"
+        approval_id = payload["approval_id"]
+        pending = server.manager.approvals.get(approval_id)
+        assert pending["status"] == "pending"
+        assert "full_access_approved" not in pending["payload"]
+
+        # Une approbation encore pending ne vaut pas autorisation.
+        status, _, _ = request(
+            server,
+            "POST",
+            "/api/runs",
+            {**body, "approval_id": approval_id},
+            token="test-token",
+        )
+        assert status == 428
+
+        server.manager.approvals.decide(approval_id, "approved")
+        status, _, _ = request(
+            server,
+            "POST",
+            "/api/runs",
+            {**body, "approval_id": approval_id},
+            token="test-token",
+        )
+        assert status == 202
+        assert server.manager.approvals.get(approval_id)["status"] == "consumed"
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_a_consumed_approval_cannot_be_replayed(tmp_path):
+    server, thread = start_server(tmp_path, "maintainer")
+    try:
+        project = server.manager.conversations.create_project("Pilote")
+        server.manager.conversations.update_project(
+            project["id"],
+            {"default_execution_mode": "danger-full-access"},
+        )
+        conversation = server.manager.conversations.create(project["id"])
+        approval = server.manager.approvals.create(
+            "full-access",
+            conversation["id"],
+            project["id"],
+            {"request": "Corrige le bug"},
+            "test",
+        )
+        server.manager.approvals.decide(approval["id"], "approved")
+        assert server.manager.approvals.consume(
+            approval["id"], conversation["id"], "Corrige le bug"
+        )
+
+        status, payload, _ = request(
+            server,
+            "POST",
+            "/api/runs",
+            {
+                "conversation_id": conversation["id"],
+                "request": "Corrige le bug",
+                "approval_id": approval["id"],
+            },
+            token="test-token",
+        )
+
+        assert status == 428
+        assert payload["approval_id"] != approval["id"]
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_reading_projects_stays_available_to_a_viewer(tmp_path):
+    """Joe Web a besoin de la liste des projets pour se rendre."""
+    assert required_role("GET", "/api/projects") == "viewer"
+    assert required_role("GET", "/api/projects/abc") == "viewer"
+    assert required_role("POST", "/api/projects") == "maintainer"
+    assert required_role("PATCH", "/api/projects/abc") == "maintainer"
+
+    for role in ("viewer", "operator", "maintainer"):
+        server, thread = start_server(tmp_path / role, role)
+        try:
+            status, payload, _ = request(
+                server, "GET", "/api/projects", token="test-token"
+            )
+            assert status == 200
+            assert isinstance(payload, list)
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+
+
+def test_a_viewer_can_acknowledge_a_completion_but_not_edit(tmp_path):
+    server, thread = start_server(tmp_path, "viewer")
+    try:
+        conversation = server.manager.conversations.create(None)
+        server.manager.conversations.append_message(
+            conversation["id"], "assistant", "fini"
+        )
+        assert server.manager.conversations.get(
+            conversation["id"]
+        )["unread_completion"] is True
+
+        status, _, _ = request(
+            server,
+            "PATCH",
+            f"/api/conversations/{conversation['id']}",
+            {"unread_completion": False},
+            token="test-token",
+        )
+        assert status == 200
+        assert server.manager.conversations.get(
+            conversation["id"]
+        )["unread_completion"] is False
+
+        status, payload, _ = request(
+            server,
+            "PATCH",
+            f"/api/conversations/{conversation['id']}",
+            {"title": "Renommée"},
+            token="test-token",
+        )
+        assert status == 403
+        assert "operator" in payload["error"]
+        assert server.manager.conversations.get(
+            conversation["id"]
+        )["title"] != "Renommée"
     finally:
         server.shutdown()
         thread.join(timeout=2)

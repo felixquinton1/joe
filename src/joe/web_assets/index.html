@@ -62,7 +62,7 @@
               <summary>Outils</summary>
               <div class="tool-panel">
                 <label class="check-label"><input id="tool-web-access" type="checkbox" checked> Recherche Web</label>
-                <small>Disponible par défaut. Décoche pour travailler hors ligne dans cette conversation.</small>
+                <small id="tool-web-access-help">Disponible par défaut. Pour l’instant, ce contrôle est effectif uniquement sur Codex.</small>
                 <div class="tool-panel-head"><strong>Fichiers du projet</strong><button id="refresh-files" type="button">Actualiser</button></div>
                 <div id="file-library" class="file-library"><small>Aucun fichier joint.</small></div>
               </div>
@@ -139,7 +139,7 @@
         <summary><span>Options avancées</span><small>Accès réseau et intégrations distantes</small></summary>
         <div class="dialog-advanced-content">
           <label class="check-label"><input id="project-remote-access" type="checkbox" checked> Autoriser la recherche Web et l’accès réseau</label>
-          <small class="setting-help">Activé par défaut. Décoche pour bloquer explicitement tout accès réseau dans ce projet.</small>
+          <small class="setting-help" id="project-remote-access-help">Activé par défaut. Pour l’instant, ce contrôle est effectif uniquement sur Codex.</small>
         </div>
       </details>
       <div class="dialog-actions"><button id="cancel-project" type="button">Annuler</button><button id="save-project" value="default">Enregistrer</button></div>

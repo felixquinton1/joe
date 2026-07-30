@@ -131,7 +131,12 @@ class WorktreeManager:
                 "Relance l’opération."
             )
         commit = self._value("rev-parse", "HEAD")
-        self.remove(worktree, delete_branch=True)
+        # La fusion est acquise : un échec de nettoyage ne doit pas faire
+        # rapporter un conflit pour une intégration qui a bien eu lieu.
+        try:
+            self.remove(worktree, delete_branch=True)
+        except WorktreeError:
+            pass
         return commit
 
     def _synchronize(

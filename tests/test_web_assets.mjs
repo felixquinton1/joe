@@ -67,3 +67,23 @@ test("selects a supported interface language and falls back to French", () => {
   assert.equal(translate("fr", "send"), "Envoyer");
   assert.match(translate("en", "slogan"), /cool kids/);
 });
+
+test("turns an API 403 into an actionable profile message", async () => {
+  // Sans cela, le corps d'erreur JSON est consommé comme une donnée valide
+  // et casse le rendu bien plus loin (« projects is not iterable »).
+  await assert.rejects(
+    () => authenticatedFetch("/api/projects", undefined, async () => ({
+      status: 403,
+      ok: false,
+    })),
+    /profile maintainer/
+  );
+});
+
+test("lets a successful response through untouched", async () => {
+  const expected = { status: 200, ok: true };
+  assert.equal(
+    await authenticatedFetch("/api/projects", undefined, async () => expected),
+    expected
+  );
+});

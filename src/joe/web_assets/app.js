@@ -1,4 +1,4 @@
-const APP_VERSION = "0.28.1";
+const APP_VERSION = "0.28.2";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -51,11 +51,30 @@ function applyLanguage(value) {
 async function loadStatus() {
   const status = await fetch("/api/status").then(response => response.json());
   updateProviderMenu(status.provider_catalog || status.providers || []);
+  annotateNetworkControl(status.network_control_providers);
   $("version").textContent = status.version || "ancienne version";
   if (status.version !== APP_VERSION) {
     const warning = $("restart-warning");
     warning.textContent = `Le serveur Joe ${status.version || "actuel"} utilise encore un ancien backend. Arrête-le avec Ctrl+C, relance joe, puis recharge cette page.`;
     warning.classList.remove("hidden");
+  }
+}
+
+function annotateNetworkControl(controlled) {
+  // Le réglage ne contraint que les fournisseurs qui exposent réellement un
+  // commutateur réseau : on le dit, plutôt que de laisser croire à une
+  // garantie globale.
+  if (!Array.isArray(controlled)) return;
+  const scope = controlled.length
+    ? `Pour l’instant, ce contrôle est effectif uniquement sur ${controlled.map(capitalize).join(", ")} : les autres CLI n’exposent pas de réglage réseau.`
+    : "Aucune CLI installée n’expose de réglage réseau : ce choix reste indicatif.";
+  for (const id of ["tool-web-access-help", "project-remote-access-help"]) {
+    const target = $(id);
+    if (!target) continue;
+    const prefix = id === "tool-web-access-help"
+      ? "Disponible par défaut."
+      : "Activé par défaut.";
+    target.textContent = `${prefix} ${scope}`;
   }
 }
 
@@ -219,6 +238,15 @@ function taskAction(label, action, kind = "") {
   return button;
 }
 
+window.addEventListener("joe:open-task", async event => {
+  const taskId = event.detail?.taskId;
+  const task = knownTasks.find(item => item.id === taskId);
+  if (task) return showTaskDiff(task);
+  await loadTasks();
+  const refreshed = knownTasks.find(item => item.id === taskId);
+  if (refreshed) await showTaskDiff(refreshed);
+});
+
 async function showTaskDiff(task) {
   const response = await joeFetch(`/api/tasks/${encodeURIComponent(task.id)}/diff`);
   const report = await response.json();
@@ -310,9 +338,10 @@ function renderFileLibrary() {
     remove.textContent = "×";
     remove.title = "Supprimer ce fichier";
     remove.onclick = async () => {
-      const response = await joeFetch(`/api/files/${encodeURIComponent(file.id)}`, {
-        method: "DELETE"
-      });
+      const response = await joeFetch(
+        `/api/files/${encodeURIComponent(file.id)}?project=${encodeURIComponent(file.project_id)}`,
+        { method: "DELETE" }
+      );
       if (response.ok) await loadFiles();
     };
     const download = document.createElement("button");
@@ -321,7 +350,7 @@ function renderFileLibrary() {
     download.textContent = "↗";
     download.title = "Ouvrir ou télécharger";
     download.onclick = () => window.open(
-      `/api/files/${encodeURIComponent(file.id)}/download`,
+      `/api/files/${encodeURIComponent(file.id)}/download?project=${encodeURIComponent(file.project_id)}`,
       "_blank",
       "noopener"
     );
@@ -1565,7 +1594,12 @@ $("cancel-project").onclick = () => {
 $("save-project").onclick = saveProject;
 $("confirm-delete-conversation").onclick = deleteConversation;
 $("stop").onclick = cancelActiveRun;
-$("refresh-usage").onclick = () => loadUsage(true);
+$("refresh-usage").onclick = () => loadUsage(true).catch(error => {
+  // L'actualisation active exige le profil maintainer : sans ce garde-fou,
+  // un refus produit une promesse rejetée non traitée.
+  $("usage").innerHTML =
+    `<span class="usage-loading">${escapeHtml(error.message)}</span>`;
+});
 $("open-preferences").onclick = () => openPreferences().catch(
   error => window.alert(error.message)
 );
@@ -1685,15 +1719,23 @@ $("toggle-activity").onclick = () => toggleMobilePanel(
   "toggle-activity"
 );
 
+function reportStartupFailure(error) {
+  // Un échec de démarrage doit être visible dans l'interface : une trace
+  // console laisse l'utilisateur devant une page vide sans explication.
+  console.error("Joe initialization failed", error);
+  const banner = $("restart-warning");
+  if (!banner) return;
+  banner.textContent = `Joe n’a pas pu charger cette interface : ${error.message}`;
+  banner.classList.remove("hidden");
+}
+
 window.JoeAuth.pairBrowser()
   .then(() => {
     Promise.all([loadStatus(), loadActiveRuns(), loadTasks()])
       .then(() => loadConversations())
       .then(connectActiveRuns)
       .then(loadDoctor)
-      .catch(error => {
-        console.error("Joe initialization failed", error);
-      });
+      .catch(reportStartupFailure);
 
     loadCapabilities().catch(() => {
       state.capabilities = {};

@@ -70,6 +70,16 @@ saisie directement ne reçoit jamais le secret : relance `joe` pour appairer un
 nouveau navigateur. Le secret reste hors du projet et ne doit pas être copié
 dans un dépôt.
 
+Sous `--profile viewer` ou `--profile operator`, l’interface reste utilisable :
+la lecture des projets est autorisée, mais les mutations de projet et
+l’actualisation active des quotas répondent `403` avec un message explicite.
+
+Le réglage « Accès Web », par projet ou par conversation, ne contraint que les
+fournisseurs qui exposent un commutateur réseau — aujourd’hui Codex seul. Les
+CLI Claude, Gemini et Copilot n’offrent aucune option équivalente : le décocher
+ne leur retire pas l’accès réseau. L’interface affiche cette portée réelle sous
+la case, à partir du champ `network_control_providers` de `GET /api/status`.
+
 Pour réappairer un navigateur après suppression des cookies :
 
 ```bash

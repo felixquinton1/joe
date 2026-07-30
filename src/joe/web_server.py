@@ -15,6 +15,7 @@ from .doctor import doctor_report
 from .files import MAX_FILE_BYTES
 from .http_utils import RequestBodyError, read_json_body, validate_bind
 from .provider_registry import get_provider_catalog, get_provider_names
+from .providers import NETWORK_CONTROLLED_PROVIDERS
 from .skills import import_skill, list_global_skills, list_skills, promote_skill
 from .web_runs import ActiveConversationError, RunManager, _existing_directory
 from .worktrees import WorktreeError
@@ -29,7 +30,11 @@ _ASSETS = {
     "/app_conversations.js": ("app_conversations.js", "text/javascript; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
 }
-API_VERSION = "1.1"
+API_VERSION = "1.2"
+
+# Champs qu'un profil viewer peut écrire sur une conversation : acquitter un
+# état lu ne constitue pas une mutation de contenu.
+ACQUITTAL_FIELDS = {"unread_completion"}
 
 
 class JoeServer(ThreadingHTTPServer):
@@ -64,6 +69,9 @@ class Handler(BaseHTTPRequestHandler):
                     "modes": ["fast", "review", "consensus"],
                     "auth_required": self.server.auth.enabled,
                     "profile": self.server.auth.role,
+                    "network_control_providers": list(
+                        NETWORK_CONTROLLED_PROVIDERS
+                    ),
                 }
             )
         force_usage = path == "/api/usage" and parse_qs(parsed.query).get(
@@ -82,7 +90,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(self.server.manager.files.list(project_id))
         if path.startswith("/api/files/") and path.endswith("/download"):
             item_id = unquote(path.split("/")[-2])
-            item = self.server.manager.files.get(item_id)
+            item = self.server.manager.files.get(
+                item_id,
+                parse_qs(parsed.query).get("project", ["free"])[0],
+            )
             if not item:
                 return self.send_error(HTTPStatus.NOT_FOUND)
             return self._file(item)
@@ -317,7 +328,6 @@ class Handler(BaseHTTPRequestHandler):
                 or not all(isinstance(item, str) for item in attachments)
             ):
                 raise ValueError("invalid attachments")
-            full_access_approved = payload.get("full_access_approved") is True
             approval_id = str(payload.get("approval_id", "")).strip()
             if agent is not None and agent not in set(get_provider_names()):
                 raise ValueError("invalid agent")
@@ -337,13 +347,13 @@ class Handler(BaseHTTPRequestHandler):
                 {"error": "Le profil maintainer est requis pour cet accès."},
                 HTTPStatus.FORBIDDEN,
             )
-        approved = full_access_approved or (
-            bool(approval_id)
-            and self.server.manager.approvals.allows(
-                approval_id,
-                conversation_id,
-                request,
-            )
+        # Un accès complet ne peut être autorisé que par une approbation
+        # durable, explicitement validée et consommée une seule fois. Aucun
+        # champ du corps de la requête ne vaut autorisation.
+        approved = bool(approval_id) and self.server.manager.approvals.allows(
+            approval_id,
+            conversation_id,
+            request,
         )
         if needs_full_access and not approved:
             conversation = self.server.manager.conversations.get(
@@ -398,7 +408,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_PATCH(self) -> None:
         path = urlparse(self.path).path
-        if not self._authorize(required_role("PATCH", path)):
+        required = required_role("PATCH", path)
+        # Acquitter le badge « Terminée » relève de la lecture : on admet
+        # viewer, puis on revalide au niveau des champs une fois le corps lu.
+        if path.startswith("/api/conversations/"):
+            required = "viewer"
+        if not self._authorize(required):
             return
         if path == "/api/preferences":
             payload = self._read_payload()
@@ -432,6 +447,9 @@ class Handler(BaseHTTPRequestHandler):
         payload = self._read_payload()
         if payload is None:
             return
+        if is_conversation and not set(payload) <= ACQUITTAL_FIELDS:
+            if not self._authorize(required_role("PATCH", path)):
+                return
         identifier = unquote(path.rsplit("/", 1)[1])
         item = (
             self.server.manager.conversations.update(identifier, payload)
@@ -459,7 +477,10 @@ class Handler(BaseHTTPRequestHandler):
             )
         if path.startswith("/api/files/"):
             item_id = unquote(path.rsplit("/", 1)[1])
-            deleted = self.server.manager.files.delete(item_id)
+            deleted = self.server.manager.files.delete(
+                item_id,
+                parse_qs(urlparse(self.path).query).get("project", ["free"])[0],
+            )
             return self._json(
                 {"deleted": deleted},
                 HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND,

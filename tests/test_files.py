@@ -55,3 +55,17 @@ def test_rejects_invalid_or_oversized_payload(tmp_path):
             "application/octet-stream",
             base64.b64encode(b"x" * (MAX_FILE_BYTES + 1)).decode(),
         )
+
+
+def test_download_and_delete_stay_scoped_to_their_project(tmp_path):
+    """Un identifiant seul ne doit pas suffire à sortir un fichier d'un projet."""
+    library = FileLibrary(tmp_path)
+    library.ensure()
+    item = library.add("projet-a", "notes.txt", "text/plain", base64.b64encode(b"x").decode())
+
+    assert library.get(item["id"], "projet-a") is not None
+    assert library.get(item["id"], "projet-b") is None
+    assert library.delete(item["id"], "projet-b") is False
+    assert library.get(item["id"], "projet-a") is not None
+    assert library.delete(item["id"], "projet-a") is True
+    assert library.get(item["id"], "projet-a") is None

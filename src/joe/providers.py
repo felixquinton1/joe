@@ -30,6 +30,15 @@ WORKSPACE_WRITE_MODES = {
 PROJECT_FULL_ACCESS_MODES = {"danger-full-access"}
 RESTRICTED_MODES = {"dontAsk"}
 
+# Fournisseurs dont la commande varie réellement selon l'accès réseau accordé.
+# Seul Codex expose un commutateur d'egress
+# (`sandbox_workspace_write.network_access`). Les CLI Claude, Gemini et Copilot
+# n'offrent aucune option équivalente : le réglage « Accès Web » ne les
+# contraint pas, et l'interface doit le dire au lieu de laisser croire à une
+# garantie globale. Voir tests/test_providers.py::
+# test_network_control_declaration_matches_commands.
+NETWORK_CONTROLLED_PROVIDERS = ("codex",)
+
 
 def _access_level(execution_mode: str | None, modifying: bool) -> str:
     if execution_mode in READ_ONLY_MODES:

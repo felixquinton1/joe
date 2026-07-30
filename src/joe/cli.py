@@ -28,7 +28,8 @@ def parser() -> argparse.ArgumentParser:
             "Interfaces : `joe <demande>` pour une commande unique, "
             "`joe cli` ou `joe chat` pour le terminal interactif, "
             "`joe web` pour l’interface locale. Commandes utiles : "
-            "`doctor`, `sync`, `restart`, `stop` et `kill`."
+            "`url` (réouvrir Joe Web appairé), `auth rotate` (renouveler le "
+            "secret local), `doctor`, `sync`, `restart`, `stop` et `kill`."
         ),
     )
     result.add_argument("request", nargs="*", help="natural-language request")

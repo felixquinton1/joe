@@ -1,6 +1,6 @@
 # Joe HTTP/SSE API — MVP contract
 
-> Statut : validé. Contrat client courant : `api_version: "1.1"`.
+> Statut : validé. Contrat client courant : `api_version: "1.2"`.
 
 ## Portée et compatibilité
 
@@ -19,6 +19,18 @@ VS Code. Il ne constitue pas une API distante ou multi-utilisateur.
 
 Joe 1.1 authentifie l’API locale et impose un profil de capacités. Un bind non
 local reste refusé sans option explicite.
+
+Joe 1.2 resserre deux points, sans ajout de route :
+
+- `full_access_approved` dans le corps de `POST /api/runs` **n’autorise plus
+  rien**. Un accès complet exige un `approval_id` durable au statut `approved`,
+  consommé une seule fois. Le champ est ignoré s’il est encore envoyé : un
+  client qui s’en servait reçoit désormais `428` avec l’`approval_id` à faire
+  valider. Aucun client 1.x publié ne dépendait de ce champ.
+- Le téléchargement et la suppression d’une pièce jointe sont cloisonnés par
+  projet et attendent `?project={id}`. Un identifiant seul ne suffit plus à
+  sortir un fichier de son projet : la réponse est `404` en cas de
+  discordance.
 
 ## Matrice des endpoints MVP
 
@@ -71,15 +83,22 @@ ne font pas partie du premier client VS Code en lecture seule.
 ```json
 {
   "version": "0.x.y",
-  "api_version": "1.1",
+  "api_version": "1.2",
   "project": "/chemin/du/projet",
   "providers": ["codex", "claude", "gemini", "copilot"],
   "provider_catalog": [{"id": "codex", "label": "Codex"}],
-  "modes": ["fast", "review", "consensus"]
+  "modes": ["fast", "review", "consensus"],
+  "network_control_providers": ["codex"]
 }
 ```
 
 Le client vérifie la version majeure de `api_version` avant toute mutation.
+
+`network_control_providers` énumère les fournisseurs dont la commande varie
+réellement selon le réglage « Accès Web » du projet ou de la conversation. Les
+autres CLI n’exposent aucun commutateur d’egress : le réglage ne les contraint
+pas, et un client doit le dire à l’utilisateur plutôt que de présenter une
+garantie globale.
 
 ## Authentification et rôles
 
@@ -95,16 +114,25 @@ permissions `0600`; il n’est jamais placé dans le projet ou dans Git.
 
 | Profil | Capacités |
 |---|---|
-| `viewer` | quotas en cache, conversations, historique et événements |
+| `viewer` | quotas en cache, conversations, historique, événements, **lecture** des projets |
 | `operator` | capacités `viewer`, conversations et runs ordinaires |
-| `maintainer` | capacités `operator`, projets, rejet Git et accès projet complet |
+| `maintainer` | capacités `operator`, mutation des projets, rejet Git et accès projet complet |
 
 Une requête non authentifiée reçoit `401`; un jeton valide mais insuffisant
 reçoit `403`. La confirmation ponctuelle `428` d’un accès complet reste requise
 pour un `maintainer`.
 
-L’actualisation active des quotas (`GET /api/usage?force=1`) et la lecture des
-configurations de projets exigent également `maintainer`.
+`GET /api/projects` est accessible dès `viewer` : Joe Web en a besoin pour se
+rendre, et le restreindre rendait l’interface inutilisable sous
+`--profile viewer` ou `--profile operator`. Toute **mutation** de projet reste
+réservée à `maintainer`.
+
+L’actualisation active des quotas (`GET /api/usage?force=1`) exige
+`maintainer`, parce qu’elle lance un sous-processus fournisseur.
+
+Un `viewer` peut écrire le seul champ `unread_completion` d’une conversation :
+acquitter un état lu n’est pas une mutation de contenu. Tout autre champ d’un
+`PATCH /api/conversations/{id}` exige `operator` et répond `403` sinon.
 
 `POST /api/auth/rotate`, réservé à `maintainer`, remplace atomiquement le secret
 du serveur et révoque immédiatement cookies et Bearers antérieurs.
@@ -133,6 +161,14 @@ Le mode historique `danger-full-access` demande une confirmation HTTP 428, mais
 ne désactive pas le sandbox du fournisseur. Une fois confirmé, il donne un
 accès complet limité à la racine du projet de la conversation et aux racines
 additionnelles explicitement configurées pour ce même projet.
+
+La confirmation passe obligatoirement par une approbation durable. Le `428`
+renvoie `{"approval": "full-access", "approval_id": "…"}` ; le client fait
+valider cette approbation (`PATCH /api/approvals/{id}` avec
+`{"decision": "approved"}`, réservé à `maintainer`), puis relance le même
+`request` en joignant `approval_id`. L’approbation est alors consommée et ne
+peut pas être rejouée : un second lancement identique produit un nouveau `428`.
+Aucun champ du corps de la requête ne peut se substituer à ce cycle.
 
 Deux lancements simultanés pour une même conversation produisent exactement un
 HTTP 202 et un HTTP 409. Le rejet ne persiste aucun second message utilisateur.

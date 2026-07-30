@@ -277,3 +277,25 @@ def test_external_comparison_is_consensus_and_marked_for_research():
     route = Router().route("Compare Maestro, Crewly and Compozy with their sites")
     assert route.mode is Mode.CONSENSUS
     assert "external-research" in route.reason
+
+
+def test_go_is_recognized_with_punctuation_and_fillers():
+    for request in (
+        "go", "Go !", "GO", "go.", "go stp", "ok go", "allez go", "Go, merci",
+    ):
+        assert Router().route(request).intent is Intent.MODIFY, request
+
+
+def test_go_never_matches_as_a_substring():
+    """« go » apparaît dans des mots courants : catégorie, algorithme, logo…"""
+    for request in (
+        "Dans quelle catégorie ranger ce fichier ?",
+        "Explique-moi l’algorithme utilisé",
+        "Quelle est l’ergonomie de la page ?",
+        "Où est configuré Django ?",
+        "Montre-moi le logo",
+        "Peux-tu résumer la négociation du protocole ?",
+        "explique go",
+        "go voir le logo",
+    ):
+        assert Router().route(request).intent is not Intent.MODIFY, request

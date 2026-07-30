@@ -2,7 +2,7 @@
   "name": "joe-control-room",
   "displayName": "Joe",
   "description": "Start, open, restart and stop the local Joe Web interface.",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "publisher": "felixquinton",
   "license": "UNLICENSED",
   "repository": {

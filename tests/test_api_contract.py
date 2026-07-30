@@ -42,7 +42,7 @@ def test_contract_exposes_independent_api_version(tmp_path):
 
         assert response.status == 200
         assert payload["version"] == __version__
-        assert payload["api_version"] == API_VERSION == "1.1"
+        assert payload["api_version"] == API_VERSION == "1.2"
         assert isinstance(payload["providers"], list)
         assert isinstance(payload["modes"], list)
     finally:
@@ -159,11 +159,29 @@ def test_contract_requires_confirmation_for_full_access(tmp_path):
 
         assert status == 428
         assert payload["approval"] == "full-access"
-        assert payload["approval_id"]
+        approval_id = payload["approval_id"]
+        assert approval_id
         assert not server.manager.conversations.get(
             conversation["id"]
         )["messages"]
 
+        # Un drapeau posé par le client ne vaut jamais autorisation : seule une
+        # approbation durable et validée débloque le run.
+        status, _ = json_request(
+            connection,
+            "POST",
+            "/api/runs",
+            {
+                "conversation_id": conversation["id"],
+                "request": "Implémente et teste cette fonctionnalité",
+                "agent": "claude",
+                "mode": "fast",
+                "full_access_approved": True,
+            },
+        )
+        assert status == 428
+
+        server.manager.approvals.decide(approval_id, "approved")
         server.manager.start = lambda *args, **kwargs: SimpleNamespace(
             run_id="approved"
         )
@@ -176,7 +194,7 @@ def test_contract_requires_confirmation_for_full_access(tmp_path):
                 "request": "Implémente et teste cette fonctionnalité",
                 "agent": "claude",
                 "mode": "fast",
-                "full_access_approved": True,
+                "approval_id": approval_id,
             },
         )
         assert status == 202

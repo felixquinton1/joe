@@ -1023,12 +1023,18 @@ class RunManager:
                     )
                 ),
             )
+            leftover = self._task_worktree(task).path.exists()
             self.tasks.update(
                 task_id,
                 status="integrated",
                 integrated_commit=commit,
                 workspace=None,
-                error=None,
+                error=(
+                    "Intégration réussie ; le worktree n’a pas pu être "
+                    "supprimé et reste à nettoyer manuellement."
+                    if leftover
+                    else None
+                ),
             )
         except Exception as error:
             self.tasks.update(

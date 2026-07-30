@@ -46,11 +46,18 @@ window.createJoeConversations = function createJoeConversations({
         <small>${escapeHtml(result.type || "conversation")}</small>
         <strong>${escapeHtml(result.title)}</strong>
         <span>${escapeHtml(result.snippet || "")}</span>`;
-      if (result.conversation_id) {
+      if (result.task_id) {
+        // Un résultat de type tâche doit ouvrir la tâche, pas seulement la
+        // conversation qui la porte.
+        button.onclick = () => window.dispatchEvent(new CustomEvent(
+          "joe:open-task",
+          { detail: { taskId: result.task_id } }
+        ));
+      } else if (result.conversation_id) {
         button.onclick = () => selectConversation(result.conversation_id);
       } else if (result.file_id) {
         button.onclick = () => window.open(
-          `/api/files/${encodeURIComponent(result.file_id)}/download`,
+          `/api/files/${encodeURIComponent(result.file_id)}/download?project=${encodeURIComponent(result.project_id || "free")}`,
           "_blank",
           "noopener"
         );

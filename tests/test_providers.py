@@ -366,3 +366,25 @@ def test_gemini_stream_fragments_are_reassembled_without_broken_words():
     assert _final_output("gemini", f"{first}\n{second}\n") == (
         "Voici la synthèse.\n\n## Résultat"
     )
+
+
+def test_network_control_declaration_matches_commands():
+    """La portée déclarée du réglage réseau doit refléter les commandes réelles.
+
+    Ce test échoue le jour où une CLI gagne (ou perd) un commutateur réseau
+    sans que la déclaration exposée à l'interface soit mise à jour.
+    """
+    from joe.providers import NETWORK_CONTROLLED_PROVIDERS
+
+    effective = []
+    for name in ("codex", "claude", "gemini", "copilot"):
+        blocked = Provider(name, name).command(
+            "p", Path("/tmp"), Intent.MODIFY, execution_mode="workspace-write"
+        )
+        allowed = Provider(name, name, remote_access=True).command(
+            "p", Path("/tmp"), Intent.MODIFY, execution_mode="workspace-write"
+        )
+        if blocked != allowed:
+            effective.append(name)
+
+    assert tuple(effective) == NETWORK_CONTROLLED_PROVIDERS

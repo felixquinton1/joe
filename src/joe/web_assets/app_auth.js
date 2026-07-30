@@ -29,6 +29,14 @@
         "Session Joe non appairée. Lance `joe url` pour rouvrir l’interface."
       );
     }
+    if (response.status === 403) {
+      // Sans cela, le corps d'erreur JSON est consommé comme une donnée
+      // valide par les appelants et casse le rendu bien plus loin.
+      throw new Error(
+        "Le profil de ce serveur Joe n’autorise pas cette action. "
+        + "Relance Joe avec --profile maintainer si nécessaire."
+      );
+    }
     return response;
   }
 

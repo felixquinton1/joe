@@ -71,7 +71,10 @@ def required_role(method: str, path: str) -> str:
     if path == "/api/auth/rotate":
         return "maintainer"
     if path == "/api/projects" or path.startswith("/api/projects/"):
-        return "maintainer"
+        # Lire la liste des projets est nécessaire au rendu de Joe Web :
+        # la restreindre rendrait l'interface inutilisable en viewer/operator.
+        # Toute mutation de projet reste réservée à maintainer.
+        return "viewer" if method == "GET" else "maintainer"
     if path.startswith("/api/tasks/") and method != "GET":
         return "maintainer"
     if path.startswith("/api/approvals/") and method != "GET":

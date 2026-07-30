@@ -186,7 +186,7 @@ test("creates a conversation, starts a safe run, reads SSE and cancels", async t
   assert.equal(await client.cancelRun("run-one"), true);
 });
 
-test("marks a full-access retry as explicitly approved", async t => {
+test("carries a server-side approval id and never self-approves", async t => {
   const fixtureServer = await fixture({
     version: "0.22.0",
     api_version: "1.0",
@@ -200,10 +200,11 @@ test("marks a full-access retry as explicitly approved", async t => {
   const client = new JoeClient(`http://127.0.0.1:${address.port}`);
 
   assert.equal(
-    await client.startRun("one", "Teste le paquet", undefined, true),
+    await client.startRun("one", "Teste le paquet", undefined, "approval-42"),
     "run-one"
   );
-  assert.equal(startedPayload().full_access_approved, true);
+  assert.equal(startedPayload().approval_id, "approval-42");
+  assert.equal(startedPayload().full_access_approved, undefined);
 });
 
 test("keeps the HTTP status and server detail on an API conflict", async t => {

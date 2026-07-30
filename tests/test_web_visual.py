@@ -2,6 +2,7 @@ import shutil
 import struct
 import subprocess
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -40,10 +41,17 @@ def test_web_shell_renders_in_headless_chromium(tmp_path, size):
             timeout=25,
             check=False,
         )
+        stderr = result.stderr.decode(errors="replace")
         if result.returncode != 0 and (
-            "snap-update-ns" in result.stderr.decode(errors="replace")
+            "snap-update-ns" in stderr or "outside of /home" in stderr
         ):
-            pytest.skip("Chromium snap cannot enter its mount namespace")
+            # Cause exacte : les navigateurs empaquetés en snap refusent un
+            # répertoire personnel hors /home. Rejouer ce smoke exige un compte
+            # dont le home est sous /home, ou un Chromium non-snap.
+            pytest.skip(
+                "Chromium est un snap et refuse un home hors /home "
+                f"({Path.home()}) : smoke visuel non exécutable sur ce compte"
+            )
         assert result.returncode == 0, result.stderr.decode(errors="replace")
         data = screenshot.read_bytes()
         assert data.startswith(b"\x89PNG\r\n\x1a\n")

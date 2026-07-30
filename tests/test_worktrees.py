@@ -106,3 +106,40 @@ def test_worktree_resolves_conflict_against_latest_main(tmp_path):
 
     assert seen == [(["value.txt"], 1)]
     assert target.read_text() == "main change\ntask change\n"
+
+
+def test_a_failed_cleanup_does_not_invalidate_a_successful_merge(tmp_path, monkeypatch):
+    """La fusion est acquise : un nettoyage raté ne doit pas signaler un conflit."""
+    from joe.worktrees import WorktreeError
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    (tmp_path / "README.md").write_text("base\n")
+    subprocess.run(["git", "add", "README.md"], cwd=tmp_path, check=True)
+    subprocess.run(
+        [
+            "git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
+            "commit", "-qm", "init",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+    manager = WorktreeManager(tmp_path)
+    worktree = manager.create("cleanupfail")
+    (worktree.path / "README.md").write_text("integrated\n")
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=worktree.path,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"], cwd=worktree.path, check=True
+    )
+
+    def refuse(*_args, **_kwargs):
+        raise WorktreeError("suppression impossible")
+
+    monkeypatch.setattr(WorktreeManager, "remove", refuse)
+    commit = manager.integrate(worktree, "test: integrate despite cleanup failure")
+
+    assert commit
+    assert (tmp_path / "README.md").read_text() == "integrated\n"
