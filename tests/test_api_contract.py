@@ -42,7 +42,7 @@ def test_contract_exposes_independent_api_version(tmp_path):
 
         assert response.status == 200
         assert payload["version"] == __version__
-        assert payload["api_version"] == API_VERSION == "1.2"
+        assert payload["api_version"] == API_VERSION == "1.3"
         assert isinstance(payload["providers"], list)
         assert isinstance(payload["modes"], list)
     finally:
@@ -373,6 +373,40 @@ def test_contract_cancels_an_active_run(tmp_path):
         assert status == 202
         assert cancelled == {"cancelled": True}
         assert run.cancel_event.is_set()
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_contract_creates_lists_and_cancels_scheduled_automation(tmp_path):
+    server, thread = start_server(tmp_path)
+    conversation = server.manager.conversations.create()
+    try:
+        connection = http.client.HTTPConnection(
+            "127.0.0.1", server.server_port, timeout=5
+        )
+        status, plan = json_request(
+            connection,
+            "POST",
+            "/api/automations",
+            {
+                "title": "Cette nuit",
+                "conversation_id": conversation["id"],
+                "steps": ["Coder", "Tester"],
+                "scheduled_for": time.time() + 3600,
+                "execution_mode": "workspace-write",
+            },
+        )
+        assert status == 201
+        status, plans = json_request(connection, "GET", "/api/automations")
+        assert status == 200
+        assert plans[0]["id"] == plan["id"]
+
+        status, cancelled = json_request(
+            connection, "POST", f"/api/automations/{plan['id']}/cancel", {}
+        )
+        assert status == 202
+        assert cancelled["status"] == "cancelled"
     finally:
         server.shutdown()
         thread.join(timeout=2)

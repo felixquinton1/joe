@@ -77,6 +77,8 @@ def required_role(method: str, path: str) -> str:
         return "viewer" if method == "GET" else "maintainer"
     if path.startswith("/api/tasks/") and method != "GET":
         return "maintainer"
+    if path.startswith("/api/automations") and method != "GET":
+        return "maintainer"
     if path.startswith("/api/approvals/") and method != "GET":
         return "maintainer"
     if path == "/api/preferences":

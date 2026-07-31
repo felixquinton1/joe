@@ -93,6 +93,21 @@ def test_projects_enable_quota_automation_by_default(tmp_path):
     assert disabled["quota_automation"] is False
 
 
+def test_project_can_reserve_a_quota_provider(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+    project = store.create_project("Night jobs")
+
+    updated = store.update_project(project["id"], {"quota_provider": "claude"})
+
+    assert updated["quota_provider"] == "claude"
+    assert store.update_project(project["id"], {"quota_provider": "invalid"})[
+        "quota_provider"
+    ] == ""
+
+
 def test_invalid_global_preferences_fall_back_to_automatic(tmp_path):
     root = tmp_path / ".agentflow"
     runs = root / "runs"

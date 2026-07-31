@@ -205,6 +205,7 @@ def admit_route(
     *,
     forced_agent: bool = False,
     forced_mode: bool = False,
+    wait_for_provider: bool = False,
     now: float | None = None,
 ) -> tuple[Route, dict[str, Any] | None]:
     """Select an affordable workflow without treating unknown quota as empty."""
@@ -224,6 +225,23 @@ def admit_route(
         for provider, (eligible, _, detail) in capacity.items()
         if eligible is False
     }
+    if wait_for_provider and capacity.get(route.primary, (None,))[0] is False:
+        retry_at = _next_quota_reset(
+            [by_provider[route.primary]] if route.primary in by_provider else [],
+            threshold=threshold,
+            now=timestamp,
+        )
+        return route, {
+            "level": "warning",
+            "message": (
+                f"{route.primary.capitalize()} est réservé pour ce projet, mais "
+                "sa réserve connue est insuffisante."
+            ),
+            "forced": False,
+            "blocked": True,
+            "retry_at": retry_at,
+            "reserved_provider": route.primary,
+        }
     if forced_mode:
         relevant = {
             name: detail

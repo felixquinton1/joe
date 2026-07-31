@@ -261,3 +261,24 @@ Fermer une interface cliente n’efface pas les conversations.
 
 Les conversations et journaux appartiennent au projet ciblé, jamais au paquet
 Python ni à l’extension.
+
+## Plans autonomes et quotas
+
+Le bouton horloge du panneau d’activité ouvre les **Plans autonomes**. Il
+permet de choisir une conversation, une heure de départ et une suite d’étapes
+simples (une par ligne). Joe exécute une seule étape à la fois, conserve son
+état après redémarrage et attend un reset de quota connu au lieu d’abandonner.
+
+La section **IA réservée** est un réglage du projet. En mode automatique, Joe
+équilibre les fournisseurs selon la tâche et les réserves connues. Si Claude,
+Codex, Gemini ou Copilot est réservé, Joe en fait l’agent principal des
+nouvelles demandes automatiques du projet et attend sa prochaine fenêtre
+connue lorsqu’elle est insuffisante. Les workflows REVIEW et CONSENSUS peuvent
+toujours appeler un autre agent pour la relecture. Un agent choisi explicitement
+dans une conversation reste un choix ponctuel et prioritaire.
+
+Un plan est volontairement borné à 24 étapes et 5 corrections par étape. Il
+s’arrête sur conflit Git, permission manquante ou validation humaine requise.
+L’accès complet n’est jamais accordé à un plan autonome. L’intégration des
+worktrees peut être automatique, mais commit et push restent régis par les
+réglages de livraison du projet.

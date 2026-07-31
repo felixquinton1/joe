@@ -79,6 +79,22 @@ def test_consensus_and_unknown_usage_are_not_rebalanced():
     assert balance_route(fast, [], now=10_000) == fast
 
 
+def test_reserved_provider_waits_for_its_own_reset():
+    route = Route(Intent.MODIFY, Mode.FAST, "claude", None, "reserved")
+
+    admitted, notice = admit_route(
+        route,
+        [status("claude", 2, 12_000), status("codex", 90, 200_000)],
+        wait_for_provider=True,
+        now=10_000,
+    )
+
+    assert admitted.primary == "claude"
+    assert notice["blocked"] is True
+    assert notice["retry_at"] == 12_000
+    assert notice["reserved_provider"] == "claude"
+
+
 def test_consensus_replaces_low_claude_with_gemini():
     route = Route(Intent.ANALYZE, Mode.CONSENSUS, "codex")
     gemini = {

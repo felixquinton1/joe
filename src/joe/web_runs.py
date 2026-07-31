@@ -17,6 +17,7 @@ from .capabilities import (
     select_model_tier,
 )
 from .approvals import ApprovalStore
+from .automations import AutomationStore
 from .conversations import ConversationStore, FREE_PROJECT_ID
 from .documents import extract_document_text
 from .files import FileLibrary
@@ -101,6 +102,8 @@ class RunManager:
         self.files.ensure()
         self.approvals = ApprovalStore(self.orchestrator.memory.root)
         self.approvals.ensure()
+        self.automations = AutomationStore(self.orchestrator.memory.root)
+        self.automations.ensure()
         for task in self.tasks.list():
             if task.get("status") in {"integrating", "resolving"}:
                 if (
@@ -127,6 +130,8 @@ class RunManager:
         self.compacting: set[str] = set()
         self.pending_path = self.orchestrator.memory.root / "pending_runs.json"
         self._recover_pending()
+        self._automation_stop = threading.Event()
+        threading.Thread(target=self._automation_loop, daemon=True).start()
 
     def start(
         self,
@@ -506,10 +511,13 @@ class RunManager:
             )
             routing_started = time.monotonic()
             forced_mode = Mode(mode) if mode else None
+            reserved_provider = self._project_quota_provider(run.conversation_id)
+            wait_for_provider = not agent and bool(reserved_provider)
+            effective_agent = reserved_provider if wait_for_provider else agent
             if classification is None:
                 baseline = orchestrator.router.route(
                     run.request,
-                    forced_agent=agent,
+                    forced_agent=effective_agent,
                     forced_mode=forced_mode,
                     previous_provider=self.conversations.previous_provider(
                         run.conversation_id
@@ -521,19 +529,20 @@ class RunManager:
                     orchestrator.providers,
                     cached_usage_status(),
                     workspace,
-                    forced_agent=bool(agent),
+                    forced_agent=bool(effective_agent),
                     forced_mode=forced_mode is not None,
                 )
             decision = resolve_route(
                 orchestrator.router,
                 run.request,
                 cached_usage_status(),
-                forced_agent=agent,
+                forced_agent=effective_agent,
                 forced_mode=forced_mode,
                 previous_provider=self.conversations.previous_provider(
                     run.conversation_id
                 ),
                 classification=classification,
+                wait_for_provider=wait_for_provider,
             )
             route = decision.route
             quota_admission = decision.quota_admission
@@ -990,6 +999,176 @@ class RunManager:
             conversation.get("project_id", "main")
         ) or {}
         return bool(project.get("quota_automation", True))
+
+    def _project_quota_provider(self, conversation_id: str) -> str | None:
+        conversation = self.conversations.get(conversation_id) or {}
+        project = self.conversations.get_project(
+            conversation.get("project_id", "main")
+        ) or {}
+        provider = str(project.get("quota_provider", ""))
+        return provider or None
+
+    def list_automations(self) -> list[dict[str, Any]]:
+        return self.automations.list()
+
+    def create_automation(self, payload: dict[str, Any]) -> dict[str, Any]:
+        conversation_id = str(payload.get("conversation_id", ""))
+        conversation = self.conversations.get(conversation_id)
+        if not conversation:
+            raise ValueError("Choisis une conversation valide.")
+        project_id = str(conversation.get("project_id", "main"))
+        raw_steps = payload.get("steps")
+        if not isinstance(raw_steps, list):
+            raise ValueError("Les étapes du plan sont invalides.")
+        execution_mode = str(payload.get("execution_mode", "workspace-write"))
+        if execution_mode not in {"read-only", "workspace-write"}:
+            raise ValueError(
+                "Un plan autonome accepte uniquement lecture seule ou écriture projet."
+            )
+        return self.automations.create(
+            title=str(payload.get("title", "")),
+            project_id=project_id,
+            conversation_id=conversation_id,
+            steps=[str(step) for step in raw_steps],
+            scheduled_for=float(payload.get("scheduled_for", time.time())),
+            mode=str(payload.get("mode", "review")),
+            execution_mode=execution_mode,
+            max_retries=int(payload.get("max_retries", 2)),
+            auto_integrate=bool(payload.get("auto_integrate", True)),
+        )
+
+    def cancel_automation(self, plan_id: str) -> dict[str, Any] | None:
+        plan = self.automations.get(plan_id)
+        if not plan:
+            return None
+        run_id = plan.get("current_run_id")
+        if run_id:
+            self.cancel(str(run_id))
+        return self.automations.cancel(plan_id)
+
+    def _automation_loop(self) -> None:
+        while not self._automation_stop.wait(2):
+            try:
+                self._advance_automations()
+            except Exception:
+                # One malformed plan must not stop the durable scheduler.
+                continue
+
+    def _advance_automations(self, now: float | None = None) -> None:
+        timestamp = time.time() if now is None else now
+        for plan in self.automations.list():
+            if plan.get("status") in {"completed", "cancelled", "blocked"}:
+                continue
+            if float(plan.get("scheduled_for", 0)) > timestamp:
+                continue
+            index = int(plan.get("current_step", 0))
+            steps = plan.get("steps") or []
+            if index >= len(steps):
+                self.automations.update(
+                    plan["id"], status="completed", current_run_id=None, error=None
+                )
+                continue
+            step = steps[index]
+            run_id = step.get("run_id") or plan.get("current_run_id")
+            if run_id:
+                task = self.tasks.get(str(run_id))
+                if not task:
+                    self.automations.update_step(
+                        plan["id"], index, status="pending", run_id=None
+                    )
+                    self.automations.update(
+                        plan["id"], status="scheduled", current_run_id=None
+                    )
+                    continue
+                status = str(task.get("status", ""))
+                if status in {"running", "integrating", "resolving"}:
+                    self.automations.update(plan["id"], status="running")
+                    continue
+                if status == "waiting_quota":
+                    self.automations.update(plan["id"], status="waiting")
+                    continue
+                if status == "review" and plan.get("auto_integrate"):
+                    try:
+                        self.integrate_task(str(run_id))
+                    except WorktreeError as error:
+                        self.automations.update(
+                            plan["id"], status="blocked", error=str(error)
+                        )
+                    continue
+                if status in {"completed", "integrated"}:
+                    self.automations.update_step(
+                        plan["id"], index, status="completed", error=None
+                    )
+                    self.automations.update(
+                        plan["id"],
+                        status="scheduled",
+                        current_step=index + 1,
+                        current_run_id=None,
+                        scheduled_for=timestamp,
+                        error=None,
+                    )
+                    continue
+                if status in {"failed", "cancelled"}:
+                    attempts = int(step.get("attempts", 0))
+                    if attempts <= int(plan.get("max_retries", 0)):
+                        self.automations.update_step(
+                            plan["id"], index, status="pending", run_id=None,
+                            error=task.get("error"),
+                        )
+                        self.automations.update(
+                            plan["id"], status="scheduled", current_run_id=None,
+                            scheduled_for=timestamp + 2, error=task.get("error"),
+                        )
+                    else:
+                        self.automations.update(
+                            plan["id"], status="blocked", error=(
+                                task.get("error") or "Nombre maximal de corrections atteint."
+                            )
+                        )
+                    continue
+                if status in {"review", "conflict"}:
+                    self.automations.update(
+                        plan["id"], status="blocked", error=(
+                            task.get("error") or "Une validation humaine est nécessaire."
+                        )
+                    )
+                    continue
+            if self.has_active_conversation(str(plan["conversation_id"])):
+                continue
+            attempts = int(step.get("attempts", 0)) + 1
+            retry_context = ""
+            if step.get("error"):
+                retry_context = (
+                    "\n\nLa tentative précédente a échoué : "
+                    f"{step['error']}. Inspecte l’état existant et corrige sans refaire "
+                    "les étapes déjà validées."
+                )
+            prompt = (
+                f"Plan autonome « {plan['title']} » — étape {index + 1}/{len(steps)}.\n"
+                f"Réalise uniquement cette étape : {step['prompt']}\n\n"
+                "Inspecte d’abord l’état actuel, conserve le travail existant et "
+                "exécute les validations pertinentes. Termine par un résultat concis."
+                + retry_context
+            )
+            try:
+                run = self.start(
+                    prompt,
+                    str(plan["conversation_id"]),
+                    None,
+                    str(plan.get("mode") or "review"),
+                    None,
+                    None,
+                    str(plan.get("execution_mode") or "workspace-write"),
+                )
+            except ActiveConversationError:
+                continue
+            self.automations.update_step(
+                plan["id"], index, status="running", attempts=attempts,
+                run_id=run.run_id, error=None,
+            )
+            self.automations.update(
+                plan["id"], status="running", current_run_id=run.run_id, error=None
+            )
 
     def _wait_for_quota_window(
         self,

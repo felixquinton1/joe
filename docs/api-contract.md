@@ -232,3 +232,15 @@ Les tests dédiés dans `tests/test_api_contract.py` verrouillent :
 - identité des curseurs `Last-Event-ID` et `after`.
 
 Les tests fonctionnels plus détaillés restent dans `tests/test_web.py`.
+
+## Automatisations (API 1.3)
+
+- `GET /api/automations` liste les plans séquentiels persistants ;
+- `POST /api/automations` crée un plan avec `conversation_id`, `steps`,
+  `scheduled_for`, `mode`, `execution_mode`, `max_retries` et
+  `auto_integrate` ;
+- `POST /api/automations/{id}/cancel` annule le plan et son run actif.
+
+Les mutations exigent le profil `maintainer`. `execution_mode` est limité à
+`read-only` et `workspace-write` : un plan autonome ne peut pas approuver son
+propre accès complet.

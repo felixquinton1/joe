@@ -83,6 +83,8 @@ class ProjectMemory:
                     "session.md\n"
                     "handoff.md\n"
                     "pending_runs.json\n"
+                    "automations.json\n"
+                    "automations.json.bak\n"
                     "backups/\n"
                     "migrations/\n"
                     "*.reject.json\n"

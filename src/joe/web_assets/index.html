@@ -75,6 +75,7 @@
     <div class="panel-resizer resize-right" data-resizer="right" title="Redimensionner le suivi"></div>
     <aside class="activity-panel">
       <div class="activity-tools">
+        <button id="open-automation" class="icon-button" type="button" title="Plans autonomes" aria-label="Plans autonomes">◷</button>
         <button id="open-preferences" class="icon-button" type="button" title="Préférences" aria-label="Préférences">⚙</button>
         <div id="language" class="language-picker" role="group" aria-label="Langue / Language">
           <button id="language-en" type="button" data-language="en" aria-pressed="false">EN</button>
@@ -227,6 +228,32 @@
       </div>
     </form>
   </dialog>
+  <dialog id="automation-dialog" class="project-dialog automation-dialog">
+    <form method="dialog">
+      <span class="eyebrow">Automatisation</span>
+      <h2>Planifier un travail autonome</h2>
+      <p class="dialog-intro">Projet : <strong id="automation-project"></strong>. Une étape démarre lorsque la précédente est validée ; Joe attend les resets de quota si nécessaire.</p>
+      <fieldset class="dialog-section automation-policy">
+        <legend>Stratégie de quotas du projet</legend>
+        <label>IA réservée
+          <select id="automation-provider"><option value="">Équilibrage automatique</option><option value="claude">Claude</option><option value="codex">Codex</option><option value="gemini">Gemini</option><option value="copilot">Copilot</option></select>
+          <small>Joe attend sa prochaine fenêtre pour le rôle principal. Une relecture ou un consensus peut encore appeler une autre IA.</small>
+        </label>
+      </fieldset>
+      <label>Titre<input id="automation-title" maxlength="80" placeholder="Ex. Campagne de tests nocturne"></label>
+      <label>Démarrage<input id="automation-when" type="datetime-local"><small>Vide : dès maintenant.</small></label>
+      <label>Étapes<textarea id="automation-steps" rows="7" placeholder="Une étape par ligne :&#10;Implémenter la fonctionnalité&#10;Exécuter les tests&#10;Analyser les résultats et corriger&#10;Relancer les validations"></textarea></label>
+      <div class="automation-options">
+        <label>Workflow<select id="automation-mode"><option value="review">Relecture</option><option value="fast">Rapide</option><option value="consensus">Consensus</option></select></label>
+        <label>Accès<select id="automation-execution"><option value="workspace-write">Écriture projet</option><option value="read-only">Lecture seule</option></select></label>
+        <label>Corrections max<input id="automation-retries" type="number" min="0" max="5" value="2"></label>
+      </div>
+      <label class="check-label"><input id="automation-integrate" type="checkbox" checked> Intégrer automatiquement chaque worktree validé</label>
+      <small class="setting-help">Joe s’arrête sur conflit, permission manquante ou après le nombre maximal de corrections. Le push reste régi par le réglage du projet.</small>
+      <section><div class="skill-manager-head"><span>Plans récents</span></div><div id="automation-list" class="automation-list"></div></section>
+      <div class="dialog-actions"><button value="cancel">Fermer</button><button id="save-automation" value="default">Programmer</button></div>
+    </form>
+  </dialog>
   <dialog id="onboarding-dialog" class="project-dialog onboarding-dialog">
     <form method="dialog">
       <span class="eyebrow">Bienvenue dans Joe</span>
@@ -241,6 +268,7 @@
   <script src="/app_auth.js"></script>
   <script src="/app_usage.js"></script>
   <script src="/app_conversations.js"></script>
+  <script src="/app_automation.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

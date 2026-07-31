@@ -1,4 +1,4 @@
-const APP_VERSION = "0.30.0";
+const APP_VERSION = "0.31.0";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -19,6 +19,7 @@ let knownTasks = [];
 let knownApprovals = [];
 let knownFiles = [];
 const selectedFileIds = new Set();
+const automation = window.createAutomationModule({ state, $, fetcher: joeFetch });
 const notifiedTaskConflicts = new Set();
 let language = window.JoeI18n.initialLanguage(
   window.localStorage,
@@ -1710,6 +1711,12 @@ $("refresh-usage").onclick = () => loadUsage(true).catch(error => {
 $("open-preferences").onclick = () => openPreferences().catch(
   error => window.alert(error.message)
 );
+$("open-automation").onclick = () => automation.open().catch(
+  error => window.alert(error.message)
+);
+$("save-automation").onclick = event => automation.save(event).catch(
+  error => window.alert(error.message)
+);
 $("open-project-skills").onclick = () => {
   const conversation = state.conversations.find(
     item => item.id === state.activeConversationId
@@ -1811,6 +1818,7 @@ function toggleMobilePanel(panelSelector, buttonId) {
 setInterval(updateCountdowns, 1000);
 setInterval(() => loadUsage().catch(() => {}), 60000);
 setInterval(() => loadTasks().catch(() => {}), 10000);
+setInterval(() => automation.load().catch(() => {}), 10000);
 setupPanelResizers();
 resizeComposer();
 for (const select of document.querySelectorAll("select")) {

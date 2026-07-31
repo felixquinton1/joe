@@ -35,9 +35,10 @@ _ASSETS = {
     "/app_auth.js": ("app_auth.js", "text/javascript; charset=utf-8"),
     "/app_usage.js": ("app_usage.js", "text/javascript; charset=utf-8"),
     "/app_conversations.js": ("app_conversations.js", "text/javascript; charset=utf-8"),
+    "/app_automation.js": ("app_automation.js", "text/javascript; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
 }
-API_VERSION = "1.2"
+API_VERSION = "1.3"
 
 # Champs qu'un profil viewer peut écrire sur une conversation : acquitter un
 # état lu ne constitue pas une mutation de contenu.
@@ -133,6 +134,8 @@ class Handler(BaseHTTPRequestHandler):
             )
         if path == "/api/tasks":
             return self._json(self.server.manager.list_tasks())
+        if path == "/api/automations":
+            return self._json(self.server.manager.list_automations())
         if path == "/api/approvals":
             return self._json(
                 self.server.manager.approvals.list(status="pending")
@@ -237,6 +240,22 @@ class Handler(BaseHTTPRequestHandler):
                 {"cancelled": cancelled},
                 HTTPStatus.ACCEPTED if cancelled else HTTPStatus.NOT_FOUND,
             )
+        if path.startswith("/api/automations/") and path.endswith("/cancel"):
+            plan_id = unquote(path.split("/")[-2])
+            plan = self.server.manager.cancel_automation(plan_id)
+            return self._json(
+                plan or {},
+                HTTPStatus.ACCEPTED if plan else HTTPStatus.NOT_FOUND,
+            )
+        if path == "/api/automations":
+            payload = self._read_payload()
+            if payload is None:
+                return
+            try:
+                plan = self.server.manager.create_automation(payload)
+            except (TypeError, ValueError) as error:
+                return self._json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+            return self._json(plan, HTTPStatus.CREATED)
         if path == "/api/conversations":
             payload = self._read_payload(allow_empty=True)
             if payload is None:
