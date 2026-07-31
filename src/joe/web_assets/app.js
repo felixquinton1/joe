@@ -1,4 +1,4 @@
-const APP_VERSION = "0.29.4";
+const APP_VERSION = "0.29.5";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -802,7 +802,15 @@ function addMessage(label, text, kind, options = {}) {
   bubble.dataset.source = text;
   wrapper.append(title, bubble);
   $("messages").appendChild(wrapper);
-  if (!options.suppressScroll) scrollIfFollowing(viewport, follow);
+  if (options.forceScroll) {
+    // Un envoi explicite crée un nouveau point de lecture : aller directement
+    // au nouveau run, même si une ancienne tâche avait positionné l'historique.
+    requestAnimationFrame(() => {
+      viewport.scrollTop = viewport.scrollHeight;
+    });
+  } else if (!options.suppressScroll) {
+    scrollIfFollowing(viewport, follow);
+  }
   return bubble;
 }
 
@@ -1449,7 +1457,12 @@ async function startRun(
     addMessage("Toi", request, "user");
   }
   const finalBubble = visible
-    ? addMessage("Joe · synthèse", "Routage local en cours…", "assistant")
+    ? addMessage(
+        "Joe · synthèse",
+        "Routage local en cours…",
+        "assistant",
+        { forceScroll: true }
+      )
     : null;
   const { run_id } = await response.json();
   selectedFileIds.clear();

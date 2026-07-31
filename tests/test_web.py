@@ -63,6 +63,8 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert "message.run_id === previousRunId" in app
         assert "renderHistoricalRunSummary(completed" in app
         assert "if (!options.suppressScroll)" in app
+        assert "if (options.forceScroll)" in app
+        assert "{ forceScroll: true }" in app
         assert "renderApproval(approval)" in app
         assert "task.pipeline" in app
         assert "dragging-files" in app
