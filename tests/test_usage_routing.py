@@ -1,5 +1,5 @@
 from joe.models import Intent, Mode, Route
-from joe.usage import admit_route, balance_route
+from joe.usage import _next_quota_reset, admit_route, balance_route
 
 
 def status(provider, remaining, reset):
@@ -201,7 +201,20 @@ def test_consensus_becomes_fast_when_only_one_provider_has_capacity():
     assert admitted == route
     assert notice["level"] == "error"
     assert notice["blocked"] is True
+    assert notice["retry_at"] == 200_000
     assert "Aucun fournisseur" in notice["message"]
+
+
+def test_next_quota_reset_ignores_healthy_and_expired_windows():
+    assert _next_quota_reset(
+        [
+            status("codex", 2, 12_000),
+            status("claude", 80, 11_000),
+            status("gemini", 1, 9_000),
+        ],
+        threshold=8,
+        now=10_000,
+    ) == 12_000
 
 
 def test_consensus_uses_one_affordable_provider_when_two_are_too_costly():

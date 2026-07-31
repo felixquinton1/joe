@@ -156,6 +156,23 @@ Le panneau montre aussi le pipeline compact « Demande → Réalisation →
 Validation → Diff → Livraison ». Une conversation affiche « En cours » pendant
 le run, puis « Terminée » jusqu’à sa prochaine ouverture.
 
+### Reprise automatique après un quota
+
+L’option projet « Reprendre automatiquement après un reset de quota » est
+activée par défaut. Si aucun fournisseur adapté ne dispose d’une réserve
+suffisante et qu’une heure de reset est connue, la tâche passe en « En attente
+du quota ». Joe conserve le prompt, les pièces jointes, le worktree et le nombre
+de tentatives, puis réactualise les quotas à l’heure prévue.
+
+Si la nouvelle fenêtre reste insuffisante, la tâche attend la suivante. Si un
+quota est atteint au milieu d’un long travail, les changements déjà présents
+dans le worktree sont conservés et la demande reprend en tenant compte de cet
+état. Une attente peut être annulée avec le bouton d’interruption habituel.
+
+Joe continue de choisir un autre fournisseur lorsqu’il peut terminer la tâche
+sans sacrifier le workflow demandé. Une sélection explicite d’agent ou de mode
+reste prioritaire et est tentée immédiatement.
+
 Les autorisations en attente restent visibles dans ce même panneau après un
 rechargement. Elles peuvent être acceptées ou refusées plus tard ; une
 autorisation acceptée ne vaut que pour la demande enregistrée.

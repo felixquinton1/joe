@@ -501,6 +501,7 @@ window.createJoeConversations = function createJoeConversations({
     $("project-remote-access").checked = true;
     $("project-auto-delivery").checked = false;
     $("project-isolated-worktrees").checked = false;
+    $("project-quota-automation").checked = true;
     updateAutoDeliveryHelp();
     $("project-execution-mode").value = "";
     refreshSelectMenu($("project-execution-mode"));
@@ -526,6 +527,7 @@ window.createJoeConversations = function createJoeConversations({
       && project.remote_access !== false;
     $("project-auto-delivery").checked = Boolean(project.auto_commit_push);
     $("project-isolated-worktrees").checked = Boolean(project.isolated_worktrees);
+    $("project-quota-automation").checked = project.quota_automation !== false;
     updateAutoDeliveryHelp();
     $("project-execution-mode").value = project.default_execution_mode || "";
     refreshSelectMenu($("project-execution-mode"));
@@ -697,6 +699,7 @@ window.createJoeConversations = function createJoeConversations({
           web_access: $("project-remote-access").checked,
           auto_commit_push: $("project-auto-delivery").checked,
           isolated_worktrees: $("project-isolated-worktrees").checked,
+          quota_automation: $("project-quota-automation").checked,
           default_execution_mode: $("project-execution-mode").value,
           context: $("project-context").value
         })

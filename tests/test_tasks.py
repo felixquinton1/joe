@@ -1,7 +1,7 @@
 import time
 
 from joe.tasks import TaskStore
-from joe.web_runs import RunManager, _task_pipeline
+from joe.web_runs import LiveRun, RunManager, _task_pipeline
 from joe.worktrees import WorktreeError, WorktreeManager
 
 
@@ -32,6 +32,46 @@ def test_task_store_persists_and_updates_runs(tmp_path):
     assert TaskStore(tmp_path).get("run1")["files"] == 2
     assert store.delete("run1") is True
     assert store.get("run1") is None
+
+
+def test_quota_wait_is_persisted_and_resumes(tmp_path, monkeypatch):
+    monkeypatch.setattr(RunManager, "_recover_pending", lambda self: None)
+    refreshed = []
+    monkeypatch.setattr(
+        "joe.web_runs.usage_status",
+        lambda force=False: refreshed.append(force) or [],
+    )
+    manager = RunManager(tmp_path)
+    conversation = manager.conversations.create()
+    run = LiveRun("quota-run", "Long travail", conversation["id"])
+    manager.tasks.create(
+        run.run_id,
+        run.request,
+        conversation["id"],
+        conversation["project_id"],
+        workspace=tmp_path,
+        base_workspace=tmp_path,
+        isolated=False,
+    )
+    manager._write_pending(run, None, None, None, None, None)
+
+    manager._wait_for_quota_window(
+        run,
+        time.time() + 0.02,
+        "Quota Claude épuisé",
+    )
+
+    assert refreshed == [True]
+    assert manager.tasks.get(run.run_id)["status"] == "running"
+    assert manager.tasks.get(run.run_id)["scheduled_for"] is None
+    assert manager._read_pending()[run.run_id]["not_before"] is None
+    assert any(event["type"] == "quota_scheduled" for event in run.events)
+
+
+def test_waiting_quota_pipeline_is_visible():
+    pipeline = _task_pipeline({"status": "waiting_quota"})
+
+    assert pipeline[1]["status"] == "waiting"
 
 
 def test_task_store_recovers_from_atomic_backup(tmp_path):

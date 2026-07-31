@@ -22,7 +22,7 @@ from .documents import extract_document_text
 from .files import FileLibrary
 from .git_review import GitSnapshot, build_report, reject, snapshot
 from .models import Intent, Mode, Route
-from .orchestrator import Orchestrator
+from .orchestrator import OrchestrationError, Orchestrator
 from .router import _routing_text
 from .routing import resolve_route
 from .route_classifier import (
@@ -31,7 +31,7 @@ from .route_classifier import (
 )
 from .skills import create_skill
 from .tasks import TaskStore
-from .usage import cached_usage_status, usage_status
+from .usage import _next_quota_reset, cached_usage_status, usage_status
 from .worktrees import Worktree, WorktreeError, WorktreeManager
 
 
@@ -65,6 +65,8 @@ class LiveRun:
     git_before: GitSnapshot | None = None
     track_changes: bool = False
     finished_at: float | None = None
+    not_before: float | None = None
+    defer_count: int = 0
 
     def emit(self, event: dict[str, Any]) -> None:
         with self.condition:
@@ -140,6 +142,8 @@ class RunManager:
         run_id: str | None = None,
         resumed: bool = False,
         classification: RouteClassification | None = None,
+        not_before: float | None = None,
+        defer_count: int = 0,
     ) -> LiveRun:
         run_id = run_id or uuid.uuid4().hex
         workspace, _, _, _ = self._project_scope(conversation_id)
@@ -170,6 +174,8 @@ class RunManager:
             base_commit=worktree.base_commit if worktree else None,
             attachments=list(attachments or []),
             git_before=snapshot(workspace),
+            not_before=not_before,
+            defer_count=defer_count,
         )
         self.tasks.create(
             run_id,
@@ -460,6 +466,23 @@ class RunManager:
         classification: RouteClassification | None = None,
     ) -> None:
         try:
+            if run.not_before:
+                if run.not_before > time.time():
+                    self._wait_for_quota_window(
+                        run,
+                        run.not_before,
+                        "Reprise automatique après redémarrage de Joe",
+                    )
+                else:
+                    run.not_before = None
+                    self.tasks.update(
+                        run.run_id,
+                        status="running",
+                        scheduled_for=None,
+                        wait_reason=None,
+                    )
+                    self._update_pending_schedule(run)
+                    usage_status(force=True)
             (
                 workspace,
                 additional_roots,
@@ -573,6 +596,26 @@ class RunManager:
             if quota_admission:
                 run.emit({"type": "quota_admission", **quota_admission})
                 if quota_admission.get("blocked"):
+                    retry_at = quota_admission.get("retry_at")
+                    if (
+                        self._project_uses_quota_automation(run.conversation_id)
+                        and isinstance(retry_at, (int, float))
+                    ):
+                        run.defer_count += 1
+                        self._wait_for_quota_window(
+                            run,
+                            float(retry_at),
+                            str(quota_admission["message"]),
+                        )
+                        return self._execute(
+                            run,
+                            agent,
+                            mode,
+                            None,
+                            None,
+                            execution_mode,
+                            None,
+                        )
                     raise RuntimeError(quota_admission["message"])
             run.emit(
                 {
@@ -602,6 +645,15 @@ class RunManager:
                 "a skill belonging to another project."
                 + self._attachment_context(attachments)
             )
+            if self._project_uses_quota_automation(run.conversation_id):
+                evidence_context += (
+                    "\n\n# Durable autonomous execution\n"
+                    "Work through long requests in explicit, bounded steps. "
+                    "Before each step, inspect the workspace and preserve work "
+                    "already completed by an earlier quota window. Do not redo a "
+                    "validated step. If the provider session stops on quota, Joe "
+                    "will retain the task and resume it after the next known reset."
+                )
             response, log = orchestrator.execute(
                 run.request,
                 route,
@@ -642,6 +694,34 @@ class RunManager:
                 ),
             )
         except Exception as exc:
+            if (
+                isinstance(exc, OrchestrationError)
+                and ":quota" in str(exc)
+                and self._project_uses_quota_automation(run.conversation_id)
+                and not run.cancel_event.is_set()
+            ):
+                statuses = usage_status(force=True)
+                retry_at = _next_quota_reset(
+                    statuses,
+                    threshold=8,
+                    now=time.time(),
+                )
+                if retry_at is not None:
+                    run.defer_count += 1
+                    self._wait_for_quota_window(
+                        run,
+                        retry_at,
+                        "Quota atteint pendant l’exécution ; reprise au prochain reset",
+                    )
+                    return self._execute(
+                        run,
+                        agent,
+                        mode,
+                        None,
+                        None,
+                        execution_mode,
+                        None,
+                    )
             git_report = self._capture_git_report(run)
             self._update_task_git(run, git_report)
             if run.cancel_event.is_set():
@@ -904,6 +984,50 @@ class RunManager:
         project = self.conversations.get_project(conversation.get("project_id", "main")) or {}
         return bool(project.get("isolated_worktrees"))
 
+    def _project_uses_quota_automation(self, conversation_id: str) -> bool:
+        conversation = self.conversations.get(conversation_id) or {}
+        project = self.conversations.get_project(
+            conversation.get("project_id", "main")
+        ) or {}
+        return bool(project.get("quota_automation", True))
+
+    def _wait_for_quota_window(
+        self,
+        run: LiveRun,
+        retry_at: float,
+        reason: str,
+    ) -> None:
+        run.not_before = retry_at
+        self.tasks.update(
+            run.run_id,
+            status="waiting_quota",
+            scheduled_for=retry_at,
+            wait_reason=reason,
+            attempt=run.defer_count,
+        )
+        self._update_pending_schedule(run)
+        run.emit(
+            {
+                "type": "quota_scheduled",
+                "retry_at": retry_at,
+                "attempt": run.defer_count,
+                "message": reason,
+            }
+        )
+        remaining = max(0.0, retry_at - time.time())
+        if run.cancel_event.wait(remaining):
+            raise RuntimeError("Exécution différée annulée")
+        run.not_before = None
+        self.tasks.update(
+            run.run_id,
+            status="running",
+            scheduled_for=None,
+            wait_reason=None,
+        )
+        self._update_pending_schedule(run)
+        # Le cache qui a motivé l'attente ne doit pas décider de la reprise.
+        usage_status(force=True)
+
     def _free_workspace(self) -> Path:
         data_home = Path(
             os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")
@@ -1044,8 +1168,20 @@ class RunManager:
             "effort": effort,
             "execution_mode": execution_mode,
             "attachments": run.attachments,
+            "not_before": run.not_before,
+            "defer_count": run.defer_count,
         }
         _atomic_json(self.pending_path, pending)
+
+    def _update_pending_schedule(self, run: LiveRun) -> None:
+        with self.lock:
+            pending = self._read_pending()
+            item = pending.get(run.run_id)
+            if not item:
+                return
+            item["not_before"] = run.not_before
+            item["defer_count"] = run.defer_count
+            _atomic_json(self.pending_path, pending)
 
     def _remove_pending(self, run_id: str) -> None:
         with self.lock:
@@ -1075,6 +1211,8 @@ class RunManager:
                 item.get("attachments") or [],
                 run_id=run_id,
                 resumed=True,
+                not_before=item.get("not_before"),
+                defer_count=int(item.get("defer_count", 0)),
             )
 
     def history(self) -> list[dict[str, Any]]:
@@ -1481,7 +1619,9 @@ def _run_summary(run: LiveRun) -> dict[str, Any]:
         elif event_type == "quota_admission":
             quota_admission = {
                 key: event.get(key)
-                for key in ("level", "message", "forced")
+                for key in (
+                    "level", "message", "forced", "blocked", "retry_at",
+                )
             }
         elif event_type == "workflow_update":
             stage = str(event.get("stage", ""))
@@ -1566,6 +1706,8 @@ def _task_pipeline(task: dict[str, Any]) -> list[dict[str, str]]:
             "status": (
                 "failed"
                 if failed and status != "conflict"
+                else "waiting"
+                if status == "waiting_quota"
                 else "running"
                 if status == "running"
                 else "complete"

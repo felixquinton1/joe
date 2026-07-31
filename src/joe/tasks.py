@@ -73,6 +73,9 @@ class TaskStore:
                 "deletions": 0,
                 "error": None,
                 "integrated_commit": None,
+                "scheduled_for": None,
+                "wait_reason": None,
+                "attempt": 0,
                 "created_at": now,
                 "updated_at": now,
             }
@@ -90,6 +93,7 @@ class TaskStore:
                 "status", "provider", "model", "mode", "files",
                 "insertions", "deletions", "error", "integrated_commit",
                 "workspace", "branch",
+                "scheduled_for", "wait_reason", "attempt",
             }
             task.update({key: value for key, value in changes.items() if key in allowed})
             task["updated_at"] = time.time()

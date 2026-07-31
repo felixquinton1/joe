@@ -763,6 +763,7 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 }
 .task-card.review .task-card-head b { color: var(--orange); }
 .task-card.running .task-card-head b { color: var(--green); }
+.task-card.waiting_quota .task-card-head b { color: var(--orange); }
 .task-card.integrating .task-card-head b,
 .task-card.resolving .task-card-head b { color: var(--green); }
 .task-card.conflict .task-card-head b { color: var(--danger); }
@@ -807,6 +808,7 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
   line-height: 1.35;
   text-overflow: ellipsis;
 }
+.task-wait { margin-top: 5px; color: var(--orange); font-size: 8px; }
 .task-actions { justify-content: flex-end; margin-top: 7px; }
 .task-actions button {
   padding: 4px 7px;

@@ -1,4 +1,4 @@
-const APP_VERSION = "0.29.5";
+const APP_VERSION = "0.30.0";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -135,7 +135,7 @@ function renderTasks() {
   const tasks = knownTasks.filter(task => {
     if (filter === "all") return true;
     if (filter === "attention") return ["review", "conflict", "failed"].includes(task.status);
-    return ["running", "integrating", "resolving", "review", "conflict"].includes(task.status);
+    return ["running", "waiting_quota", "integrating", "resolving", "review", "conflict"].includes(task.status);
   }).slice(0, 12);
   $("task-count").textContent = String(tasks.length + knownApprovals.length);
   for (const approval of knownApprovals) {
@@ -150,6 +150,7 @@ function renderTasks() {
   }
   const statusLabels = {
     running: t("running"),
+    waiting_quota: "En attente du quota",
     review: t("review_task"),
     completed: t("done"),
     integrated: t("integrated"),
@@ -183,6 +184,7 @@ function renderTasks() {
         <b>${escapeHtml(statusLabels[task.status] || task.status)}</b>
       </div>
       <div class="task-meta">${branch}<span>${Number(task.files || 0)} fichier${Number(task.files || 0) === 1 ? "" : "s"} · +${Number(task.insertions || 0)} −${Number(task.deletions || 0)}</span></div>
+      ${task.status === "waiting_quota" && task.scheduled_for ? `<div class="task-wait">Reprise ${escapeHtml(new Date(task.scheduled_for * 1000).toLocaleString())}</div>` : ""}
       <div class="task-pipeline">${(task.pipeline || []).map(stage => (
         `<span class="${escapeHtml(stage.status)}"><i></i>${escapeHtml(stage.label)}</span>`
       )).join("")}</div>
@@ -1270,6 +1272,13 @@ function handleEvent(conversationId, event, finalBubble) {
     updateWorkflowFallback(event.provider, event.fallback);
   } else if (event.type === "quota_admission") {
     finalBubble.textContent += `\n${event.message}`;
+  } else if (event.type === "quota_scheduled") {
+    const when = new Date(event.retry_at * 1000).toLocaleString();
+    setSummaryPending(finalBubble, false);
+    finalBubble.textContent = `En attente de quota · reprise automatique ${when}`;
+    $("run-state").textContent = "En attente";
+    $("run-state").className = "run-state running";
+    loadTasks().catch(() => {});
   } else if (event.type === "evidence") {
     const row = document.createElement("div");
     row.className = `evidence-row ${event.status}`;

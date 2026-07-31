@@ -80,6 +80,19 @@ def test_global_preferences_apply_only_to_new_conversations(tmp_path):
     assert created["settings"]["mode"] == "review"
 
 
+def test_projects_enable_quota_automation_by_default(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+
+    project = store.create_project("Autonome")
+    disabled = store.update_project(project["id"], {"quota_automation": False})
+
+    assert project["quota_automation"] is True
+    assert disabled["quota_automation"] is False
+
+
 def test_invalid_global_preferences_fall_back_to_automatic(tmp_path):
     root = tmp_path / ".agentflow"
     runs = root / "runs"

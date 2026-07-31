@@ -307,10 +307,15 @@ def admit_route(
                 "level": "error",
                 "message": (
                     "Aucun fournisseur ne dispose d’une réserve connue suffisante. "
-                    "Choisis explicitement un agent ou un mode pour tenter quand même."
+                    "La tâche peut attendre automatiquement le prochain reset."
                 ),
                 "forced": False,
                 "blocked": True,
+                "retry_at": _next_quota_reset(
+                    statuses,
+                    threshold=fast_threshold,
+                    now=timestamp,
+                ),
             }
         reduced = Route(
             route.intent,
@@ -384,6 +389,28 @@ def admit_route(
         "message": message,
         "forced": bool(forced_provider_warning),
     }
+
+
+def _next_quota_reset(
+    statuses: list[dict[str, Any]],
+    *,
+    threshold: float,
+    now: float,
+) -> float | None:
+    """Return the first future reset that can change a quota decision."""
+    resets = []
+    for status in statuses:
+        for window in status.get("windows") or []:
+            reset = window.get("resets_at")
+            remaining = window.get("remaining_percent")
+            if (
+                isinstance(reset, (int, float))
+                and float(reset) > now
+                and isinstance(remaining, (int, float))
+                and float(remaining) < threshold
+            ):
+                resets.append(float(reset))
+    return min(resets) if resets else None
 
 
 def _workflow_threshold(route: Route) -> float:

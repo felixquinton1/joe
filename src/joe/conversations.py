@@ -20,7 +20,7 @@ DEFAULT_SETTINGS = {
 DEFAULT_PREFERENCES = {"agent": "", "mode": ""}
 DEFAULT_PROJECT_ID = "main"
 FREE_PROJECT_ID = "free"
-CURRENT_SCHEMA_VERSION = 8
+CURRENT_SCHEMA_VERSION = 9
 
 
 class ConversationStore:
@@ -122,6 +122,7 @@ class ConversationStore:
             "web_access": True,
             "auto_commit_push": False,
             "isolated_worktrees": False,
+            "quota_automation": True,
             "default_execution_mode": "",
             "collapsed": False,
             "position": len(existing),
@@ -163,6 +164,8 @@ class ConversationStore:
                 project["auto_commit_push"] = bool(changes["auto_commit_push"])
             if "isolated_worktrees" in changes:
                 project["isolated_worktrees"] = bool(changes["isolated_worktrees"])
+            if "quota_automation" in changes:
+                project["quota_automation"] = bool(changes["quota_automation"])
             if "default_execution_mode" in changes:
                 value = str(changes["default_execution_mode"])
                 project["default_execution_mode"] = (
@@ -621,6 +624,7 @@ class ConversationStore:
                     "web_access": True,
                     "auto_commit_push": False,
                     "isolated_worktrees": False,
+                    "quota_automation": True,
                     "default_execution_mode": "",
                     "collapsed": False,
                     "position": 0,
@@ -658,6 +662,7 @@ class ConversationStore:
             project["remote_access"] = bool(project["web_access"])
             project.setdefault("auto_commit_push", False)
             project.setdefault("isolated_worktrees", False)
+            project.setdefault("quota_automation", True)
             project.setdefault("default_execution_mode", "")
             project.setdefault("collapsed", False)
             project.setdefault("position", payload["projects"].index(project))
