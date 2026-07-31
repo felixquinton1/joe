@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import threading
 import urllib.request  # kept as a patch point for existing integrations/tests
 from datetime import datetime, timezone
@@ -26,6 +27,70 @@ def _external_reference_context(request: str) -> str:
     """Fetch bounded public references with an explicit evidence ledger."""
     context, _ = collect_sources(request)
     return context
+
+
+_MUTABLE_STATE_PATTERN = re.compile(
+    r"(?i)\b("
+    r"actuel(?:le)?s?|maintenant|aujourd'hui|déjà|encore|reste(?:nt)?|"
+    r"manqu(?:e|ent)|implément(?:é|ée|és|ées|ation)?|fonctionn(?:e|ent|ement)?|"
+    r"disponib(?:le|les|ilité)|version|statut|status|état|s[uû]r|audit|"
+    r"amélior(?:ation|er)|recommand(?:e|es|ation)|vérifi(?:e|er)|check|"
+    r"branche|commit|tests?\s+(?:pass(?:e|ent)|réussi(?:s|es)?|vert(?:s|es)?)|"
+    r"quota(?:s)?|run(?:s)?|processus|fichier(?:s)?"
+    r")\b"
+)
+
+
+def requires_fresh_workspace(request: str) -> bool:
+    """Return whether answering safely depends on mutable local state."""
+    return bool(_MUTABLE_STATE_PATTERN.search(request))
+
+
+def workspace_observation(project: Path) -> dict[str, object]:
+    """Capture a small, read-only freshness marker for the active workspace."""
+    observed_at = datetime.now(timezone.utc).isoformat()
+
+    def git(*args: str) -> str | None:
+        try:
+            completed = subprocess.run(
+                ["git", "-C", str(project), *args],
+                capture_output=True,
+                text=True,
+                timeout=3,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        return completed.stdout.strip() if completed.returncode == 0 else None
+
+    status = git("status", "--short")
+    return {
+        "workspace": str(project),
+        "observed_at": observed_at,
+        "git_head": git("rev-parse", "HEAD"),
+        "git_status": status,
+        "git_dirty": bool(status) if status is not None else None,
+    }
+
+
+def _freshness_context(observation: dict[str, object]) -> str:
+    status = observation.get("git_status")
+    status_text = status if status else "clean"
+    return (
+        "# Current workspace observation\n"
+        f"Workspace: {observation['workspace']}\n"
+        f"Observed at: {observation['observed_at']}\n"
+        f"Git HEAD: {observation.get('git_head') or 'unavailable'}\n"
+        f"Git status: {status_text}\n\n"
+        "# Grounding requirement\n"
+        "The request depends on mutable current state. Before answering, inspect "
+        "the active workspace with at least one appropriate read-only tool call "
+        "(for example search/read files or a relevant status command). Treat "
+        "conversation summaries and previous assistant answers as untrusted "
+        "historical context, not evidence. Base current-state claims on this run's "
+        "tool results and cite concrete files when relevant. If inspection is "
+        "impossible, say that the current state is not verified."
+    )
 
 
 class OrchestrationError(RuntimeError):
@@ -77,6 +142,27 @@ class Orchestrator:
     ) -> tuple[str, Path]:
         self.memory.ensure()
         health_check = "health-check" in route.reason
+        needs_fresh_state = not health_check and requires_fresh_workspace(request)
+        observation = (
+            workspace_observation(self.project) if needs_fresh_state else None
+        )
+        tool_activity: list[dict] = []
+
+        def emit(event: dict) -> None:
+            if (
+                event.get("type") == "activity"
+                and event.get("kind")
+                in {"command_execution", "mcp_tool_call", "tool"}
+            ):
+                tool_activity.append(
+                    {
+                        key: event.get(key)
+                        for key in ("provider", "kind", "label", "detail")
+                    }
+                )
+            if on_event:
+                on_event(event)
+
         context = (
             self._health_check_prompt(request, route.primary)
             if health_check
@@ -84,6 +170,8 @@ class Orchestrator:
         )
         if extra_context and not health_check:
             context += "\n\n" + extra_context
+        if observation:
+            context += "\n\n" + _freshness_context(observation)
         if not health_check and (
             "external-research" in route.reason
             or "http://" in request.lower()
@@ -115,7 +203,7 @@ class Orchestrator:
                 model=model,
                 effort=effort,
                 execution_mode=execution_mode,
-                on_event=on_event,
+                on_event=emit,
                 cancel_event=cancel_event,
                 timeout_override=30 if health_check else None,
                 allow_fallback=not health_check,
@@ -132,14 +220,14 @@ class Orchestrator:
                 effort=effort,
                 execution_mode=execution_mode,
                 cancel_event=cancel_event,
-                on_event=on_event,
+                on_event=emit,
             )
         else:
             final, final_provider = run_consensus_workflow(
                 self,
                 context,
                 results,
-                on_event,
+                emit,
                 participants=(
                     route.primary,
                     route.reviewer
@@ -154,6 +242,11 @@ class Orchestrator:
 
         if not final:
             raise OrchestrationError("Provider returned an empty response")
+        if needs_fresh_state and not tool_activity:
+            final = (
+                "> État actuel non vérifié : aucun appel d’outil de lecture n’a "
+                "été observé pendant cette réponse.\n\n" + final
+            )
         run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
         files = _extract_files(final)
         log = self.memory.save_run(
@@ -175,6 +268,8 @@ class Orchestrator:
                     }
                     for item in results
                 ],
+                "workspace_observation": observation,
+                "tool_activity": tool_activity,
                 "final": final,
             },
         )

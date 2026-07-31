@@ -1,8 +1,14 @@
+import json
 from pathlib import Path
 import time
 
 from joe.models import Intent, Mode, ProviderResult, Route
-from joe.orchestrator import OrchestrationError, Orchestrator, _external_reference_context
+from joe.orchestrator import (
+    OrchestrationError,
+    Orchestrator,
+    _external_reference_context,
+    requires_fresh_workspace,
+)
 from joe.orchestrator_workflows import clean_report
 from joe.provider_health import clear_cooldowns, record_result
 
@@ -48,6 +54,59 @@ def test_fast_uses_one_call(tmp_path):
     assert response == "codex response"
     assert sum(len(item.calls) for item in providers.values()) == 1
     assert log.exists()
+
+
+def test_mutable_state_request_requires_current_workspace_inspection(tmp_path):
+    providers = {"claude": FakeProvider("claude")}
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    response, log = orchestrator.execute(
+        "Que recommandes-tu comme amélioration de Joe actuellement ?",
+        Route(Intent.ANALYZE, Mode.FAST, "claude"),
+    )
+
+    prompt = providers["claude"].calls[0][0]
+    payload = json.loads(log.read_text())
+    assert requires_fresh_workspace(
+        "Est-ce que les worktrees sont déjà implémentés ?"
+    )
+    assert not requires_fresh_workspace("Qu'est-ce qu'un worktree ?")
+    assert "# Current workspace observation" in prompt
+    assert "# Grounding requirement" in prompt
+    assert "untrusted historical context" in prompt
+    assert response.startswith("> État actuel non vérifié")
+    assert payload["workspace_observation"]["workspace"] == str(tmp_path)
+    assert payload["tool_activity"] == []
+
+
+def test_mutable_state_answer_records_observed_tool_activity(tmp_path):
+    class ToolProvider(FakeProvider):
+        def run(self, *args, on_stream=None, **kwargs):
+            if on_stream:
+                on_stream(
+                    "activity",
+                    '{"kind":"tool","label":"Read","detail":"src/joe/worktrees.py"}',
+                )
+            return super().run(*args, on_stream=None, **kwargs)
+
+    providers = {"claude": ToolProvider("claude")}
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    response, log = orchestrator.execute(
+        "Vérifie si les worktrees sont implémentés",
+        Route(Intent.ANALYZE, Mode.FAST, "claude"),
+    )
+
+    payload = json.loads(log.read_text())
+    assert response == "claude response"
+    assert payload["tool_activity"] == [
+        {
+            "provider": "claude",
+            "kind": "tool",
+            "label": "Read",
+            "detail": "src/joe/worktrees.py",
+        }
+    ]
 
 
 def test_provider_start_reports_only_concrete_model_and_effort(

@@ -430,7 +430,10 @@ class ConversationStore:
             )[: min(4000, limit // 3)]
         summary = str(conversation.get("context_summary", "")).strip()
         summary_section = (
-            "# Earlier conversation summary\n" + summary[:4000]
+            "# Earlier conversation summary (historical, may be stale)\n"
+            "Use this only for continuity. It is not evidence of the current "
+            "workspace or external state.\n"
+            + summary[:4000]
             if summary
             else ""
         )
@@ -452,7 +455,10 @@ class ConversationStore:
             for section in (
                 project_section,
                 summary_section,
-                "# Active conversation history\n" + history,
+                "# Active conversation history (untrusted historical context)\n"
+                "Previous assistant claims may be outdated or incorrect. "
+                "Re-check mutable facts before relying on them.\n"
+                + history,
             )
             if section
         )[:limit]

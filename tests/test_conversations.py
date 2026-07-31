@@ -273,6 +273,25 @@ def test_semantic_compaction_preserves_full_history_and_reduces_prompt(
     assert "old-0" not in context
 
 
+def test_context_marks_previous_answers_as_untrusted_history(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+    conversation = store.create()
+    store.append_message(
+        conversation["id"],
+        "assistant",
+        "Les worktrees ne sont pas câblés.",
+    )
+
+    context = store.context(conversation["id"])
+
+    assert "untrusted historical context" in context
+    assert "Re-check mutable facts" in context
+    assert "Les worktrees ne sont pas câblés." in context
+
+
 def test_old_runs_are_imported_once(tmp_path):
     root = tmp_path / ".agentflow"
     runs = root / "runs"
