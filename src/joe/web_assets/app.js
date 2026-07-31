@@ -1,4 +1,4 @@
-const APP_VERSION = "0.29.2";
+const APP_VERSION = "0.29.3";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -785,7 +785,7 @@ let confirmDeleteConversation;
 
 function clearConversation() { $("messages").replaceChildren(); }
 
-function addMessage(label, text, kind) {
+function addMessage(label, text, kind, options = {}) {
   const viewport = document.querySelector(".conversation");
   const follow = shouldFollow(viewport);
   const wrapper = document.createElement("div");
@@ -802,7 +802,7 @@ function addMessage(label, text, kind) {
   bubble.dataset.source = text;
   wrapper.append(title, bubble);
   $("messages").appendChild(wrapper);
-  scrollIfFollowing(viewport, follow);
+  if (!options.suppressScroll) scrollIfFollowing(viewport, follow);
   return bubble;
 }
 

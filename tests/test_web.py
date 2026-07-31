@@ -62,6 +62,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert "reconcileRun(conversationId, runId)" in app
         assert "message.run_id === previousRunId" in app
         assert "renderHistoricalRunSummary(completed" in app
+        assert "if (!options.suppressScroll)" in app
         assert "renderApproval(approval)" in app
         assert "task.pipeline" in app
         assert "dragging-files" in app
@@ -228,6 +229,9 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert response.status == 200
         assert b"loadGlobalSkills" in conversations_script
         assert b"promoteSkill" in conversations_script
+        assert b"{ suppressScroll: true }" in conversations_script
+        assert b"requestedMessage.scrollIntoView" not in conversations_script
+        assert b"conversationViewport.scrollTop = Math.max" in conversations_script
 
         connection.request("GET", "/style.css")
         response = connection.getresponse()

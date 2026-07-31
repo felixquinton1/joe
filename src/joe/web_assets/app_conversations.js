@@ -340,9 +340,19 @@ window.createJoeConversations = function createJoeConversations({
     for (const message of conversation.messages) {
       let bubble;
       if (message.role === "user") {
-        bubble = addMessage("Toi", message.content, "user");
+        bubble = addMessage(
+          "Toi",
+          message.content,
+          "user",
+          { suppressScroll: true }
+        );
       } else {
-        bubble = addMessage("Joe · synthèse", "", "assistant");
+        bubble = addMessage(
+          "Joe · synthèse",
+          "",
+          "assistant",
+          { suppressScroll: true }
+        );
         renderHistoricalRunSummary(message, bubble);
         renderMarkdown(bubble, message.content);
         if (message.git_report) renderGitReport(message.git_report, message.run_id);
@@ -358,7 +368,17 @@ window.createJoeConversations = function createJoeConversations({
     }
     const conversationViewport = document.querySelector(".conversation");
     if (requestedMessage) {
-      requestedMessage.scrollIntoView({ block: "center", behavior: "smooth" });
+      // Positionner le viewport avant le prochain rendu évite de montrer un
+      // long défilement depuis le début de la conversation.
+      const viewportBox = conversationViewport.getBoundingClientRect();
+      const messageBox = requestedMessage.getBoundingClientRect();
+      conversationViewport.scrollTop = Math.max(
+        0,
+        conversationViewport.scrollTop
+          + messageBox.top
+          - viewportBox.top
+          - (conversationViewport.clientHeight - messageBox.height) / 2
+      );
       requestedMessage.classList.add("task-focus");
       window.setTimeout(() => requestedMessage.classList.remove("task-focus"), 1800);
     } else {
