@@ -1420,3 +1420,11 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 .plan-notes-label{display:block;margin-bottom:8px;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.05em}
 .plan-notes{width:100%;margin-top:5px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font:inherit;font-size:11px;resize:vertical}
 .plan-notes:focus{outline:none;border-color:var(--orange)}
+/* Rappel de validation sous la réponse, dans la fenêtre principale : le plan est
+   déjà lisible dans la bulle, on n'ajoute ici que de quoi l'ajuster et décider. */
+.message .plan-controls{margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.message .plan-controls .task-actions{display:flex;flex-wrap:wrap;gap:6px}
+.message .plan-controls .task-actions button{padding:6px 12px;border:1px solid var(--line);border-radius:8px;color:var(--ink);background:#f4f2ec;font:inherit;font-size:12px;cursor:pointer}
+.message .plan-controls .task-actions button:hover{background:#eceae4}
+.message .plan-controls .task-actions button.primary{color:var(--green);background:var(--green-soft)}
+.message .plan-controls .task-actions button.danger:hover{color:var(--danger);background:#f8e5e1}

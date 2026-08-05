@@ -1146,3 +1146,53 @@ def test_a_finished_plan_run_produces_a_durable_approval(tmp_path):
     # Il survit à un rechargement du store.
     reloaded = RunManager(tmp_path).approvals.list(status="pending")
     assert reloaded[0]["id"] == approval["id"]
+
+
+def test_prompt_label_shortens_the_stored_user_message(tmp_path, monkeypatch):
+    """Un plan validé ne doit pas réapparaître en entier comme mon message.
+
+    Le modèle reçoit tout le `request` ; l'historique n'affiche que l'intitulé
+    court fourni via `prompt_label`.
+    """
+    monkeypatch.setattr(RunManager, "_recover_pending", lambda self: None)
+    monkeypatch.setattr(RunManager, "_execute", lambda self, *args: None)
+    manager = RunManager(tmp_path)
+    conversation = manager.conversations.create()
+    full_request = "Demande initiale\n\n# Plan validé\n1. étape\n2. étape"
+
+    run = manager.start(
+        full_request,
+        conversation["id"],
+        "codex",
+        "fast",
+        None,
+        None,
+        None,
+        prompt_label="Implémenter le plan validé ci-dessus.",
+    )
+
+    messages = manager.conversations.get(conversation["id"])["messages"]
+    assert messages[0]["role"] == "user"
+    assert messages[0]["content"] == "Implémenter le plan validé ci-dessus."
+    # Le run — donc le modèle — garde bien le contenu complet.
+    assert run.request == full_request
+
+
+def test_a_run_without_prompt_label_stores_the_full_request(tmp_path, monkeypatch):
+    monkeypatch.setattr(RunManager, "_recover_pending", lambda self: None)
+    monkeypatch.setattr(RunManager, "_execute", lambda self, *args: None)
+    manager = RunManager(tmp_path)
+    conversation = manager.conversations.create()
+
+    manager.start(
+        "Corrige le bug de tri",
+        conversation["id"],
+        "codex",
+        "fast",
+        None,
+        None,
+        None,
+    )
+
+    messages = manager.conversations.get(conversation["id"])["messages"]
+    assert messages[0]["content"] == "Corrige le bug de tri"

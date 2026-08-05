@@ -195,6 +195,7 @@ class RunManager:
         classification: RouteClassification | None = None,
         decision: RunDecision | None = None,
         plan_stage: str = "",
+        prompt_label: str = "",
         not_before: float | None = None,
         defer_count: int = 0,
     ) -> LiveRun:
@@ -268,10 +269,13 @@ class RunManager:
                     "Une tâche est déjà active dans cette conversation."
                 )
             if not resumed:
+                # Le modèle a reçu tout le `request` ; l'historique n'affiche que
+                # l'intitulé fourni quand il existe (ex. « implémente ce plan »),
+                # pour ne pas dupliquer un plan déjà lisible plus haut.
                 self.conversations.append_message(
                     conversation_id,
                     "user",
-                    request,
+                    prompt_label or request,
                     run.run_id,
                 )
             self.live[run.run_id] = run

@@ -232,22 +232,63 @@ function renderPlanApproval(approval) {
   card.innerHTML = `
     <div class="task-card-head"><strong>Plan proposé</strong><b>À valider</b></div>
     <div class="task-meta"><span>${escapeHtml(approval.payload?.request || "")}</span></div>
-    <div class="plan-body"></div>
-    <label class="plan-notes-label">Modifications à apporter (facultatif)
-      <textarea class="plan-notes" rows="2" placeholder="Ex. commence par les tests, ne touche pas au loader…"></textarea>
-    </label>
-    <div class="task-actions"></div>`;
+    <div class="plan-body"></div>`;
   renderMarkdown(card.querySelector(".plan-body"), approval.payload?.plan || "");
-  const notes = card.querySelector(".plan-notes");
-  card.querySelector(".task-actions").append(
-    taskAction("Refuser", () => decideApproval(approval, "refused"), "danger"),
+  card.appendChild(planControls(approval));
+  return card;
+}
+
+// Zone d'ajustement + boutons de décision d'un plan, partagée entre la carte du
+// panneau Tâches et le rappel affiché sous la réponse dans la fenêtre principale.
+function planControls(approval) {
+  const wrap = document.createElement("div");
+  wrap.className = "plan-controls";
+  const notesLabel = document.createElement("label");
+  notesLabel.className = "plan-notes-label";
+  notesLabel.textContent = "Modifications à apporter (facultatif)";
+  const notes = document.createElement("textarea");
+  notes.className = "plan-notes";
+  notes.rows = 2;
+  notes.placeholder = "Ex. commence par les tests, ne touche pas au loader…";
+  notesLabel.appendChild(notes);
+  const actions = document.createElement("div");
+  actions.className = "task-actions";
+  // Le même plan peut être affiché à deux endroits : une décision doit retirer
+  // les deux jeux de boutons pour éviter une double validation.
+  const done = () => dropPlanControls(approval.id);
+  actions.append(
+    taskAction("Refuser", () => decideApproval(approval, "refused").then(done), "danger"),
     taskAction(
       "Autoriser avec modifications",
-      () => decideApproval(approval, "approved", notes.value.trim())
+      () => decideApproval(approval, "approved", notes.value.trim()).then(done)
     ),
-    taskAction("Autoriser", () => decideApproval(approval, "approved"), "primary")
+    taskAction("Autoriser", () => decideApproval(approval, "approved").then(done), "primary")
   );
-  return card;
+  wrap.append(notesLabel, actions);
+  wrap.dataset.approvalId = approval.id;
+  return wrap;
+}
+
+function dropPlanControls(approvalId) {
+  for (const node of document.querySelectorAll(
+    `.plan-controls[data-approval-id="${CSS.escape(approvalId)}"]`
+  )) {
+    node.remove();
+  }
+}
+
+// Après un run en mode plan, la réponse (le plan lui-même) est déjà dans la
+// bulle. On y accroche les mêmes commandes de validation que dans le panneau
+// Tâches, pour lire et décider sans quitter la fenêtre principale.
+function attachPlanControls(conversationId, bubble) {
+  if (!bubble) return;
+  const approval = knownApprovals.find(
+    item => item.kind === "plan" && item.conversation_id === conversationId
+  );
+  if (!approval) return;
+  const wrapper = bubble.closest(".message") || bubble.parentElement;
+  if (!wrapper || wrapper.querySelector(".plan-controls")) return;
+  wrapper.appendChild(planControls(approval));
 }
 
 async function decideApproval(approval, decision, notes = "") {
@@ -267,9 +308,12 @@ async function decideApproval(approval, decision, notes = "") {
       // l'agent le mieux placé selon les quotas restants et la tâche.
       const parts = [payload.request, "# Plan validé", payload.plan];
       if (notes) parts.push("# Modifications demandées", notes);
+      // Le modèle reçoit tout (demande + plan + ajustements), mais l'historique
+      // n'affiche qu'un intitulé court : le plan est déjà lisible juste au-dessus.
       await startRun(parts.join("\n\n"), approval.conversation_id, {
         ...currentRunSettings(),
-        plan: false
+        plan: false,
+        promptLabel: "Implémenter le plan validé ci-dessus."
       });
     } else {
       await startRun(
@@ -1129,6 +1173,7 @@ function updateWorkflowFallback(provider, fallback) {
   renderMarkdown,
   renderGitReport,
   renderHistoricalRunSummary,
+  attachPlanControls,
   applySettings,
   refreshSelectMenu,
   renderWorkflowUpdate,
@@ -1324,7 +1369,9 @@ function handleEvent(conversationId, event, finalBubble) {
     renderAnswer(finalBubble, event.response);
     finishRun(conversationId, true);
     loadConversations(false);
-    loadTasks().catch(() => {});
+    loadTasks()
+      .then(() => attachPlanControls(conversationId, finalBubble))
+      .catch(() => {});
     launchNextQueued(conversationId);
   } else if (event.type === "error") {
     setSummaryPending(finalBubble, false);
@@ -1449,11 +1496,17 @@ async function startRun(
     enqueueRequest(conversationId, request, settings);
     return;
   }
+  // `promptLabel` sert uniquement à l'affichage : le modèle reçoit tout le
+  // `request`, mais l'historique montre un intitulé court (ex. un plan validé
+  // n'a pas à réapparaître en entier comme s'il s'agissait de mon message).
+  const { promptLabel, ...runSettings } = settings;
+  const shownRequest = promptLabel || request;
   const payload = {
     request,
     conversation_id: conversationId,
-    ...settings
+    ...runSettings
   };
+  if (promptLabel) payload.prompt_label = promptLabel;
   // Rendu optimiste immédiat : dès le clic sur « Envoyer », on affiche le
   // message de l'utilisateur et une bulle placeholder, sans attendre la
   // réponse du serveur (le routage peut prendre un instant à démarrer).
@@ -1467,7 +1520,7 @@ async function startRun(
     $("stop").classList.remove("hidden");
     $("run-state").textContent = t("running");
     $("run-state").className = "run-state running";
-    addMessage("Toi", request, "user");
+    addMessage("Toi", shownRequest, "user");
   }
   const finalBubble = visible
     ? addMessage(
@@ -1736,6 +1789,16 @@ window.addEventListener("joe:conversation-selected", () => {
   loadFiles().catch(() => {});
 });
 document.addEventListener("click", closeSelectMenus);
+// Les popovers « Outils » et « Quotas » sont des <details> natifs : sans ce
+// garde, seul un second clic sur le résumé les referme. On les referme dès
+// qu'un clic tombe en dehors de leur périmètre.
+document.addEventListener("click", event => {
+  for (const popover of document.querySelectorAll(
+    "details.tool-popover[open], details.usage-popover[open]"
+  )) {
+    if (!popover.contains(event.target)) popover.removeAttribute("open");
+  }
+});
 $("new-project").onclick = createProject;
 $("cancel-project").onclick = () => {
   state.editingProjectId = null;

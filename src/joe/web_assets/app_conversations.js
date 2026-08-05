@@ -8,6 +8,7 @@ window.createJoeConversations = function createJoeConversations({
   renderMarkdown,
   renderGitReport,
   renderHistoricalRunSummary,
+  attachPlanControls,
   applySettings,
   refreshSelectMenu,
   renderWorkflowUpdate,
@@ -337,6 +338,7 @@ window.createJoeConversations = function createJoeConversations({
     clearConversation();
     $("conversation-title").textContent = conversation.title;
     let requestedMessage = null;
+    let lastAssistantBubble = null;
     for (const message of conversation.messages) {
       let bubble;
       if (message.role === "user") {
@@ -356,6 +358,7 @@ window.createJoeConversations = function createJoeConversations({
         renderHistoricalRunSummary(message, bubble);
         renderMarkdown(bubble, message.content);
         if (message.git_report) renderGitReport(message.git_report, message.run_id);
+        lastAssistantBubble = bubble;
       }
       const wrapper = bubble.closest(".message");
       if (message.run_id) wrapper.dataset.runId = message.run_id;
@@ -363,6 +366,9 @@ window.createJoeConversations = function createJoeConversations({
         requestedMessage = wrapper;
       }
     }
+    // Un plan encore en attente doit rester lisible et validable dans la fenêtre
+    // principale même après un rechargement, pas seulement dans le panneau Tâches.
+    attachPlanControls(conversationId, lastAssistantBubble);
     if (!conversation.messages.length) {
       $("messages").innerHTML = '<div class="empty-state"><span class="empty-mark">J</span><h3>Nouvelle conversation</h3><p>Les réglages et l’historique de cette conversation resteront indépendants.</p></div>';
     }
