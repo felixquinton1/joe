@@ -1140,3 +1140,39 @@ def test_a_local_action_never_asks_for_approval():
         local_action="create_skill",
     )
     assert decision.needs_approval is False
+
+
+def test_plan_run_stays_read_only_whatever_the_project_level():
+    """Rédiger un plan n'exige aucun droit : le run n'exécute rien."""
+    from joe.web_runs import RunDecision
+
+    route = Route(Intent.MODIFY, Mode.FAST, "claude")
+    for level in ("read_only", "manual", "auto"):
+        decision = RunDecision(
+            route=route,
+            execution_mode="read-only",
+            ai_access=level,
+            plan_stage="propose",
+        )
+        assert decision.will_execute is False, level
+        # Rien ne s'exécute : aucune approbation en amont, même en manuel.
+        assert decision.needs_approval is False, level
+
+
+def test_a_finished_plan_run_produces_a_durable_approval(tmp_path):
+    manager = RunManager(tmp_path)
+    manager.conversations.update_project("main", {"ai_access": "manual"})
+    conversation = manager.conversations.create("main")
+    run = LiveRun("plan-run", "Ajoute une option de purge", conversation["id"])
+
+    manager._propose_plan(run, "1. Lire le loader\n2. Ajouter le drapeau")
+
+    pending = manager.approvals.list(status="pending")
+    assert len(pending) == 1
+    approval = pending[0]
+    assert approval["kind"] == "plan"
+    assert approval["payload"]["plan"].startswith("1. Lire le loader")
+    assert approval["payload"]["request"] == "Ajoute une option de purge"
+    # Il survit à un rechargement du store.
+    reloaded = RunManager(tmp_path).approvals.list(status="pending")
+    assert reloaded[0]["id"] == approval["id"]

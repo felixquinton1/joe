@@ -515,6 +515,7 @@ class Handler(BaseHTTPRequestHandler):
             ):
                 raise ValueError("invalid attachments")
             approval_id = str(payload.get("approval_id", "")).strip()
+            plan_stage = "propose" if payload.get("plan") is True else ""
             if agent is not None and agent not in set(get_provider_names()):
                 raise ValueError("invalid agent")
             if mode not in {None, "fast", "review", "consensus"}:
@@ -536,6 +537,7 @@ class Handler(BaseHTTPRequestHandler):
                 model,
                 effort,
                 execution_mode,
+                plan_stage=plan_stage,
             )
             classification = decision.classification
             decided_by = decision.decided_by
@@ -648,6 +650,7 @@ class Handler(BaseHTTPRequestHandler):
                 execution_mode,
                 attachments,
                 decision=decision,
+                plan_stage=plan_stage,
             )
         except ActiveConversationError as exc:
             return self._json({"error": str(exc)}, HTTPStatus.CONFLICT)

@@ -55,6 +55,8 @@ class RunDecision:
     local_action: str = ""
     local_payload: dict[str, Any] = field(default_factory=dict)
     ai_access: str = "manual"
+    plan_stage: str = ""
+    """"propose" = ce run rédige un plan et n'exécute rien."""
 
     @property
     def will_execute(self) -> bool:
@@ -68,7 +70,9 @@ class RunDecision:
         Une action locale ne lance aucun fournisseur : elle n'a rien à faire
         approuver.
         """
-        if self.local_action or not self.will_execute:
+        if self.local_action or self.plan_stage == "propose":
+            return False
+        if not self.will_execute:
             return False
         return self.ai_access == "manual"
 
@@ -194,6 +198,7 @@ class RunManager:
         resumed: bool = False,
         classification: RouteClassification | None = None,
         decision: RunDecision | None = None,
+        plan_stage: str = "",
         not_before: float | None = None,
         defer_count: int = 0,
     ) -> LiveRun:
@@ -210,6 +215,7 @@ class RunManager:
                 effort,
                 execution_mode,
                 classification=classification,
+                plan_stage=plan_stage,
             )
         workspace, _, _, _ = self._project_scope(conversation_id)
         base_workspace = workspace
@@ -371,6 +377,23 @@ class RunManager:
             decision=decision,
         )
 
+    def _propose_plan(self, run: LiveRun, plan: str) -> None:
+        """Turn a finished plan run into a decision the user can act on.
+
+        Le plan est durable : il survit à un rechargement, et il est consommé
+        à la validation comme les autres approbations. Ce qui aura été fait
+        reste ensuite dans l'historique de la conversation, donc dans le
+        contexte du run suivant.
+        """
+        conversation = self.conversations.get(run.conversation_id) or {}
+        self.approvals.create(
+            "plan",
+            run.conversation_id,
+            str(conversation.get("project_id", FREE_PROJECT_ID)),
+            {"request": run.request, "plan": plan},
+            "Plan proposé — valide-le pour lancer l'exécution.",
+        )
+
     def _run_local_action(
         self,
         run: LiveRun,
@@ -430,6 +453,7 @@ class RunManager:
         classification: RouteClassification | None = None,
         local_action: str = "",
         local_payload: dict[str, Any] | None = None,
+        plan_stage: str = "",
     ) -> RunDecision:
         """Decide once what this run will do, and with which model.
 
@@ -507,8 +531,12 @@ class RunManager:
             wait_for_provider=wait_for_provider,
         )
         route = resolved.route
-        execution_mode = _resolve_execution_mode(
-            execution_mode, ai_access, route
+        # Rédiger un plan n'exige aucun droit : le run reste en lecture seule
+        # quel que soit le niveau du projet.
+        execution_mode = (
+            "read-only"
+            if plan_stage == "propose"
+            else _resolve_execution_mode(execution_mode, ai_access, route)
         )
         if classification is not None:
             effort = effort or classification.effort
@@ -534,6 +562,7 @@ class RunManager:
             routing_ms=round((time.monotonic() - started) * 1000),
             wait_for_provider=wait_for_provider,
             ai_access=ai_access,
+            plan_stage=plan_stage,
         )
 
     def requires_full_access_approval(
@@ -703,6 +732,7 @@ class RunManager:
                 "a skill belonging to another project."
                 + _permission_context(execution_mode)
                 + _QUESTION_CONTEXT
+                + (_PLAN_CONTEXT if decision.plan_stage == "propose" else "")
                 + self._attachment_context(attachments)
             )
             if self._project_uses_quota_automation(run.conversation_id):
@@ -739,6 +769,8 @@ class RunManager:
                 git_report=git_report,
                 run_summary=_run_summary(run),
             )
+            if decision.plan_stage == "propose" and response.strip():
+                self._propose_plan(run, response)
             run.emit({"type": "git_report", "run_id": run.run_id, **git_report})
             run.emit(
                 {
@@ -1986,6 +2018,21 @@ termine ta réponse par un bloc de code balisé `joe:question` contenant un JSON
 Joe l'affichera comme des boutons ; le clic renverra l'option choisie comme
 message suivant. N'utilise ce bloc que lorsque la réponse change réellement la
 suite du travail, jamais pour demander une permission d'exécution.
+"""
+
+
+# Consigne de rédaction d'un plan. Le run est en lecture seule : le modèle
+# propose, il n'agit pas. La validation déclenche un second run que le routeur
+# décide à neuf, en fonction des quotas restants et de la tâche.
+_PLAN_CONTEXT = """
+
+# Mode plan
+Tu es en mode plan : n'exécute aucune commande et ne modifie aucun fichier.
+Inspecte ce dont tu as besoin en lecture seule, puis rends UN plan d'exécution :
+les étapes dans l'ordre, ce que chacune change, et ce qui la valide. Sois
+concret et court — ce plan sera soumis tel quel à l'utilisateur, puis exécuté
+par un agent qui n'aura que ce texte et l'historique de la conversation.
+Ne demande pas d'autorisation : la validation se fait sur ta réponse.
 """
 
 

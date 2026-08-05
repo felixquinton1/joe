@@ -208,6 +208,7 @@ function renderTasks() {
 }
 
 function renderApproval(approval) {
+  if (approval.kind === "plan") return renderPlanApproval(approval);
   const card = document.createElement("article");
   card.className = "task-card approval";
   card.innerHTML = `
@@ -223,7 +224,33 @@ function renderApproval(approval) {
   return card;
 }
 
-async function decideApproval(approval, decision) {
+function renderPlanApproval(approval) {
+  // Un plan se lit avant d'être validé : on le rend en entier, et on laisse
+  // l'ajuster sans le réécrire, comme le fait Codex.
+  const card = document.createElement("article");
+  card.className = "task-card approval plan-approval";
+  card.innerHTML = `
+    <div class="task-card-head"><strong>Plan proposé</strong><b>À valider</b></div>
+    <div class="task-meta"><span>${escapeHtml(approval.payload?.request || "")}</span></div>
+    <div class="plan-body"></div>
+    <label class="plan-notes-label">Modifications à apporter (facultatif)
+      <textarea class="plan-notes" rows="2" placeholder="Ex. commence par les tests, ne touche pas au loader…"></textarea>
+    </label>
+    <div class="task-actions"></div>`;
+  renderMarkdown(card.querySelector(".plan-body"), approval.payload?.plan || "");
+  const notes = card.querySelector(".plan-notes");
+  card.querySelector(".task-actions").append(
+    taskAction("Refuser", () => decideApproval(approval, "refused"), "danger"),
+    taskAction(
+      "Autoriser avec modifications",
+      () => decideApproval(approval, "approved", notes.value.trim())
+    ),
+    taskAction("Autoriser", () => decideApproval(approval, "approved"), "primary")
+  );
+  return card;
+}
+
+async function decideApproval(approval, decision, notes = "") {
   const response = await joeFetch(
     `/api/approvals/${encodeURIComponent(approval.id)}`,
     {
@@ -235,11 +262,22 @@ async function decideApproval(approval, decision) {
   if (!response.ok) return;
   if (decision === "approved") {
     const payload = approval.payload || {};
-    await startRun(
-      payload.request,
-      payload.conversation_id,
-      { ...payload, approval_id: approval.id }
-    );
+    if (approval.kind === "plan") {
+      // Pas de fournisseur imposé ni d'approval_id : le routeur choisit à neuf
+      // l'agent le mieux placé selon les quotas restants et la tâche.
+      const parts = [payload.request, "# Plan validé", payload.plan];
+      if (notes) parts.push("# Modifications demandées", notes);
+      await startRun(parts.join("\n\n"), approval.conversation_id, {
+        ...currentRunSettings(),
+        plan: false
+      });
+    } else {
+      await startRun(
+        payload.request,
+        payload.conversation_id,
+        { ...payload, approval_id: approval.id }
+      );
+    }
   }
   await loadTasks();
 }
@@ -1341,7 +1379,8 @@ function currentRunSettings() {
     mode: $("mode").value,
     model,
     effort: $("effort").value,
-    attachments: [...selectedFileIds]
+    attachments: [...selectedFileIds],
+    plan: $("tool-plan-first").checked
   };
 }
 

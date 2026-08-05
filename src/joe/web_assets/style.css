@@ -1413,3 +1413,10 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 .question-option:hover:not(:disabled){border-color:var(--orange);color:var(--orange)}
 .question-option:disabled{opacity:.45;cursor:default}
 .question-option.chosen{border-color:var(--orange);background:var(--orange-soft);color:var(--orange);font-weight:650}
+
+.plan-approval .plan-body{max-height:260px;overflow:auto;margin:8px 0;padding:9px 11px;border-radius:9px;background:#e9e7e0;font-size:11px;line-height:1.5}
+.plan-approval .plan-body :is(h1,h2,h3){margin:6px 0 3px;font-size:11px}
+.plan-approval .plan-body :is(ul,ol){margin:4px 0;padding-left:18px}
+.plan-notes-label{display:block;margin-bottom:8px;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.05em}
+.plan-notes{width:100%;margin-top:5px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font:inherit;font-size:11px;resize:vertical}
+.plan-notes:focus{outline:none;border-color:var(--orange)}
