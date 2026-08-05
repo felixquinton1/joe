@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 import pytest
@@ -152,6 +153,8 @@ def test_local_skill_run_reports_routing_and_closes_the_stage(tmp_path):
         decided_by="lexical",
     )
 
+    _await_run(run)
+
     by_type = {}
     for event in run.events:
         by_type.setdefault(event["type"], []).append(event)
@@ -207,9 +210,66 @@ def test_local_skill_run_surfaces_the_llm_router_decision(tmp_path):
         decided_by="classifier",
     )
 
+    _await_run(run)
     route = next(event for event in run.events if event["type"] == "route")
     assert route["decided_by"] == "classifier"
     assert "routeur LLM" in route["reason"]
     assert route["routing_ms"] == 412
     assert route["classifier"]["classifier_model"] == "gemini-2.5-flash"
     assert route["classifier"]["confidence"] == 0.93
+
+def _await_run(run, timeout: float = 10.0):
+    """Une action locale suit désormais le cycle de vie asynchrone commun."""
+    deadline = time.monotonic() + timeout
+    with run.condition:
+        while not run.done and time.monotonic() < deadline:
+            run.condition.wait(timeout=0.1)
+    assert run.done, "le run local ne s'est pas terminé"
+    return run
+
+
+def test_a_local_action_produces_a_run_summary_like_any_run(tmp_path):
+    """Sans cela, la carte de pipeline disparaissait au rechargement."""
+    from joe.web_runs import RunManager
+
+    manager = RunManager(tmp_path)
+    conversation = manager.conversations.create(None)
+    run = manager.start_local_skill(
+        "crée un skill resume pour ce projet",
+        conversation["id"],
+        name="resume",
+        instructions="Vérifier les tests.",
+        global_scope=False,
+    )
+    _await_run(run)
+
+    messages = manager.conversations.get(conversation["id"])["messages"]
+    assistant = messages[-1]
+    assert assistant["provider"] == "joe"
+    # Le résumé de run est ce que relit l'interface après un rechargement.
+    assert assistant["run_summary"]
+    assert assistant["run_summary"]["route"]["primary"] == "joe"
+    # Et la tâche est close proprement, comme pour un run fournisseur.
+    task = manager.tasks.get(run.run_id)
+    assert task["status"] in {"completed", "review"}
+
+
+def test_a_local_action_can_be_cancelled_and_leaves_no_pending(tmp_path):
+    """L'ancien pipeline parallèle n'écrivait ni pending ni thread annulable."""
+    from joe.web_runs import RunManager
+
+    manager = RunManager(tmp_path)
+    conversation = manager.conversations.create(None)
+    run = manager.start_local_skill(
+        "crée un skill jetable pour ce projet",
+        conversation["id"],
+        name="jetable",
+        instructions="Rien de particulier.",
+        global_scope=False,
+    )
+    _await_run(run)
+
+    # Une action locale ne doit pas être rejouée comme un run fournisseur
+    # après un redémarrage.
+    assert manager._read_pending() == {}
+    assert manager.get_run(run.run_id) is run

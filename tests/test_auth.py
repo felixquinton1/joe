@@ -268,7 +268,7 @@ def test_full_access_flag_in_the_body_never_authorizes_a_run(tmp_path):
         )
 
         assert status == 428
-        assert payload["approval"] == "full-access"
+        assert payload["approval"] == "run"
         approval_id = payload["approval_id"]
         pending = server.manager.approvals.get(approval_id)
         assert pending["status"] == "pending"

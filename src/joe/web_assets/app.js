@@ -665,19 +665,16 @@ function updateCapabilityMenus() {
   const capability = state.capabilities[provider];
   setOptions($("model"), [{ id: "", label: t("provider_default") }]);
   setOptions($("effort"), [{ id: "", label: t("model_default") }]);
-  setOptions($("execution-mode"), [{ id: "", label: t("automatic") }]);
   if (!capability) {
-    for (const control of [$("model"), $("effort"), $("execution-mode")]) {
+    for (const control of [$("model"), $("effort")]) {
       control.disabled = true;
       refreshSelectMenu(control);
     }
     return;
   }
   $("model").disabled = false;
-  $("execution-mode").disabled = false;
   addOptions($("model"), capability.models || []);
   addOptions($("model"), [{ id: "__custom__", label: "Autre identifiant…" }]);
-  addOptions($("execution-mode"), (capability.execution_modes || []).filter(item => item.id !== "auto"));
   updateEfforts();
 }
 
@@ -698,7 +695,6 @@ function currentSettings() {
     mode: $("mode").value,
     model: $("model").value,
     effort: $("effort").value,
-    execution_mode: $("execution-mode").value,
     web_access: $("tool-web-access").checked ? "on" : "off"
   };
 }
@@ -712,10 +708,9 @@ function applySettings(settings) {
   updateEfforts();
   $("mode").value = settings.mode || "";
   $("effort").value = settings.effort || "";
-  $("execution-mode").value = settings.execution_mode || "";
   $("tool-web-access").checked = settings.web_access !== "off";
   for (const select of [
-    $("agent"), $("mode"), $("model"), $("effort"), $("execution-mode")
+    $("agent"), $("mode"), $("model"), $("effort")
   ]) {
     refreshSelectMenu(select);
   }
@@ -1103,6 +1098,17 @@ function updateWorkflowFallback(provider, fallback) {
   fetcher: joeFetch
 }));
 
+const TERMINAL_EVENTS = new Set(["complete", "error", "cancelled"]);
+
+function patchRunningStages(activeRun, provider, patch) {
+  // Le prédicat « étape courante de ce fournisseur » n'existe qu'ici.
+  for (const [stage, workflowEvent] of activeRun.workflow) {
+    if (workflowEvent.status === "running" && workflowEvent.provider === provider) {
+      activeRun.workflow.set(stage, { ...workflowEvent, ...patch });
+    }
+  }
+}
+
 function handleEvent(conversationId, event, finalBubble) {
   const activeRun = state.runs.get(conversationId);
   if (event.type === "route" && activeRun) {
@@ -1118,38 +1124,22 @@ function handleEvent(conversationId, event, finalBubble) {
     activeRun.workflow.set(event.stage, event);
   }
   if (event.type === "provider_fallback" && activeRun) {
-    for (const [stage, workflowEvent] of activeRun.workflow) {
-      if (
-        workflowEvent.status === "running"
-        && workflowEvent.provider === event.provider
-      ) {
-        activeRun.workflow.set(stage, {
-          ...workflowEvent,
-          provider: event.fallback,
-          fallback_from: event.provider
-        });
-      }
-    }
+    patchRunningStages(activeRun, event.provider, {
+      provider: event.fallback,
+      fallback_from: event.provider
+    });
   }
   if (event.type === "provider_start" && activeRun) {
-    for (const [stage, workflowEvent] of activeRun.workflow) {
-      if (
-        workflowEvent.status === "running"
-        && workflowEvent.provider === event.provider
-      ) {
-        activeRun.workflow.set(stage, {
-          ...workflowEvent,
-          model: event.model,
-          effort: event.effort
-        });
-      }
-    }
+    patchRunningStages(activeRun, event.provider, {
+      model: event.model,
+      effort: event.effort
+    });
   }
   if (conversationId !== state.activeConversationId) {
     const panel = state.panels.get(conversationId);
     if (panel) {
       panel.rawLog += `${JSON.stringify(event)}\n`;
-      if (event.type === "complete" || event.type === "error" || event.type === "cancelled") {
+      if (TERMINAL_EVENTS.has(event.type)) {
         for (const node of panel.agentNodes) {
           node.classList.remove("active");
           const status = node.querySelector(".agent-status");
@@ -1159,7 +1149,7 @@ function handleEvent(conversationId, event, finalBubble) {
         panel.runStateClass = `run-state ${event.type === "complete" ? "done" : "idle"}`;
       }
     }
-    if (event.type === "complete" || event.type === "error" || event.type === "cancelled") {
+    if (TERMINAL_EVENTS.has(event.type)) {
       state.runs.delete(conversationId);
       loadConversations(false);
       loadTasks().catch(() => {});
@@ -1293,7 +1283,7 @@ function handleEvent(conversationId, event, finalBubble) {
   } else if (event.type === "complete") {
     setSummaryPending(finalBubble, false);
     finishWorkflowProgress(activeRun?.runId, activeRun?.mode);
-    renderMarkdown(finalBubble, event.response);
+    renderAnswer(finalBubble, event.response);
     finishRun(conversationId, true);
     loadConversations(false);
     loadTasks().catch(() => {});
@@ -1351,7 +1341,6 @@ function currentRunSettings() {
     mode: $("mode").value,
     model,
     effort: $("effort").value,
-    execution_mode: $("execution-mode").value,
     attachments: [...selectedFileIds]
   };
 }
@@ -1513,7 +1502,7 @@ function attachRun(conversationId, runId, request, finalBubble = null) {
     if (lastEventId) activeRun.lastEventId = Number(lastEventId);
     const event = JSON.parse(data);
     handleEvent(conversationId, event, activeRun.bubble);
-    if (event.type === "complete" || event.type === "error" || event.type === "cancelled") stream.close();
+    if (TERMINAL_EVENTS.has(event.type)) stream.close();
   };
   stream.onerror = () => {
     stream.close();
@@ -1661,7 +1650,6 @@ $("model").addEventListener("change", () => {
 });
 $("mode").addEventListener("change", saveSettings);
 $("effort").addEventListener("change", saveSettings);
-$("execution-mode").addEventListener("change", saveSettings);
 $("tool-web-access").addEventListener("change", saveSettings);
 $("task-filter").addEventListener("change", renderTasks);
 $("attach-files").onclick = () => $("file-input").click();
@@ -1833,6 +1821,34 @@ $("toggle-activity").onclick = () => toggleMobilePanel(
   ".activity-panel",
   "toggle-activity"
 );
+
+function renderAnswer(bubble, text) {
+  // Rend la réponse, et si elle se termine par un bloc `joe:question`, propose
+  // les options en boutons plutôt que de laisser l'utilisateur les recopier.
+  const question = window.JoeMarkdown.extractQuestion(text);
+  renderMarkdown(bubble, question ? question.body : text);
+  if (!question) return;
+  const card = document.createElement("div");
+  card.className = "question-card";
+  const label = document.createElement("strong");
+  label.textContent = question.question;
+  const choices = document.createElement("div");
+  choices.className = "question-options";
+  for (const option of question.options) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "question-option";
+    button.textContent = option;
+    button.onclick = () => {
+      for (const other of choices.querySelectorAll("button")) other.disabled = true;
+      button.classList.add("chosen");
+      startRun(option);
+    };
+    choices.appendChild(button);
+  }
+  card.append(label, choices);
+  bubble.appendChild(card);
+}
 
 function reportStartupFailure(error) {
   // Un échec de démarrage doit être visible dans l'interface : une trace

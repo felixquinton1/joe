@@ -12,6 +12,7 @@ from typing import Any
 from .capabilities import cached_provider_capabilities, select_model
 from .models import Intent, Mode, ProviderResult, Route
 from .provider_health import recent_failure
+from .provider_registry import counterpart
 from .provider_registry import get_provider_names
 from .providers import Provider
 
@@ -173,7 +174,7 @@ def apply_classification(
     )
     reviewer = None
     if mode is Mode.REVIEW:
-        reviewer = "claude" if provider == "codex" else "codex"
+        reviewer = counterpart(provider)
     reason = (
         f"{route.reason}; llm-classifier={classification.classifier_provider}; "
         f"complexity={complexity}; confidence={classification.confidence:.2f}; "

@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
 from .models import Intent, ProviderResult, Route
+from .provider_registry import counterpart
 
 
 REPORT_RULES = (
@@ -112,7 +113,7 @@ def run_review_workflow(
         primary.stdout,
     )
     reviewer = route.reviewer or (
-        "claude" if primary.provider == "codex" else "codex"
+        counterpart(primary.provider)
     )
     review_request = review_prompt(context, primary.stdout)
     workflow_event(

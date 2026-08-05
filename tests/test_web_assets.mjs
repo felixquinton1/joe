@@ -9,6 +9,13 @@ const { authenticatedFetch, pairBrowser } = require(
 const { initialLanguage, translate } = require(
   "../src/joe/web_assets/i18n.js"
 );
+// markdown.js s'installe sur `window` : on lui en fournit un.
+globalThis.window = globalThis.window || {};
+globalThis.document = globalThis.document || {
+  createElement: () => ({ set textContent(v) { this._v = v; }, get innerHTML() { return this._v; } })
+};
+require("../src/joe/web_assets/markdown.js");
+const { window } = globalThis;
 
 test("pairs from the fragment and removes it from browser history", async () => {
   const calls = [];
@@ -84,5 +91,28 @@ test("lets a successful response through untouched", async () => {
   assert.equal(
     await authenticatedFetch("/api/projects", undefined, async () => expected),
     expected
+  );
+});
+
+test("turns a joe:question block into a question and a clean body", () => {
+  const parse = window.JoeMarkdown.extractQuestion;
+  const parsed = parse(
+    'Voici mon analyse.\n\n```joe:question\n'
+    + '{"question":"Quelle option ?","options":["Régénérer","Restreindre"]}\n```'
+  );
+  assert.equal(parsed.question, "Quelle option ?");
+  assert.deepEqual(parsed.options, ["Régénérer", "Restreindre"]);
+  // Le bloc est retiré du corps affiché.
+  assert.equal(parsed.body, "Voici mon analyse.");
+});
+
+test("ignores a malformed or single-option question block", () => {
+  const parse = window.JoeMarkdown.extractQuestion;
+  assert.equal(parse("texte sans bloc"), null);
+  assert.equal(parse('```joe:question\npas du json\n```'), null);
+  // Une seule option n'est pas un choix : on n'affiche pas de carte.
+  assert.equal(
+    parse('```joe:question\n{"question":"Ok ?","options":["Oui"]}\n```'),
+    null
   );
 });

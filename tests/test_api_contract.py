@@ -16,6 +16,10 @@ def start_server(tmp_path):
     server = JoeServer(("127.0.0.1", 0), Handler)
     server.auth = LocalAuth()
     server.manager = RunManager(tmp_path)
+    # Les tests qui n'exercent pas la porte d'approbation travaillent en accès
+    # automatique ; ceux qui la testent règlent ai_access explicitement.
+    for project in server.manager.conversations.list_projects():
+        server.manager.conversations.update_project(project["id"], {"ai_access": "auto"})
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, thread
@@ -138,7 +142,7 @@ def test_contract_requires_confirmation_for_full_access(tmp_path):
     try:
         server.manager.conversations.update_project(
             "main",
-            {"default_execution_mode": "danger-full-access"},
+            {"ai_access": "manual"},
         )
         conversation = server.manager.conversations.create("main")
         connection = http.client.HTTPConnection(
@@ -158,7 +162,7 @@ def test_contract_requires_confirmation_for_full_access(tmp_path):
         )
 
         assert status == 428
-        assert payload["approval"] == "full-access"
+        assert payload["approval"] == "run"
         approval_id = payload["approval_id"]
         assert approval_id
         assert not server.manager.conversations.get(
@@ -209,7 +213,7 @@ def test_contract_persists_and_consumes_full_access_approval(tmp_path):
     try:
         server.manager.conversations.update_project(
             "main",
-            {"default_execution_mode": "danger-full-access"},
+            {"ai_access": "manual"},
         )
         conversation = server.manager.conversations.create("main")
         connection = http.client.HTTPConnection(
@@ -639,5 +643,52 @@ def test_contract_sse_cursors_resume_strictly_after_event(tmp_path):
     finally:
         for connection in connections:
             connection.close()
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_the_authorized_route_is_the_one_that_runs(tmp_path):
+    """Le garde-fou d'accès complet et l'exécution partagent une décision.
+
+    Avant, `requires_full_access_approval` appelait `resolve_route` sans
+    `wait_for_provider` ni fournisseur réservé, alors que `_execute` les
+    appliquait : la route autorisée n'était pas structurellement celle
+    exécutée.
+    """
+    server, thread = start_server(tmp_path)
+    try:
+        manager = server.manager
+        conversation = manager.conversations.create("main")
+        decisions = []
+        original = manager.decide
+
+        def counting_decide(*args, **kwargs):
+            decision = original(*args, **kwargs)
+            decisions.append(decision)
+            return decision
+
+        manager.decide = counting_decide
+        manager.start = lambda *args, **kwargs: SimpleNamespace(
+            run_id="once", decision=kwargs.get("decision")
+        )
+
+        connection = http.client.HTTPConnection(
+            "127.0.0.1", server.server_port, timeout=5
+        )
+        status, payload = json_request(
+            connection,
+            "POST",
+            "/api/runs",
+            {
+                "conversation_id": conversation["id"],
+                "request": "Analyse ce dépôt sans rien modifier",
+            },
+        )
+
+        assert status == 202
+        # Une seule décision pour toute la requête : plus de recalcul entre
+        # l'autorisation et le démarrage.
+        assert len(decisions) == 1
+    finally:
         server.shutdown()
         thread.join(timeout=2)

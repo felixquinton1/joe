@@ -26,6 +26,10 @@ def start_server(tmp_path):
     server = JoeServer(("127.0.0.1", 0), Handler)
     server.auth = LocalAuth()
     server.manager = RunManager(tmp_path)
+    # Les tests qui n'exercent pas la porte d'approbation travaillent en accès
+    # automatique ; ceux qui la testent règlent ai_access explicitement.
+    for project in server.manager.conversations.list_projects():
+        server.manager.conversations.update_project(project["id"], {"ai_access": "auto"})
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, thread
@@ -411,6 +415,11 @@ def test_explicit_skill_prompt_is_handled_locally_without_provider(tmp_path):
         assert response.status == 202
         run = server.manager.live.get(payload["run_id"])
         assert run is not None
+        # L'action locale suit le cycle de vie asynchrone commun à tout run.
+        deadline = time.monotonic() + 10
+        with run.condition:
+            while not run.done and time.monotonic() < deadline:
+                run.condition.wait(timeout=0.1)
         assert run.done is True
         assert run.events[0]["primary"] == "joe"
         skill = tmp_path / ".agentflow/skills/test/SKILL.md"
@@ -729,19 +738,19 @@ def test_project_scope_uses_only_explicit_roots(tmp_path, monkeypatch):
         {
             "workspace_root": str(workspace),
             "additional_roots": [str(extra)],
-            "default_execution_mode": "workspace-write",
+            "ai_access": "auto",
         },
     )
     conversation = manager.conversations.create(project["id"])
 
-    root, additional, remote, execution_mode = manager._project_scope(
+    root, additional, remote, ai_access = manager._project_scope(
         conversation["id"]
     )
 
     assert root == workspace.resolve()
     assert additional == (extra.resolve(),)
     assert remote is True
-    assert execution_mode == "workspace-write"
+    assert ai_access == "auto"
 
     manager.conversations.update(
         conversation["id"],
@@ -758,21 +767,15 @@ def test_only_explicit_operational_checks_use_project_validation_permission():
     assert not _operational_validation("Explique-moi l’architecture de Joe")
 
 
-def test_project_write_default_applies_to_modify_routes():
-    route = Route(Intent.MODIFY, Mode.FAST, "codex")
-
-    assert _resolve_execution_mode(
-        None,
-        "danger-full-access",
-        route,
-        "Ajoute le logo",
-    ) == "danger-full-access"
-    assert _resolve_execution_mode(
-        "read-only",
-        "danger-full-access",
-        route,
-        "Ajoute le logo",
-    ) == "read-only"
+def test_project_access_level_drives_the_execution_mode():
+    """Le niveau du projet décide seul : l'intention ne s'en mêle plus."""
+    for intent in (Intent.MODIFY, Intent.ANALYZE, Intent.ANSWER):
+        route = Route(intent, Mode.FAST, "codex")
+        assert _resolve_execution_mode(None, "read_only", route) == "read-only"
+        assert _resolve_execution_mode(None, "manual", route) == "workspace-write"
+        assert _resolve_execution_mode(None, "auto", route) == "workspace-write"
+        # Un choix explicite de conversation prime toujours.
+        assert _resolve_execution_mode("read-only", "auto", route) == "read-only"
 
 
 def test_full_access_approval_is_required_before_start(tmp_path, monkeypatch):
@@ -780,35 +783,25 @@ def test_full_access_approval_is_required_before_start(tmp_path, monkeypatch):
     manager = RunManager(tmp_path)
     manager.conversations.update_project(
         "main",
-        {"default_execution_mode": "danger-full-access"},
+        {"ai_access": "manual"},
     )
     conversation = manager.conversations.create("main")
 
-    assert manager.requires_full_access_approval(
+    # En accès manuel, l'approbation ne dépend plus de l'intention devinée :
+    # toute demande qui pourra exécuter quelque chose passe par la carte.
+    for request in (
         "Implémente et teste cette fonctionnalité",
-        conversation["id"],
-        "claude",
-        "fast",
-        None,
-    )
-    assert not manager.requires_full_access_approval(
         "Explique cette fonctionnalité",
-        conversation["id"],
-        "claude",
-        "fast",
-        None,
-    )
+    ):
+        assert manager.requires_full_access_approval(
+            request, conversation["id"], "claude", "fast", None
+        ), request
 
 
 def test_consensus_remains_read_only_despite_project_default():
     route = Route(Intent.MODIFY, Mode.CONSENSUS, "codex")
 
-    assert _resolve_execution_mode(
-        None,
-        "danger-full-access",
-        route,
-        "Décide de l’architecture",
-    ) is None
+    assert _resolve_execution_mode(None, "auto", route) is None
 
 
 def test_run_summary_preserves_completed_workflow_and_fallback():
@@ -1078,3 +1071,72 @@ def test_pasted_diagnostic_does_not_raise_effort():
     )
 
     assert _complex_request(request, route) is False
+
+
+def test_cluster_inspection_is_an_operational_validation():
+    """Sans exécution, l'état d'un job distant ne peut être que déduit."""
+    assert _operational_validation(
+        "il y a 8 runs qui tournent depuis 8h sur JZ, check leur état"
+    )
+    assert _operational_validation("lance squeue puis sacct sur les 8 job IDs")
+    assert _operational_validation("rapatrie les résultats avec jz.sh pull-all")
+    assert _operational_validation("vérifie le quota et la walltime sur jean-zay")
+    # Une vraie question d'analyse reste en lecture seule.
+    assert not _operational_validation("Explique-moi l’architecture de Joe")
+    assert not _operational_validation("résume les résultats de la campagne")
+
+
+def test_read_only_runs_are_told_no_approval_channel_exists():
+    """Joe ne peut pas transmettre d'approbation en cours de run : le dire."""
+    from joe.web_runs import _permission_context
+
+    read_only = _permission_context(None)
+    assert "aucune invite d'approbation interactive" in read_only
+    assert "Ne demande jamais d'approuver une commande" in read_only
+    assert "Permission des validations opérationnelles" in read_only
+
+    writable = _permission_context("workspace-write")
+    assert "Exécute directement les commandes" in writable
+    assert "Ne demande jamais" not in writable
+
+
+def test_three_access_levels_are_provider_independent():
+    """Le niveau du projet décide, quel que soit le fournisseur."""
+    from pathlib import Path
+
+    from joe.providers import Provider
+    from joe.web_runs import RunDecision, _resolve_execution_mode
+
+    attendu = {
+        "read_only": {"codex": "read-only", "claude": "plan", "gemini": "plan"},
+        "manual": {
+            "codex": "workspace-write", "claude": "acceptEdits", "gemini": "auto_edit"
+        },
+        "auto": {
+            "codex": "workspace-write", "claude": "acceptEdits", "gemini": "auto_edit"
+        },
+    }
+    for level, par_fournisseur in attendu.items():
+        for intent in (Intent.ANALYZE, Intent.MODIFY, Intent.ANSWER):
+            route = Route(intent, Mode.FAST, "claude")
+            mode = _resolve_execution_mode(None, level, route)
+            for name, expected in par_fournisseur.items():
+                argv = Provider(name, name).command(
+                    "p", Path("/tmp"), intent, execution_mode=mode
+                )
+                assert expected in argv, (level, name, intent)
+            decision = RunDecision(route=route, execution_mode=mode, ai_access=level)
+            assert decision.needs_approval is (level == "manual")
+
+
+def test_a_local_action_never_asks_for_approval():
+    from joe.web_runs import RunDecision
+
+    route = Route(Intent.MODIFY, Mode.FAST, "joe")
+    decision = RunDecision(
+        route=route,
+        execution_mode="workspace-write",
+        ai_access="manual",
+        local_action="create_skill",
+    )
+    assert decision.needs_approval is False

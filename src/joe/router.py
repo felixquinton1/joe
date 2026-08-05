@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 
 from .models import Intent, Mode, Route
-from .provider_registry import get_provider_names
+from .provider_registry import counterpart, get_provider_names
 
 MODIFY_WORDS = {
     "ajoute", "ajouter", "change", "changer", "corrige", "corriger", "crée",
@@ -96,10 +96,6 @@ SUBSTANTIAL_REVIEW_PHRASES = {
     "vérification croisée",
 }
 ARCHITECTURE_WORDS = {"architecture", "migration", "protocole", "roadmap"}
-CODE_WORDS = {
-    "bug", "debug", "python", "test", "tests", "loss", "training", "code",
-    "exception", "traceback", "implémentation", "implementation",
-}
 DOC_WORDS = {"documentation", "readme", "rédige", "rédiger", "critique"}
 LARGE_CONTEXT_WORDS = {
     "gros dépôt", "grand dépôt", "gros contexte", "long contexte",
@@ -306,13 +302,11 @@ class Router:
         elif explicit_provider and not explicit_workflow_review:
             primary = explicit_provider
         elif follow_up_review:
-            primary = "claude" if previous_provider == "codex" else "codex"
+            primary = counterpart(previous_provider or "")
         elif any(phrase in lower for phrase in LARGE_CONTEXT_WORDS):
             primary = "gemini"
         elif words & DOC_WORDS or words & ARCHITECTURE_WORDS:
             primary = "claude"
-        elif words & CODE_WORDS or intent is Intent.MODIFY:
-            primary = "codex"
         else:
             primary = "codex"
 
@@ -321,7 +315,7 @@ class Router:
             reviewer = (
                 explicit_provider
                 if explicit_workflow_review and explicit_provider
-                else "claude" if primary == "codex" else "codex"
+                else counterpart(primary)
             )
         reason = (
             f"{intent.value}; {mode.value}; preferred={primary}"

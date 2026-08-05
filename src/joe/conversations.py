@@ -9,6 +9,38 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from .provider_registry import get_provider_names
+
+# Le jeu d'agents acceptés se dérive du registre : le recopier ici laissait un
+# nouveau fournisseur être silencieusement remis à « automatique ».
+_VALID_AGENTS = {"", *get_provider_names()}
+
+# Accès accordé à l'IA sur un projet. Un seul réglage, trois valeurs, valable
+# pour tous les fournisseurs — il remplace le couple (« Permissions » de la
+# conversation, « Permission des validations opérationnelles » du projet) dont
+# le recouvrement rendait le comportement imprévisible.
+AI_ACCESS_LEVELS = ("read_only", "manual", "auto")
+DEFAULT_AI_ACCESS = "manual"
+
+# Reprise de l'ancien réglage : une valeur d'exécution déjà choisie exprimait
+# une intention d'autoriser, on la traduit en « automatique » pour ne pas
+# durcir silencieusement un projet qui tournait.
+_LEGACY_ACCESS = {
+    "": DEFAULT_AI_ACCESS,
+    "read-only": "read_only",
+    "plan": "read_only",
+    "workspace-write": "auto",
+    "danger-full-access": "auto",
+}
+
+
+def _ai_access(value: Any, legacy: Any = None) -> str:
+    text = str(value or "")
+    if text in AI_ACCESS_LEVELS:
+        return text
+    return _LEGACY_ACCESS.get(str(legacy or ""), DEFAULT_AI_ACCESS)
+
+
 DEFAULT_SETTINGS = {
     "agent": "",
     "mode": "",
@@ -85,7 +117,7 @@ class ConversationStore:
             if "agent" in changes:
                 agent = str(changes["agent"])
                 preferences["agent"] = (
-                    agent if agent in {"", "codex", "claude", "gemini", "copilot"}
+                    agent if agent in _VALID_AGENTS
                     else ""
                 )
             if "mode" in changes:
@@ -125,6 +157,7 @@ class ConversationStore:
             "quota_automation": True,
             "quota_provider": "",
             "default_execution_mode": "",
+            "ai_access": DEFAULT_AI_ACCESS,
             "collapsed": False,
             "position": len(existing),
             "created_at": time.time(),
@@ -170,7 +203,7 @@ class ConversationStore:
             if "quota_provider" in changes:
                 value = str(changes["quota_provider"])
                 project["quota_provider"] = (
-                    value if value in {"", "codex", "claude", "gemini", "copilot"} else ""
+                    value if value in _VALID_AGENTS else ""
                 )
             if "default_execution_mode" in changes:
                 value = str(changes["default_execution_mode"])
@@ -180,6 +213,8 @@ class ConversationStore:
                     in {"", "read-only", "workspace-write", "danger-full-access"}
                     else ""
                 )
+            if "ai_access" in changes:
+                project["ai_access"] = _ai_access(changes["ai_access"])
             if "collapsed" in changes:
                 project["collapsed"] = bool(changes["collapsed"])
             if "position" in changes:
@@ -641,7 +676,7 @@ class ConversationStore:
         preferences["agent"] = (
             preferences.get("agent", "")
             if preferences.get("agent", "")
-            in {"", "codex", "claude", "gemini", "copilot"}
+            in _VALID_AGENTS
             else ""
         )
         preferences["mode"] = (
@@ -671,6 +706,9 @@ class ConversationStore:
             project.setdefault("quota_automation", True)
             project.setdefault("quota_provider", "")
             project.setdefault("default_execution_mode", "")
+            project["ai_access"] = _ai_access(
+                project.get("ai_access"), project.get("default_execution_mode")
+            )
             project.setdefault("collapsed", False)
             project.setdefault("position", payload["projects"].index(project))
         payload["version"] = CURRENT_SCHEMA_VERSION

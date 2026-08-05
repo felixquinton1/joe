@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Callable
 
 from .capabilities import provider_defaults
+from .provider_registry import counterpart
 from .external_sources import collect_sources
 from .usage_tracking import parse_provider_usage
 from .memory import ProjectMemory
@@ -231,7 +232,7 @@ class Orchestrator:
                 participants=(
                     route.primary,
                     route.reviewer
-                    or ("claude" if route.primary == "codex" else "codex"),
+                    or counterpart(route.primary),
                 ),
                 selected_provider=route.primary,
                 model=model,

@@ -39,7 +39,6 @@
           <div class="control-group provider-controls">
             <label><span data-i18n="model">Modèle</span><select id="model"><option value="">Défaut du fournisseur</option></select></label>
             <label><span data-i18n="effort">Effort</span><select id="effort"><option value="">Défaut du modèle</option></select></label>
-            <label><span data-i18n="permissions">Permissions</span><select id="execution-mode"><option value="">Automatique</option></select></label>
           </div>
         </details>
       </div>
@@ -119,7 +118,8 @@
       </fieldset>
       <fieldset class="dialog-section">
         <legend>Exécution &amp; livraison</legend>
-        <label>Permission des validations opérationnelles<select id="project-execution-mode"><option value="">Automatique (lecture seule)</option><option value="workspace-write">Écriture dans le projet</option><option value="danger-full-access">Accès complet</option></select></label>
+        <label>Accès de l'IA<select id="project-ai-access"><option value="read_only">Lecture seule — aucune commande</option><option value="manual">Validation manuelle — j'autorise chaque demande</option><option value="auto">Automatique — aucune confirmation</option></select></label>
+        <small id="project-ai-access-help" class="setting-help">S'applique à tous les fournisseurs et à toutes les demandes du projet. La zone autorisée reste la racine du projet et ses racines additionnelles.</small>
         <label class="check-label"><input id="project-auto-delivery" type="checkbox"> Commit et push automatiques après une modification validée</label>
         <small id="project-auto-delivery-help" class="setting-help">Désactivé : tu peux examiner les changements et utiliser « Rejeter la sélection ».</small>
         <label class="check-label"><input id="project-isolated-worktrees" type="checkbox"> Isoler les modifications dans un worktree Git</label>

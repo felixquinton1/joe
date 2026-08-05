@@ -14,6 +14,7 @@ from typing import Any
 from . import __version__
 from .models import Mode, Route
 from .provider_health import apply_cooldowns
+from .provider_registry import counterpart, usage_providers
 from .usage_claude import (
     claude_account_plan as _claude_account_plan,
     claude_reset_timestamp as _claude_reset_timestamp,
@@ -28,12 +29,9 @@ from .usage_claude import (
 from .usage_codex import (
     codex_status as _codex_status_impl,
     normalize_codex_usage,
-    send as _send_impl,
     window_name as _window_name,
 )
 from .usage_gemini import (
-    gemini_auth_type as _gemini_auth_type_impl,
-    gemini_quota_description as _gemini_quota_description_impl,
     gemini_stats as _gemini_stats,
     gemini_status as _gemini_status_impl,
     gemini_usage_path as _gemini_usage_path_impl,
@@ -100,14 +98,6 @@ def _gemini_status(
     settings_path: Path | None = None,
 ) -> dict[str, Any]:
     return _gemini_status_impl(path=path, settings_path=settings_path)
-
-
-def _gemini_auth_type(path: Path | None = None) -> str | None:
-    return _gemini_auth_type_impl(path)
-
-
-def _gemini_quota_description(auth_type: str | None) -> str:
-    return _gemini_quota_description_impl(auth_type)
 
 
 def _with_last_available(status: dict[str, Any]) -> dict[str, Any]:
@@ -178,7 +168,7 @@ def balance_route(
     """Move a FAST automatic route away from a constrained main provider."""
     if route.mode is not Mode.FAST or route.primary not in {"codex", "claude"}:
         return route
-    alternative = "claude" if route.primary == "codex" else "codex"
+    alternative = counterpart(route.primary)
     by_provider = {item.get("provider"): item for item in statuses}
     current = by_provider.get(route.primary)
     other = by_provider.get(alternative)
@@ -218,7 +208,7 @@ def admit_route(
         provider: _provider_capacity(
             by_provider.get(provider), threshold, timestamp
         )
-        for provider in ("codex", "claude", "gemini")
+        for provider in usage_providers()
     }
     constrained = {
         provider: detail
@@ -267,7 +257,7 @@ def admit_route(
 
     eligible = [
         provider
-        for provider in ("codex", "claude", "gemini")
+        for provider in usage_providers()
         if capacity[provider][0] is not False
     ]
     eligible.sort(
@@ -287,7 +277,7 @@ def admit_route(
             fast_threshold = 3 if route.intent.value == "answer" else 8
             affordable_single = [
                 provider
-                for provider in ("codex", "claude", "gemini")
+                for provider in usage_providers()
                 if _provider_capacity(
                     by_provider.get(provider), fast_threshold, timestamp
                 )[0]
@@ -355,7 +345,7 @@ def admit_route(
     original_reviewer = route.reviewer
     if needed == 2 and not original_reviewer:
         original_reviewer = (
-            "claude" if route.primary == "codex" else "codex"
+            counterpart(route.primary)
         )
     primary = route.primary if route.primary in eligible else eligible[0]
     others = [provider for provider in eligible if provider != primary]
@@ -575,10 +565,6 @@ def _codex_status() -> dict[str, Any]:
         os_module=os,
         time_module=time,
     )
-
-
-def _send(process: subprocess.Popen[bytes], message: dict[str, Any]) -> None:
-    _send_impl(process, message)
 
 
 def _unavailable(provider: str, message: str) -> dict[str, Any]:

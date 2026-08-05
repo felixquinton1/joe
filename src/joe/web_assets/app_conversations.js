@@ -503,8 +503,8 @@ window.createJoeConversations = function createJoeConversations({
     $("project-isolated-worktrees").checked = false;
     $("project-quota-automation").checked = true;
     updateAutoDeliveryHelp();
-    $("project-execution-mode").value = "";
-    refreshSelectMenu($("project-execution-mode"));
+    $("project-ai-access").value = "manual";
+    refreshSelectMenu($("project-ai-access"));
     $("project-context").value = "";
     $("skill-name").value = "";
     $("skill-instructions").value = "";
@@ -529,8 +529,8 @@ window.createJoeConversations = function createJoeConversations({
     $("project-isolated-worktrees").checked = Boolean(project.isolated_worktrees);
     $("project-quota-automation").checked = project.quota_automation !== false;
     updateAutoDeliveryHelp();
-    $("project-execution-mode").value = project.default_execution_mode || "";
-    refreshSelectMenu($("project-execution-mode"));
+    $("project-ai-access").value = project.ai_access || "manual";
+    refreshSelectMenu($("project-ai-access"));
     $("project-context").value = project.context || "";
     $("skill-name").value = "";
     $("skill-instructions").value = "";
@@ -700,7 +700,7 @@ window.createJoeConversations = function createJoeConversations({
           auto_commit_push: $("project-auto-delivery").checked,
           isolated_worktrees: $("project-isolated-worktrees").checked,
           quota_automation: $("project-quota-automation").checked,
-          default_execution_mode: $("project-execution-mode").value,
+          ai_access: $("project-ai-access").value,
           context: $("project-context").value
         })
       }

@@ -11,7 +11,7 @@ from joe.providers import (
     _final_output,
     _redact_values,
     _secret_values,
-    _terminal_gemini_quota,
+    _terminal_quota,
     _process_group_options,
     classify_error,
 )
@@ -280,8 +280,13 @@ def test_error_classification():
         0,
         "codex",
     ) is None
-    assert _terminal_gemini_quota(
-        "429 RESOURCE_EXHAUSTED: exceeded your current quota"
+    # Les marqueurs de quota terminal viennent du registre, plus d'un test
+    # sur le nom du fournisseur.
+    assert _terminal_quota(
+        "gemini", "429 RESOURCE_EXHAUSTED: exceeded your current quota"
+    )
+    assert not _terminal_quota(
+        "codex", "429 RESOURCE_EXHAUSTED: exceeded your current quota"
     )
 
 
@@ -388,3 +393,62 @@ def test_network_control_declaration_matches_commands():
             effective.append(name)
 
     assert tuple(effective) == NETWORK_CONTROLLED_PROVIDERS
+
+
+def test_registry_is_the_single_source_of_provider_behaviour():
+    """Un comportement propre à un fournisseur se déclare une seule fois."""
+    from joe.maintenance import KNOWN_VERSIONS
+    from joe.memory import DEFAULT_CONFIG
+    from joe.provider_registry import (
+        default_fallbacks,
+        get_provider_names,
+        get_provider_specs,
+        minimum_versions,
+        usage_providers,
+    )
+    from joe.conversations import _VALID_AGENTS
+
+    names = set(get_provider_names())
+    assert _VALID_AGENTS == {"", *names}
+    assert set(KNOWN_VERSIONS) == names
+    assert KNOWN_VERSIONS == minimum_versions()
+    assert DEFAULT_CONFIG["fallbacks"] == default_fallbacks()
+    assert set(usage_providers()) <= names
+    # Chaque repli déclaré doit pointer vers un fournisseur connu.
+    for spec in get_provider_specs():
+        assert set(spec.fallbacks) <= names, spec.name
+        assert set(spec.reviewer_peers) <= names, spec.name
+
+
+def test_the_watchdog_is_armed_by_the_declared_delay_alone():
+    """Plus aucun test sur le nom du fournisseur n'arme le chien de garde."""
+    from joe.provider_registry import get_provider_spec
+
+    assert get_provider_spec("gemini").watchdog_seconds
+    assert get_provider_spec("codex").watchdog_seconds is None
+    assert Provider("gemini", "gemini").watchdog_delay == 90
+    assert Provider("codex", "codex").watchdog_delay is None
+    # Un override d'instance reste prioritaire.
+    assert Provider("codex", "codex", watchdog_seconds=5).watchdog_delay == 5
+
+
+def test_streaming_providers_all_have_a_parser_and_an_extractor():
+    """Sinon le fournisseur se dégrade en silence : aucun événement, sortie brute."""
+    from joe.providers import _ACTIVITY_PARSERS, _FINAL_EXTRACTORS
+    from joe.provider_registry import get_provider_specs
+
+    streaming = {spec.name for spec in get_provider_specs() if spec.streams_json}
+    assert set(_ACTIVITY_PARSERS) == streaming
+    assert set(_FINAL_EXTRACTORS) == streaming
+
+
+def test_the_reviewer_counterpart_comes_from_the_registry():
+    from joe.provider_registry import counterpart
+
+    assert counterpart("codex") == "claude"
+    assert counterpart("claude") == "codex"
+    # Gemini et Copilot ont désormais un complémentaire déclaré, au lieu
+    # d'être exclus par une expression codée en dur.
+    assert counterpart("gemini") == "codex"
+    assert counterpart("copilot") == "codex"
+    assert counterpart("codex", eligible=("codex",)) is None

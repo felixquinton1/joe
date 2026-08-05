@@ -125,5 +125,28 @@
     return text.replace(/\u0000CODE(\d+)\u0000/g, (_, position) => `<code>${code[Number(position)]}</code>`);
   }
 
-  window.JoeMarkdown = { renderMarkdown, isTableSeparator };
+  function extractQuestion(text) {
+    // L'IA n'a aucun canal interactif : elle termine son tour sur un bloc
+    // `joe:question`, que Joe transforme en boutons. Le clic renvoie l'option
+    // choisie comme message suivant — ni blocage, ni protocole.
+    const match = /```joe:question\s*\n([\s\S]*?)```/.exec(text || "");
+    if (!match) return null;
+    let parsed;
+    try {
+      parsed = JSON.parse(match[1]);
+    } catch (error) {
+      return null;
+    }
+    const options = Array.isArray(parsed && parsed.options)
+      ? parsed.options.map(item => String(item)).filter(Boolean).slice(0, 4)
+      : [];
+    if (!parsed || !parsed.question || options.length < 2) return null;
+    return {
+      question: String(parsed.question),
+      options,
+      body: text.replace(match[0], "").trimEnd()
+    };
+  }
+
+  window.JoeMarkdown = { renderMarkdown, isTableSeparator, extractQuestion };
 }());

@@ -5,12 +5,11 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-KNOWN_VERSIONS = {
-    "codex": "0.145.0",
-    "claude": "2.1.197",
-    "gemini": "0.52.0",
-    "copilot": "1.0.75",
-}
+from .provider_registry import minimum_versions
+
+# Les versions minimales sont déclarées une fois au registre des
+# fournisseurs, avec le reste du comportement propre à chacun.
+KNOWN_VERSIONS = minimum_versions()
 
 
 def provider_audit() -> list[dict[str, Any]]:

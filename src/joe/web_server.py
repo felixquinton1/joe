@@ -10,12 +10,13 @@ from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from . import __version__
-from .auth import LocalAuth, auth_token_path, required_role, rotate_token
+from .auth import LocalAuth, auth_token_path, rotate_token
 from .doctor import doctor_report
 from .files import MAX_FILE_BYTES
 from .http_utils import RequestBodyError, read_json_body, validate_bind
 from .provider_registry import get_provider_catalog, get_provider_names
 from .providers import NETWORK_CONTROLLED_PROVIDERS
+from .routes import Route, resolve
 from .skills import (
     create_skill,
     import_skill,
@@ -24,7 +25,12 @@ from .skills import (
     parse_skill_request,
     promote_skill,
 )
-from .web_runs import ActiveConversationError, RunManager, _existing_directory
+from .web_runs import (
+    ActiveConversationError,
+    RunManager,
+    _existing_directory,
+    _web_facade,
+)
 from .worktrees import WorktreeError
 
 _ASSETS = {
@@ -53,331 +59,439 @@ class JoeServer(ThreadingHTTPServer):
 
 class Handler(BaseHTTPRequestHandler):
     server: JoeServer
+    route: Route
+    query: dict[str, list[str]]
 
     def do_GET(self) -> None:
-        parsed = urlparse(self.path)
-        path = parsed.path
-        if path in _ASSETS:
-            name, content_type = _ASSETS[path]
-            return self._asset(name, content_type)
-        if path == "/api/status":
-            return self._json(
-                {
-                    "version": __version__,
-                    "api_version": API_VERSION,
-                    "project": str(self.server.manager.project),
-                    "conversation_store": str(
-                        self.server.manager.conversations.path
-                    ),
-                    "conversation_backup": str(
-                        self.server.manager.conversations.backup_path
-                    ),
-                    "providers": get_provider_names(),
-                    "provider_catalog": get_provider_catalog(),
-                    "modes": ["fast", "review", "consensus"],
-                    "auth_required": self.server.auth.enabled,
-                    "profile": self.server.auth.role,
-                    "network_control_providers": list(
-                        NETWORK_CONTROLLED_PROVIDERS
-                    ),
-                }
-            )
-        force_usage = path == "/api/usage" and parse_qs(parsed.query).get(
-            "force"
-        ) == ["1"]
-        required = "maintainer" if force_usage else required_role("GET", path)
-        if not self._authorize(required):
-            return
-        facade = _web_facade()
-        if path == "/api/capabilities":
-            return self._json(facade.provider_capabilities())
-        if path == "/api/doctor":
-            return self._json(doctor_report(self.server.manager.project))
-        if path == "/api/files":
-            project_id = parse_qs(parsed.query).get("project", ["free"])[0]
-            return self._json(self.server.manager.files.list(project_id))
-        if path.startswith("/api/files/") and path.endswith("/download"):
-            item_id = unquote(path.split("/")[-2])
-            item = self.server.manager.files.get(
-                item_id,
-                parse_qs(parsed.query).get("project", ["free"])[0],
-            )
-            if not item:
-                return self.send_error(HTTPStatus.NOT_FOUND)
-            return self._file(item)
-        if path == "/api/usage":
-            force = parse_qs(parsed.query).get("force") == ["1"]
-            return self._json(facade.usage_status(force=force))
-        if path == "/api/conversations":
-            return self._json(self.server.manager.conversations.list())
-        if path == "/api/search":
-            query = parse_qs(parsed.query).get("q", [""])[0]
-            project_id = parse_qs(parsed.query).get("project", [None])[0]
-            return self._json(
-                self.server.manager.search(query, project_id)
-            )
-        if path == "/api/analytics":
-            project_id = parse_qs(parsed.query).get("project", [None])[0]
-            return self._json(self.server.manager.conversations.analytics(project_id))
-        if path == "/api/preferences":
-            return self._json(self.server.manager.conversations.preferences())
-        if path == "/api/runs/active":
-            return self._json(
-                [
-                    {
-                        "run_id": run.run_id,
-                        "conversation_id": run.conversation_id,
-                        "request": run.request,
-                    }
-                    for run in self.server.manager.active_runs()
-                ]
-            )
-        if path == "/api/tasks":
-            return self._json(self.server.manager.list_tasks())
-        if path == "/api/automations":
-            return self._json(self.server.manager.list_automations())
-        if path == "/api/approvals":
-            return self._json(
-                self.server.manager.approvals.list(status="pending")
-            )
-        if path.startswith("/api/tasks/") and path.endswith("/diff"):
-            task_id = unquote(path.split("/")[-2])
-            try:
-                report = self.server.manager.task_diff(task_id)
-            except WorktreeError as error:
-                return self._json(
-                    {"error": str(error)},
-                    HTTPStatus.CONFLICT,
-                )
-            return self._json(
-                report,
-                HTTPStatus.OK if report is not None else HTTPStatus.NOT_FOUND,
-            )
-        if path == "/api/projects":
-            return self._json(self.server.manager.conversations.list_projects())
-        if path == "/api/skills/global":
-            return self._json(list_global_skills())
-        if path.startswith("/api/projects/") and path.endswith("/skills"):
-            project_id = unquote(path.split("/")[-2])
-            project = self.server.manager.conversations.get_project(project_id)
-            if not project:
-                return self._json({}, HTTPStatus.NOT_FOUND)
-            workspace = _existing_directory(project.get("workspace_root")) or self.server.manager.project
-            return self._json(list_skills(workspace))
-        if path.startswith("/api/projects/"):
-            item = self.server.manager.conversations.get_project(
-                unquote(path.rsplit("/", 1)[1])
-            )
-            return self._json(item, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
-        if path.startswith("/api/conversations/"):
-            item = self.server.manager.conversations.get(
-                unquote(path.rsplit("/", 1)[1])
-            )
-            return self._json(item, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
-        if path == "/api/history":
-            return self._json(self.server.manager.history())
-        if path.startswith("/api/history/"):
-            item = self.server.manager.history_item(unquote(path.rsplit("/", 1)[1]))
-            return self._json(item, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
-        if path.startswith("/api/events/"):
-            return self._events(
-                unquote(path.rsplit("/", 1)[1]),
-                _event_cursor(
-                    self.headers.get("Last-Event-ID"),
-                    parse_qs(parsed.query).get("after", ["0"])[0],
-                ),
-            )
-        self.send_error(HTTPStatus.NOT_FOUND)
+        self._dispatch("GET")
 
     def do_POST(self) -> None:
-        path = urlparse(self.path).path
-        if path == "/api/pair":
-            return self._pair()
-        if not self._authorize(required_role("POST", path)):
-            return
-        if path == "/api/auth/rotate":
-            token = rotate_token(self.server.auth_path)
-            self.server.auth = LocalAuth(token, self.server.auth.role, True)
-            return self._json({"rotated": True})
-        if path.startswith("/api/tasks/") and path.endswith("/integrate"):
-            task_id = unquote(path.split("/")[-2])
-            try:
-                task = self.server.manager.integrate_task(task_id)
-            except KeyError:
-                return self._json({}, HTTPStatus.NOT_FOUND)
-            except WorktreeError as error:
-                return self._json(
-                    {"error": str(error)},
-                    HTTPStatus.CONFLICT,
-                )
-            return self._json(task, HTTPStatus.ACCEPTED)
-        if path.startswith("/api/runs/") and path.endswith("/reject"):
-            run_id = unquote(path.split("/")[-2])
-            payload = self._read_payload(allow_empty=True)
-            if payload is None:
-                return
-            selected_files = payload.get("files")
-            if selected_files is not None and (
-                not isinstance(selected_files, list)
-                or not all(isinstance(path, str) for path in selected_files)
-            ):
-                return self._json(
-                    {"restored": False, "message": "Sélection invalide."},
-                    HTTPStatus.BAD_REQUEST,
-                )
-            restored, message = self.server.manager.reject_changes(
-                run_id,
-                selected_files,
-            )
-            return self._json(
-                {"restored": restored, "message": message},
-                HTTPStatus.OK if restored else HTTPStatus.CONFLICT,
-            )
-        if path.startswith("/api/runs/") and path.endswith("/cancel"):
-            run_id = unquote(path.split("/")[-2])
-            cancelled = self.server.manager.cancel(run_id)
-            return self._json(
-                {"cancelled": cancelled},
-                HTTPStatus.ACCEPTED if cancelled else HTTPStatus.NOT_FOUND,
-            )
-        if path.startswith("/api/automations/") and path.endswith("/cancel"):
-            plan_id = unquote(path.split("/")[-2])
-            plan = self.server.manager.cancel_automation(plan_id)
-            return self._json(
-                plan or {},
-                HTTPStatus.ACCEPTED if plan else HTTPStatus.NOT_FOUND,
-            )
-        if path == "/api/automations":
-            payload = self._read_payload()
-            if payload is None:
-                return
-            try:
-                plan = self.server.manager.create_automation(payload)
-            except (TypeError, ValueError) as error:
-                return self._json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
-            return self._json(plan, HTTPStatus.CREATED)
-        if path == "/api/conversations":
-            payload = self._read_payload(allow_empty=True)
-            if payload is None:
-                return
-            return self._json(
-                self.server.manager.conversations.create(payload.get("project_id")),
-                HTTPStatus.CREATED,
-            )
-        if path == "/api/files":
-            payload = self._read_payload(max_bytes=MAX_FILE_BYTES * 2)
-            if payload is None:
-                return
-            project_id = str(payload.get("project_id", "free"))
-            if not self.server.manager.conversations.get_project(project_id):
-                return self._json(
-                    {"error": "Projet inconnu."},
-                    HTTPStatus.BAD_REQUEST,
-                )
-            try:
-                item = self.server.manager.files.add(
-                    project_id,
-                    str(payload.get("name", "file")),
-                    str(payload.get("content_type", "")),
-                    str(payload.get("data", "")),
-                )
-            except (OSError, ValueError) as error:
-                return self._json(
-                    {"error": str(error)},
-                    HTTPStatus.BAD_REQUEST,
-                )
-            return self._json(item, HTTPStatus.CREATED)
-        if path == "/api/projects":
-            payload = self._read_payload(allow_empty=True)
-            if payload is None:
-                return
-            return self._json(
-                self.server.manager.conversations.create_project(
-                    str(payload.get("name", "Nouveau projet"))
-                ),
-                HTTPStatus.CREATED,
-            )
-        if path == "/api/skills/global/create":
-            payload = self._read_payload()
-            if payload is None:
-                return
-            try:
-                created = create_skill(
-                    None,
-                    str(payload.get("name", "")),
-                    str(payload.get("instructions", "")),
-                    global_scope=True,
-                )
-            except (OSError, ValueError) as error:
-                return self._json({"message": str(error)}, HTTPStatus.BAD_REQUEST)
-            return self._json(created, HTTPStatus.CREATED)
-        if path == "/api/skills/global/import":
-            payload = self._read_payload()
-            if payload is None:
-                return
-            try:
-                imported = import_skill(
-                    None,
-                    Path(str(payload.get("source", ""))),
-                    name=str(payload.get("name", "")).strip() or None,
-                    global_scope=True,
-                )
-            except (OSError, ValueError) as error:
-                return self._json({"message": str(error)}, HTTPStatus.BAD_REQUEST)
-            return self._json(imported, HTTPStatus.CREATED)
-        if path.startswith("/api/projects/") and path.endswith("/skills/create"):
-            project_id = unquote(path.split("/")[-3])
-            project = self.server.manager.conversations.get_project(project_id)
-            if not project:
-                return self._json({}, HTTPStatus.NOT_FOUND)
-            payload = self._read_payload()
-            if payload is None:
-                return
-            workspace = _existing_directory(project.get("workspace_root")) or self.server.manager.project
-            try:
-                created = create_skill(
-                    workspace,
-                    str(payload.get("name", "")),
-                    str(payload.get("instructions", "")),
-                )
-            except (OSError, ValueError) as error:
-                return self._json({"message": str(error)}, HTTPStatus.BAD_REQUEST)
-            return self._json(created, HTTPStatus.CREATED)
-        if path.startswith("/api/projects/") and path.endswith("/skills/import"):
-            project_id = unquote(path.split("/")[-3])
-            project = self.server.manager.conversations.get_project(project_id)
-            if not project:
-                return self._json({}, HTTPStatus.NOT_FOUND)
-            payload = self._read_payload(allow_empty=True)
-            if payload is None:
-                return
-            workspace = _existing_directory(project.get("workspace_root")) or self.server.manager.project
-            try:
-                imported = import_skill(
-                    workspace,
-                    Path(str(payload.get("source", ""))),
-                    name=str(payload.get("name", "")).strip() or None,
-                    source_provider=str(payload.get("provider", "unknown")),
-                )
-            except (OSError, ValueError) as error:
-                return self._json({"message": str(error)}, HTTPStatus.BAD_REQUEST)
-            return self._json(imported, HTTPStatus.CREATED)
-        if path.startswith("/api/projects/") and path.endswith("/skills/promote"):
-            project_id = unquote(path.split("/")[-3])
-            project = self.server.manager.conversations.get_project(project_id)
-            if not project:
-                return self._json({}, HTTPStatus.NOT_FOUND)
-            payload = self._read_payload(allow_empty=True)
-            if payload is None:
-                return
-            workspace = _existing_directory(project.get("workspace_root")) or self.server.manager.project
-            try:
-                promoted = promote_skill(workspace, str(payload.get("name", "")).strip())
-            except (OSError, ValueError) as error:
-                return self._json({"message": str(error)}, HTTPStatus.BAD_REQUEST)
-            return self._json(promoted, HTTPStatus.CREATED)
-        if path != "/api/runs":
+        self._dispatch("POST")
+
+    def do_PATCH(self) -> None:
+        self._dispatch("PATCH")
+
+    def do_DELETE(self) -> None:
+        self._dispatch("DELETE")
+
+    def _dispatch(self, method: str) -> None:
+        """Resolve the route, authorize from its declared role, then serve it.
+
+        Les motifs étant ancrés et exclusifs, une route non déclarée échoue en
+        404 franc au lieu d'être détournée vers un préfixe fourre-tout.
+        """
+        parsed = urlparse(self.path)
+        if method == "GET" and parsed.path in _ASSETS:
+            name, content_type = _ASSETS[parsed.path]
+            return self._asset(name, content_type)
+        match = resolve(method, parsed.path)
+        if match is None:
             return self.send_error(HTTPStatus.NOT_FOUND)
+        self.route, parameters = match
+        self.query = parse_qs(parsed.query)
+        if self.route.role and not self._authorize(self._route_role()):
+            return
+        handler = getattr(self, self.route.handler)
+        handler(**{key: unquote(value) for key, value in parameters.items()})
+
+    def _route_role(self) -> str:
+        """Role for this request, including any elevation carried by the query."""
+        elevation = self.route.query_role
+        if elevation and self.query.get(elevation[0]) == [elevation[1]]:
+            return elevation[2]
+        return self.route.role
+
+    def _param(self, name: str, default: str | None = None) -> str | None:
+        return self.query.get(name, [default])[0]
+
+    # --- Lecture ---------------------------------------------------------
+
+    def _get_status(self) -> None:
+        self._json(
+            {
+                "version": __version__,
+                "api_version": API_VERSION,
+                "project": str(self.server.manager.project),
+                "conversation_store": str(self.server.manager.conversations.path),
+                "conversation_backup": str(
+                    self.server.manager.conversations.backup_path
+                ),
+                "providers": get_provider_names(),
+                "provider_catalog": get_provider_catalog(),
+                "modes": ["fast", "review", "consensus"],
+                "auth_required": self.server.auth.enabled,
+                "profile": self.server.auth.role,
+                "network_control_providers": list(NETWORK_CONTROLLED_PROVIDERS),
+            }
+        )
+
+    def _get_capabilities(self) -> None:
+        self._json(_web_facade().provider_capabilities())
+
+    def _get_doctor(self) -> None:
+        self._json(doctor_report(self.server.manager.project))
+
+    def _get_files(self) -> None:
+        self._json(self.server.manager.files.list(self._param("project", "free")))
+
+    def _get_file_download(self, item_id: str) -> None:
+        item = self.server.manager.files.get(item_id, self._param("project", "free"))
+        if not item:
+            return self.send_error(HTTPStatus.NOT_FOUND)
+        self._file(item)
+
+    def _get_usage(self) -> None:
+        force = self.query.get("force") == ["1"]
+        self._json(_web_facade().usage_status(force=force))
+
+    def _get_conversations(self) -> None:
+        self._json(self.server.manager.conversations.list())
+
+    def _get_conversation(self, conversation_id: str) -> None:
+        item = self.server.manager.conversations.get(conversation_id)
+        self._json(item, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
+
+    def _get_search(self) -> None:
+        self._json(
+            self.server.manager.search(
+                self._param("q", "") or "",
+                self._param("project"),
+            )
+        )
+
+    def _get_analytics(self) -> None:
+        self._json(
+            self.server.manager.conversations.analytics(self._param("project"))
+        )
+
+    def _get_preferences(self) -> None:
+        self._json(self.server.manager.conversations.preferences())
+
+    def _get_active_runs(self) -> None:
+        self._json(
+            [
+                {
+                    "run_id": run.run_id,
+                    "conversation_id": run.conversation_id,
+                    "request": run.request,
+                }
+                for run in self.server.manager.active_runs()
+            ]
+        )
+
+    def _get_tasks(self) -> None:
+        self._json(self.server.manager.list_tasks())
+
+    def _get_task_diff(self, task_id: str) -> None:
+        try:
+            report = self.server.manager.task_diff(task_id)
+        except WorktreeError as error:
+            return self._json({"error": str(error)}, HTTPStatus.CONFLICT)
+        self._json(
+            report,
+            HTTPStatus.OK if report is not None else HTTPStatus.NOT_FOUND,
+        )
+
+    def _get_automations(self) -> None:
+        self._json(self.server.manager.list_automations())
+
+    def _get_approvals(self) -> None:
+        self._json(self.server.manager.approvals.list(status="pending"))
+
+    def _get_projects(self) -> None:
+        self._json(self.server.manager.conversations.list_projects())
+
+    def _get_project(self, project_id: str) -> None:
+        item = self.server.manager.conversations.get_project(project_id)
+        self._json(item, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
+
+    def _get_project_skills(self, project_id: str) -> None:
+        workspace = self._project_workspace(project_id)
+        if workspace is None:
+            return self._json({}, HTTPStatus.NOT_FOUND)
+        self._json(list_skills(workspace))
+
+    def _get_global_skills(self) -> None:
+        self._json(list_global_skills())
+
+    def _get_history(self) -> None:
+        self._json(self.server.manager.history())
+
+    def _get_history_item(self, run_id: str) -> None:
+        item = self.server.manager.history_item(run_id)
+        self._json(item, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
+
+    def _get_events(self, run_id: str) -> None:
+        self._events(
+            run_id,
+            _event_cursor(
+                self.headers.get("Last-Event-ID"),
+                self._param("after", "0") or "0",
+            ),
+        )
+
+    # --- Écriture --------------------------------------------------------
+
+    def _post_pair(self) -> None:
+        self._pair()
+
+    def _post_auth_rotate(self) -> None:
+        token = rotate_token(self.server.auth_path)
+        self.server.auth = LocalAuth(token, self.server.auth.role, True)
+        self._json({"rotated": True})
+
+    def _post_run_cancel(self, run_id: str) -> None:
+        cancelled = self.server.manager.cancel(run_id)
+        self._json(
+            {"cancelled": cancelled},
+            HTTPStatus.ACCEPTED if cancelled else HTTPStatus.NOT_FOUND,
+        )
+
+    def _post_run_reject(self, run_id: str) -> None:
+        payload = self._read_payload(allow_empty=True)
+        if payload is None:
+            return
+        selected_files = payload.get("files")
+        if selected_files is not None and (
+            not isinstance(selected_files, list)
+            or not all(isinstance(item, str) for item in selected_files)
+        ):
+            return self._json(
+                {"restored": False, "message": "Sélection invalide."},
+                HTTPStatus.BAD_REQUEST,
+            )
+        restored, message = self.server.manager.reject_changes(
+            run_id,
+            selected_files,
+        )
+        self._json(
+            {"restored": restored, "message": message},
+            HTTPStatus.OK if restored else HTTPStatus.CONFLICT,
+        )
+
+    def _post_task_integrate(self, task_id: str) -> None:
+        try:
+            task = self.server.manager.integrate_task(task_id)
+        except KeyError:
+            return self._json({}, HTTPStatus.NOT_FOUND)
+        except WorktreeError as error:
+            return self._json({"error": str(error)}, HTTPStatus.CONFLICT)
+        self._json(task, HTTPStatus.ACCEPTED)
+
+    def _post_automations(self) -> None:
+        payload = self._read_payload()
+        if payload is None:
+            return
+        try:
+            plan = self.server.manager.create_automation(payload)
+        except (TypeError, ValueError) as error:
+            return self._json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+        self._json(plan, HTTPStatus.CREATED)
+
+    def _post_automation_cancel(self, plan_id: str) -> None:
+        plan = self.server.manager.cancel_automation(plan_id)
+        self._json(
+            plan or {},
+            HTTPStatus.ACCEPTED if plan else HTTPStatus.NOT_FOUND,
+        )
+
+    def _post_conversations(self) -> None:
+        payload = self._read_payload(allow_empty=True)
+        if payload is None:
+            return
+        self._json(
+            self.server.manager.conversations.create(payload.get("project_id")),
+            HTTPStatus.CREATED,
+        )
+
+    def _post_files(self) -> None:
+        payload = self._read_payload(max_bytes=MAX_FILE_BYTES * 2)
+        if payload is None:
+            return
+        project_id = str(payload.get("project_id", "free"))
+        if not self.server.manager.conversations.get_project(project_id):
+            return self._json({"error": "Projet inconnu."}, HTTPStatus.BAD_REQUEST)
+        try:
+            item = self.server.manager.files.add(
+                project_id,
+                str(payload.get("name", "file")),
+                str(payload.get("content_type", "")),
+                str(payload.get("data", "")),
+            )
+        except (OSError, ValueError) as error:
+            return self._json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+        self._json(item, HTTPStatus.CREATED)
+
+    def _post_projects(self) -> None:
+        payload = self._read_payload(allow_empty=True)
+        if payload is None:
+            return
+        self._json(
+            self.server.manager.conversations.create_project(
+                str(payload.get("name", "Nouveau projet"))
+            ),
+            HTTPStatus.CREATED,
+        )
+
+    def _post_global_skill_create(self) -> None:
+        payload = self._read_payload()
+        if payload is None:
+            return
+        self._skill_result(
+            create_skill,
+            None,
+            str(payload.get("name", "")),
+            str(payload.get("instructions", "")),
+            global_scope=True,
+        )
+
+    def _post_global_skill_import(self) -> None:
+        payload = self._read_payload()
+        if payload is None:
+            return
+        self._skill_result(
+            import_skill,
+            None,
+            Path(str(payload.get("source", ""))),
+            name=str(payload.get("name", "")).strip() or None,
+            global_scope=True,
+        )
+
+    def _post_project_skill_create(self, project_id: str) -> None:
+        workspace = self._project_workspace(project_id)
+        if workspace is None:
+            return self._json({}, HTTPStatus.NOT_FOUND)
+        payload = self._read_payload()
+        if payload is None:
+            return
+        self._skill_result(
+            create_skill,
+            workspace,
+            str(payload.get("name", "")),
+            str(payload.get("instructions", "")),
+        )
+
+    def _post_project_skill_import(self, project_id: str) -> None:
+        workspace = self._project_workspace(project_id)
+        if workspace is None:
+            return self._json({}, HTTPStatus.NOT_FOUND)
+        payload = self._read_payload(allow_empty=True)
+        if payload is None:
+            return
+        self._skill_result(
+            import_skill,
+            workspace,
+            Path(str(payload.get("source", ""))),
+            name=str(payload.get("name", "")).strip() or None,
+            source_provider=str(payload.get("provider", "unknown")),
+        )
+
+    def _post_project_skill_promote(self, project_id: str) -> None:
+        workspace = self._project_workspace(project_id)
+        if workspace is None:
+            return self._json({}, HTTPStatus.NOT_FOUND)
+        payload = self._read_payload(allow_empty=True)
+        if payload is None:
+            return
+        self._skill_result(
+            promote_skill,
+            workspace,
+            str(payload.get("name", "")).strip(),
+        )
+
+    # --- Mise à jour -----------------------------------------------------
+
+    def _patch_preferences(self) -> None:
+        payload = self._read_payload()
+        if payload is None:
+            return
+        self._json(self.server.manager.conversations.update_preferences(payload))
+
+    def _patch_approval(self, approval_id: str) -> None:
+        payload = self._read_payload()
+        if payload is None:
+            return
+        try:
+            item = self.server.manager.approvals.decide(
+                approval_id,
+                str(payload.get("decision", "")),
+            )
+        except ValueError as error:
+            return self._json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+        self._json(item or {}, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
+
+    def _patch_conversation(self, conversation_id: str) -> None:
+        payload = self._read_payload()
+        if payload is None:
+            return
+        # Le rôle de base n'autorise que l'acquittement : tout autre champ
+        # exige le rôle escaladé déclaré par la route.
+        if not set(payload) <= ACQUITTAL_FIELDS:
+            if not self._authorize(self.route.escalated_role):
+                return
+        item = self.server.manager.conversations.update(conversation_id, payload)
+        self._json(item, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
+
+    def _patch_project(self, project_id: str) -> None:
+        payload = self._read_payload()
+        if payload is None:
+            return
+        item = self.server.manager.conversations.update_project(project_id, payload)
+        self._json(item, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
+
+    # --- Suppression -----------------------------------------------------
+
+    def _delete_task(self, task_id: str) -> None:
+        try:
+            deleted = self.server.manager.delete_task(task_id)
+        except WorktreeError as error:
+            return self._json({"error": str(error)}, HTTPStatus.CONFLICT)
+        self._json(
+            {"deleted": deleted},
+            HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND,
+        )
+
+    def _delete_file(self, item_id: str) -> None:
+        deleted = self.server.manager.files.delete(
+            item_id,
+            self._param("project", "free"),
+        )
+        self._json(
+            {"deleted": deleted},
+            HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND,
+        )
+
+    def _delete_conversation(self, conversation_id: str) -> None:
+        if self.server.manager.has_active_conversation(conversation_id):
+            return self._json(
+                {"error": "Interromps la tâche avant de supprimer la conversation."},
+                HTTPStatus.CONFLICT,
+            )
+        deleted = self.server.manager.conversations.delete(conversation_id)
+        self._json(
+            {"deleted": deleted},
+            HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND,
+        )
+
+    # --- Communs aux endpoints skills ------------------------------------
+
+    def _project_workspace(self, project_id: str) -> Path | None:
+        project = self.server.manager.conversations.get_project(project_id)
+        if not project:
+            return None
+        return (
+            _existing_directory(project.get("workspace_root"))
+            or self.server.manager.project
+        )
+
+    def _skill_result(self, operation, *args, **kwargs) -> None:
+        try:
+            result = operation(*args, **kwargs)
+        except (OSError, ValueError) as error:
+            return self._json({"message": str(error)}, HTTPStatus.BAD_REQUEST)
+        self._json(result, HTTPStatus.CREATED)
+
+    def _post_runs(self) -> None:
         try:
             payload = self._read_payload()
             if payload is None:
@@ -407,32 +521,34 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("invalid mode")
         except ValueError as exc:
             return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+        # La détection lexicale tranche sans appeler de modèle ; sinon on prend
+        # LA décision du run, qui porte aussi la classification du routeur.
         skill_request = parse_skill_request(request)
-        # Quelle instance a décidé de l'action : la détection lexicale, qui
-        # n'appelle aucun modèle, ou le routeur LLM. L'interface doit pouvoir
-        # le dire au lieu d'afficher un agent sans information.
-        decided_by = "lexical" if skill_request is not None else "classifier"
-        classification = (
-            None
-            if skill_request is not None
-            else self.server.manager.classify(
+        decision = None
+        classification = None
+        decided_by = "lexical"
+        if skill_request is None:
+            decision = self.server.manager.decide(
                 request,
                 conversation_id,
                 agent,
                 mode,
+                model,
+                effort,
+                execution_mode,
             )
-        )
-        if (
-            skill_request is None
-            and classification is not None
-            and classification.action == "create_skill"
-            and classification.confidence >= 0.85
-        ):
-            skill_request = {
-                "name": classification.skill_name,
-                "instructions": classification.skill_instructions,
-                "scope": classification.skill_scope,
-            }
+            classification = decision.classification
+            decided_by = decision.decided_by
+            if (
+                classification is not None
+                and classification.action == "create_skill"
+                and classification.confidence >= 0.85
+            ):
+                skill_request = {
+                    "name": classification.skill_name,
+                    "instructions": classification.skill_instructions,
+                    "scope": classification.skill_scope,
+                }
         if skill_request is not None:
             if not self.server.auth.allows("maintainer"):
                 return self._json(
@@ -463,14 +579,9 @@ class Handler(BaseHTTPRequestHandler):
             except ActiveConversationError as exc:
                 return self._json({"error": str(exc)}, HTTPStatus.CONFLICT)
             return self._json({"run_id": run.run_id}, HTTPStatus.ACCEPTED)
-        needs_full_access = self.server.manager.requires_full_access_approval(
-            request,
-            conversation_id,
-            agent,
-            mode,
-            execution_mode,
-            classification,
-        )
+        # Celle que l'on autorise ici est exactement celle qui sera exécutée :
+        # le garde-fou et l'exécution ne peuvent plus diverger.
+        needs_full_access = decision.needs_full_access
         if needs_full_access and not self.server.auth.allows("maintainer"):
             return self._json(
                 {"error": "Le profil maintainer est requis pour cet accès."},
@@ -488,28 +599,40 @@ class Handler(BaseHTTPRequestHandler):
             conversation = self.server.manager.conversations.get(
                 conversation_id
             ) or {}
+            # La carte doit dire ce qui va tourner : sans le fournisseur, le
+            # périmètre et le niveau d'accès, l'utilisateur approuve à l'aveugle.
+            workspace, roots, _, _ = self.server.manager._project_scope(
+                conversation_id
+            )
+            scope = ", ".join(str(path) for path in (workspace, *roots))
             approval = self.server.manager.approvals.create(
-                "full-access",
+                "run",
                 conversation_id,
                 str(conversation.get("project_id", "free")),
                 {
-                    key: value
-                    for key, value in payload.items()
-                    if key not in {"full_access_approved", "approval_id"}
+                    **{
+                        key: value
+                        for key, value in payload.items()
+                        if key not in {"full_access_approved", "approval_id"}
+                    },
+                    "provider": decision.route.primary,
+                    "model": decision.model,
+                    "workflow": decision.route.mode.value,
+                    "scope": scope,
+                    "access": decision.execution_mode,
                 },
                 (
-                    "Cette tâche demande l’accès complet aux racines "
-                    "déclarées du projet."
+                    f"{decision.route.primary} va pouvoir exécuter des commandes "
+                    f"et modifier des fichiers dans : {scope}"
                 ),
             )
             return self._json(
                 {
                     "error": (
-                        "Cette tâche demande un accès complet aux seules racines "
-                        "déclarées pour ce projet. Confirme l’autorisation pour "
-                        "ce run."
+                        "Ce projet est en validation manuelle. Autorise cette "
+                        "demande pour la lancer."
                     ),
-                    "approval": "full-access",
+                    "approval": "run",
                     "approval_id": approval["id"],
                 },
                 HTTPStatus.PRECONDITION_REQUIRED,
@@ -524,7 +647,7 @@ class Handler(BaseHTTPRequestHandler):
                 effort,
                 execution_mode,
                 attachments,
-                classification=classification,
+                decision=decision,
             )
         except ActiveConversationError as exc:
             return self._json({"error": str(exc)}, HTTPStatus.CONFLICT)
@@ -535,99 +658,6 @@ class Handler(BaseHTTPRequestHandler):
                 request,
             )
         self._json({"run_id": run.run_id}, HTTPStatus.ACCEPTED)
-
-    def do_PATCH(self) -> None:
-        path = urlparse(self.path).path
-        required = required_role("PATCH", path)
-        # Acquitter le badge « Terminée » relève de la lecture : on admet
-        # viewer, puis on revalide au niveau des champs une fois le corps lu.
-        if path.startswith("/api/conversations/"):
-            required = "viewer"
-        if not self._authorize(required):
-            return
-        if path == "/api/preferences":
-            payload = self._read_payload()
-            if payload is None:
-                return
-            return self._json(
-                self.server.manager.conversations.update_preferences(payload)
-            )
-        if path.startswith("/api/approvals/"):
-            payload = self._read_payload()
-            if payload is None:
-                return
-            try:
-                item = self.server.manager.approvals.decide(
-                    unquote(path.rsplit("/", 1)[1]),
-                    str(payload.get("decision", "")),
-                )
-            except ValueError as error:
-                return self._json(
-                    {"error": str(error)},
-                    HTTPStatus.BAD_REQUEST,
-                )
-            return self._json(
-                item or {},
-                HTTPStatus.OK if item else HTTPStatus.NOT_FOUND,
-            )
-        is_conversation = path.startswith("/api/conversations/")
-        is_project = path.startswith("/api/projects/")
-        if not is_conversation and not is_project:
-            return self.send_error(HTTPStatus.NOT_FOUND)
-        payload = self._read_payload()
-        if payload is None:
-            return
-        if is_conversation and not set(payload) <= ACQUITTAL_FIELDS:
-            if not self._authorize(required_role("PATCH", path)):
-                return
-        identifier = unquote(path.rsplit("/", 1)[1])
-        item = (
-            self.server.manager.conversations.update(identifier, payload)
-            if is_conversation
-            else self.server.manager.conversations.update_project(identifier, payload)
-        )
-        self._json(item, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
-
-    def do_DELETE(self) -> None:
-        path = urlparse(self.path).path
-        if not self._authorize(required_role("DELETE", path)):
-            return
-        if path.startswith("/api/tasks/"):
-            task_id = unquote(path.rsplit("/", 1)[1])
-            try:
-                deleted = self.server.manager.delete_task(task_id)
-            except WorktreeError as error:
-                return self._json(
-                    {"error": str(error)},
-                    HTTPStatus.CONFLICT,
-                )
-            return self._json(
-                {"deleted": deleted},
-                HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND,
-            )
-        if path.startswith("/api/files/"):
-            item_id = unquote(path.rsplit("/", 1)[1])
-            deleted = self.server.manager.files.delete(
-                item_id,
-                parse_qs(urlparse(self.path).query).get("project", ["free"])[0],
-            )
-            return self._json(
-                {"deleted": deleted},
-                HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND,
-            )
-        if not path.startswith("/api/conversations/"):
-            return self.send_error(HTTPStatus.NOT_FOUND)
-        conversation_id = unquote(path.rsplit("/", 1)[1])
-        if self.server.manager.has_active_conversation(conversation_id):
-            return self._json(
-                {"error": "Interromps la tâche avant de supprimer la conversation."},
-                HTTPStatus.CONFLICT,
-            )
-        deleted = self.server.manager.conversations.delete(conversation_id)
-        self._json(
-            {"deleted": deleted},
-            HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND,
-        )
 
     def _events(self, run_id: str, after: int = 0) -> None:
         run = self.server.manager.get_run(run_id)
@@ -793,10 +823,6 @@ def serve(
     server.serve_forever()
 
 
-def _web_facade():
-    from . import web as facade
-
-    return facade
 
 
 def _event_cursor(header: str | None, query: str | None) -> int:

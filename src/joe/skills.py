@@ -69,7 +69,7 @@ def global_skills_root() -> Path:
 
 
 def list_skills(project: Path, configured_paths: list[str] | None = None) -> list[dict[str, Any]]:
-    roots = [project / ".agentflow" / "skills", project / "skills"]
+    roots = [_project_skills_root(project), project / "skills"]
     roots.extend(Path(path).expanduser() for path in (configured_paths or []))
     found: list[dict[str, Any]] = []
     seen: set[Path] = set()
@@ -144,11 +144,9 @@ def create_skill(
 
 def promote_skill(project: Path, name: str) -> dict[str, Any]:
     """Copy a project skill into the global directory shared by all projects."""
-    skill_name = re.sub(r"[^a-z0-9-]+", "-", name.lower()).strip("-")
-    if not skill_name:
-        raise ValueError("Le skill doit avoir un nom non vide.")
-    source = (project / ".agentflow" / "skills" / skill_name / "SKILL.md").resolve()
-    root = (project / ".agentflow" / "skills").resolve()
+    skill_name = _skill_name(name)
+    source = (_project_skills_root(project) / skill_name / "SKILL.md").resolve()
+    root = _project_skills_root(project).resolve()
     if root not in source.parents or not source.is_file():
         raise FileNotFoundError(f"Skill de projet introuvable : {skill_name}")
     destination = (global_skills_root() / skill_name / "SKILL.md").resolve()

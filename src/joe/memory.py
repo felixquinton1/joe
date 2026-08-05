@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .provider_registry import default_fallbacks
+
 DEFAULT_CONFIG = {
     "version": 1,
     "timeout_seconds": 900,
@@ -27,12 +29,7 @@ DEFAULT_CONFIG = {
         "model": "gemini-3-flash-preview",
     },
     "shared_skill_paths": [],
-    "fallbacks": {
-        "codex": ["gemini", "claude", "copilot"],
-        "claude": ["gemini", "codex", "copilot"],
-        "gemini": ["codex", "claude", "copilot"],
-        "copilot": ["gemini", "codex", "claude"],
-    },
+    "fallbacks": default_fallbacks(),
 }
 SECRET_PATTERN = re.compile(
     r"""(?i)(api[_-]?key|token|secret|password)(\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s]+)"""

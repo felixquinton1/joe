@@ -1405,3 +1405,11 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+.question-card{margin-top:12px;padding:12px;border:1px solid var(--line);border-left:3px solid var(--orange);border-radius:11px;background:var(--surface)}
+.question-card strong{display:block;font-size:12px;font-weight:700}
+.question-options{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.question-option{padding:7px 13px;border:1px solid var(--line);border-radius:999px;background:var(--surface);font:inherit;font-size:11px;cursor:pointer;transition:.15s ease}
+.question-option:hover:not(:disabled){border-color:var(--orange);color:var(--orange)}
+.question-option:disabled{opacity:.45;cursor:default}
+.question-option.chosen{border-color:var(--orange);background:var(--orange-soft);color:var(--orange);font-weight:650}

@@ -6,6 +6,8 @@ import secrets
 from dataclasses import dataclass
 from pathlib import Path
 
+from .routes import required_role
+
 ROLES = ("viewer", "operator", "maintainer")
 _ROLE_LEVEL = {name: index for index, name in enumerate(ROLES)}
 
@@ -67,24 +69,8 @@ class LocalAuth:
         return _ROLE_LEVEL[self.role] >= _ROLE_LEVEL[required]
 
 
-def required_role(method: str, path: str) -> str:
-    if path == "/api/auth/rotate":
-        return "maintainer"
-    if path == "/api/projects" or path.startswith("/api/projects/"):
-        # Lire la liste des projets est nécessaire au rendu de Joe Web :
-        # la restreindre rendrait l'interface inutilisable en viewer/operator.
-        # Toute mutation de projet reste réservée à maintainer.
-        return "viewer" if method == "GET" else "maintainer"
-    if path.startswith("/api/tasks/") and method != "GET":
-        return "maintainer"
-    if path.startswith("/api/automations") and method != "GET":
-        return "maintainer"
-    if path.startswith("/api/approvals/") and method != "GET":
-        return "maintainer"
-    if path == "/api/preferences":
-        return "operator" if method != "GET" else "viewer"
-    if path.endswith("/reject"):
-        return "maintainer"
-    if method == "GET":
-        return "viewer"
-    return "operator"
+# Le rôle exigé par un endpoint est une colonne de la table de routes : le
+# maintenir ici en second jeu de motifs de chemin est précisément ce qui a
+# laissé la création de skill global dériver vers `operator`.
+__all__ = ["ROLES", "LocalAuth", "auth_token_path", "load_or_create_token",
+           "required_role", "rotate_token"]

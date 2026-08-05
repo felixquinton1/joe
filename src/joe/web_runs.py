@@ -11,19 +11,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .capabilities import (
-    cached_provider_capabilities,
-    select_model,
-    select_model_tier,
-)
+from .capabilities import select_model, select_model_tier
 from .approvals import ApprovalStore
 from .automations import AutomationStore
-from .conversations import ConversationStore, FREE_PROJECT_ID
+from .conversations import ConversationStore, FREE_PROJECT_ID, _ai_access
 from .documents import extract_document_text
 from .files import FileLibrary
 from .git_review import GitSnapshot, build_report, reject, snapshot
 from .models import Intent, Mode, Route
 from .orchestrator import OrchestrationError, Orchestrator
+from .providers import _access_level
 from .router import _routing_text
 from .routing import resolve_route
 from .route_classifier import (
@@ -34,6 +31,55 @@ from .skills import create_skill
 from .tasks import TaskStore
 from .usage import _next_quota_reset, cached_usage_status, usage_status
 from .worktrees import Worktree, WorktreeError, WorktreeManager
+
+
+@dataclass(frozen=True)
+class RunDecision:
+    """Everything decided before a run starts, computed once and transported.
+
+    La séquence lexical → classifieur → équilibrage → admission quota →
+    mode d'exécution était rejouée par le garde-fou d'accès complet et par
+    l'exécution, avec des arguments différents : le garde autorisait donc une
+    route qui n'était pas celle exécutée. Un seul objet supprime l'écart.
+    """
+
+    route: Route
+    quota_admission: dict[str, Any] | None = None
+    classification: RouteClassification | None = None
+    execution_mode: str | None = None
+    model: str | None = None
+    effort: str | None = None
+    decided_by: str = "lexical"
+    routing_ms: int = 0
+    wait_for_provider: bool = False
+    local_action: str = ""
+    local_payload: dict[str, Any] = field(default_factory=dict)
+    ai_access: str = "manual"
+
+    @property
+    def will_execute(self) -> bool:
+        """True when the provider will be able to run commands or edit files."""
+        return _access_level(self.execution_mode, modifying=False) != "read"
+
+    @property
+    def needs_approval(self) -> bool:
+        """Manual projects confirm once per request, before anything starts.
+
+        Une action locale ne lance aucun fournisseur : elle n'a rien à faire
+        approuver.
+        """
+        if self.local_action or not self.will_execute:
+            return False
+        return self.ai_access == "manual"
+
+    # Compatibilité : l'ancien nom désignait la même porte d'approbation.
+    @property
+    def needs_full_access(self) -> bool:
+        return self.needs_approval
+
+
+# Pseudo-fournisseur des actions que Joe exécute lui-même.
+LOCAL_PROVIDER = "joe"
 
 
 class ActiveConversationError(RuntimeError):
@@ -147,10 +193,24 @@ class RunManager:
         run_id: str | None = None,
         resumed: bool = False,
         classification: RouteClassification | None = None,
+        decision: RunDecision | None = None,
         not_before: float | None = None,
         defer_count: int = 0,
     ) -> LiveRun:
         run_id = run_id or uuid.uuid4().hex
+        # Une décision fournie par l'appelant est celle qui a été autorisée :
+        # on ne la recalcule pas. Sinon on la prend ici, une fois pour toutes.
+        if decision is None:
+            decision = self.decide(
+                request,
+                conversation_id,
+                agent,
+                mode,
+                model,
+                effort,
+                execution_mode,
+                classification=classification,
+            )
         workspace, _, _, _ = self._project_scope(conversation_id)
         base_workspace = workspace
         isolated = self._project_uses_worktree(conversation_id)
@@ -214,14 +274,15 @@ class RunManager:
                 )
             self.live[run.run_id] = run
             try:
-                self._write_pending(
-                    run,
-                    agent,
-                    mode,
-                    model,
-                    effort,
-                    execution_mode,
-                )
+                if not decision.local_action:
+                    self._write_pending(
+                        run,
+                        agent,
+                        mode,
+                        model,
+                        effort,
+                        execution_mode,
+                    )
             except Exception:
                 self.live.pop(run.run_id, None)
                 if isolated and not resumed:
@@ -246,7 +307,7 @@ class RunManager:
                 model,
                 effort,
                 execution_mode,
-                classification,
+                decision,
             ),
             daemon=True,
         )
@@ -282,118 +343,198 @@ class RunManager:
         classification: RouteClassification | None = None,
         decided_by: str = "lexical",
     ) -> LiveRun:
-        """Create a skill as a local Joe action, without calling a provider."""
-        run_id = uuid.uuid4().hex
-        workspace, _, _, _ = self._project_scope(conversation_id)
-        conversation = self.conversations.get(conversation_id) or {}
-        with self.lock:
-            self._prune_live_locked()
-            if any(
-                active.conversation_id == conversation_id and not active.done
-                for active in self.live.values()
-            ):
-                raise ActiveConversationError(
-                    "Une tâche est déjà active dans cette conversation."
-                )
-            run = LiveRun(
-                run_id,
-                request,
-                conversation_id,
-                workspace=workspace,
-                base_workspace=workspace,
-            )
-            self.live[run_id] = run
-        self.tasks.create(
-            run_id,
+        """Create a skill as a local Joe action, through the normal run cycle.
+
+        Cette méthode ne double plus `start`/`_execute` : elle décrit l'action
+        et laisse le cycle de vie commun s'en occuper, ce qui lui donne le
+        résumé de run, l'annulation et le rapport Git comme n'importe quel run.
+        """
+        decision = self.decide(
             request,
             conversation_id,
-            str(conversation.get("project_id", "main")),
-            workspace=workspace,
-            base_workspace=workspace,
-            isolated=False,
+            local_action="create_skill",
+            local_payload={
+                "name": name,
+                "instructions": instructions,
+                "global_scope": global_scope,
+            },
+            classification=classification,
         )
-        self.conversations.append_message(
-            conversation_id, "user", request, run_id
+        return self.start(
+            request,
+            conversation_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            decision=decision,
         )
-        # Aucun fournisseur n'est appelé ici : Joe écrit le skill lui-même.
-        # On le dit explicitement plutôt que de laisser l'interface afficher un
-        # agent « joe » sans modèle ni statut.
-        run.emit({
-            "type": "route",
-            "mode": "fast",
-            "intent": "modify",
-            "primary": "joe",
-            "reviewer": None,
-            "reason": (
-                "Création locale de skill"
-                + (
-                    " (routeur LLM)"
-                    if decided_by == "classifier"
-                    else " (détection lexicale)"
-                )
-            ),
-            "model": None,
-            "effort": None,
-            "execution_mode": "workspace-write",
-            "routing_ms": classification.latency_ms if classification else 0,
-            "profile": self.profile,
-            "local_action": "create_skill",
-            "decided_by": decided_by,
-            "classifier": classification.payload() if classification else None,
-        })
-        run.emit({
-            "type": "activity",
-            "provider": "joe",
-            "kind": "model",
-            "label": "action locale · aucun modèle appelé",
-        })
+
+    def _run_local_action(
+        self,
+        run: LiveRun,
+        decision: RunDecision,
+    ) -> tuple[str, str]:
+        """Execute an action Joe performs itself, with no provider call."""
+        payload = decision.local_payload
+        self._emit_run_event(
+            run,
+            {
+                "type": "activity",
+                "provider": LOCAL_PROVIDER,
+                "kind": "model",
+                "label": "action locale · aucun modèle appelé",
+            },
+        )
+        failure = None
         try:
             created = create_skill(
-                None if global_scope else workspace,
-                name,
-                instructions,
-                global_scope=global_scope,
+                None if payload["global_scope"] else run.workspace,
+                str(payload["name"]),
+                str(payload["instructions"]),
+                global_scope=bool(payload["global_scope"]),
             )
-            scope = "commun" if global_scope else "du projet"
+            scope = "commun" if payload["global_scope"] else "du projet"
             response = (
                 f"Skill **{created['name']}** créé comme skill {scope}.\n\n"
                 f"`{created['path']}`"
             )
-            self.tasks.update(run_id, status="completed", provider="joe", mode="fast")
-            failure = None
         except (OSError, ValueError) as error:
             response = f"Le skill n’a pas été créé : {error}"
-            self.tasks.update(run_id, status="failed", provider="joe", mode="fast", error=str(error))
             failure = str(error)
-        self.conversations.append_message(
-            conversation_id,
-            "assistant",
-            response,
-            run_id,
-            provider="joe",
+        self._emit_run_event(
+            run,
+            {
+                "type": "provider_end",
+                "provider": LOCAL_PROVIDER,
+                "ok": failure is None,
+                "error": failure,
+                "local_action": decision.local_action,
+            },
         )
-        # Clôture explicite de l'étape : sans cet événement l'interface laisse
-        # l'agent et le pipeline bloqués sur « En cours ».
-        run.emit({
-            "type": "provider_end",
-            "provider": "joe",
-            "ok": failure is None,
-            "error": failure,
-            "local_action": "create_skill",
-        })
-        run.emit({"type": "complete", "response": response, "log": ""})
-        with run.condition:
-            run.done = True
-            run.finished_at = time.time()
-            run.condition.notify_all()
-        cleanup = threading.Timer(
-            self.LIVE_RUN_TTL_SECONDS,
-            self._expire_live_run,
-            args=(run.run_id, run.finished_at),
+        if failure:
+            raise ValueError(failure)
+        return response, ""
+
+    def decide(
+        self,
+        request: str,
+        conversation_id: str,
+        agent: str | None = None,
+        mode: str | None = None,
+        model: str | None = None,
+        effort: str | None = None,
+        execution_mode: str | None = None,
+        *,
+        classification: RouteClassification | None = None,
+        local_action: str = "",
+        local_payload: dict[str, Any] | None = None,
+    ) -> RunDecision:
+        """Decide once what this run will do, and with which model.
+
+        Seul point où la décision de routage est prise : le garde-fou d'accès
+        complet et l'exécution lisent le même objet, donc la route autorisée
+        est exactement celle qui tourne.
+        """
+        started = time.monotonic()
+        workspace, additional_roots, remote_access, ai_access = (
+            self._project_scope(conversation_id)
         )
-        cleanup.daemon = True
-        cleanup.start()
-        return run
+        forced_mode = Mode(mode) if mode else None
+        previous = self.conversations.previous_provider(conversation_id)
+        reserved_provider = self._project_quota_provider(conversation_id)
+        wait_for_provider = not agent and bool(reserved_provider)
+        effective_agent = reserved_provider if wait_for_provider else agent
+
+        if local_action:
+            # Aucun fournisseur n'est appelé : Joe agit lui-même, mais le run
+            # suit le même cycle de vie que les autres.
+            return RunDecision(
+                route=Route(
+                    Intent.MODIFY,
+                    Mode.FAST,
+                    LOCAL_PROVIDER,
+                    None,
+                    reason=(
+                        "action locale Joe"
+                        + (
+                            " (routeur LLM)"
+                            if classification
+                            else " (détection lexicale)"
+                        )
+                    ),
+                ),
+                classification=classification,
+                execution_mode="workspace-write",
+                decided_by="classifier" if classification else "lexical",
+                routing_ms=classification.latency_ms if classification else 0,
+                local_action=local_action,
+                local_payload=dict(local_payload or {}),
+            )
+
+        if classification is None and os.environ.get(
+            "JOE_DISABLE_LLM_ROUTER"
+        ) != "1":
+            orchestrator = Orchestrator(
+                workspace,
+                additional_roots=additional_roots,
+                remote_access=remote_access,
+            )
+            baseline = orchestrator.router.route(
+                request,
+                forced_agent=effective_agent,
+                forced_mode=forced_mode,
+                previous_provider=previous,
+            )
+            classification = classify_route_request(
+                request,
+                baseline,
+                orchestrator.providers,
+                cached_usage_status(),
+                workspace,
+                forced_agent=bool(effective_agent),
+                forced_mode=forced_mode is not None,
+            )
+        resolved = resolve_route(
+            self.orchestrator.router,
+            request,
+            cached_usage_status(),
+            forced_agent=effective_agent,
+            forced_mode=forced_mode,
+            previous_provider=previous,
+            classification=classification,
+            wait_for_provider=wait_for_provider,
+        )
+        route = resolved.route
+        execution_mode = _resolve_execution_mode(
+            execution_mode, ai_access, route
+        )
+        if classification is not None:
+            effort = effort or classification.effort
+            model = model or select_model_tier(route.primary, classification.model_tier)
+        elif _complex_request(request, route):
+            effort = effort or "high"
+            model = model or select_model(route.primary, complex_request=True)
+        elif route.mode is Mode.FAST:
+            effort = effort or "low"
+            model = model or select_model(route.primary, complex_request=False)
+        if "health-check" in route.reason:
+            effort = effort or "low"
+            if route.primary == "gemini":
+                model = model or "gemini-3-flash-preview"
+        return RunDecision(
+            route=route,
+            quota_admission=resolved.quota_admission,
+            classification=classification,
+            execution_mode=execution_mode,
+            model=model,
+            effort=effort,
+            decided_by="classifier" if classification else "lexical",
+            routing_ms=round((time.monotonic() - started) * 1000),
+            wait_for_provider=wait_for_provider,
+            ai_access=ai_access,
+        )
 
     def requires_full_access_approval(
         self,
@@ -404,61 +545,15 @@ class RunManager:
         execution_mode: str | None,
         classification: RouteClassification | None = None,
     ) -> bool:
-        _, _, _, project_execution_mode = self._project_scope(conversation_id)
-        forced_mode = Mode(mode) if mode else None
-        route = resolve_route(
-            self.orchestrator.router,
+        """Kept for callers that only need the gate answer."""
+        return self.decide(
             request,
-            cached_usage_status(),
-            forced_agent=agent,
-            forced_mode=forced_mode,
-            previous_provider=self.conversations.previous_provider(
-                conversation_id
-            ),
+            conversation_id,
+            agent,
+            mode,
+            execution_mode=execution_mode,
             classification=classification,
-        ).route
-        resolved = _resolve_execution_mode(
-            execution_mode,
-            project_execution_mode,
-            route,
-            request,
-        )
-        return resolved == "danger-full-access"
-
-    def classify(
-        self,
-        request: str,
-        conversation_id: str,
-        agent: str | None,
-        mode: str | None,
-    ) -> RouteClassification | None:
-        if os.environ.get("JOE_DISABLE_LLM_ROUTER") == "1":
-            return None
-        workspace, additional_roots, remote_access, _ = self._project_scope(
-            conversation_id
-        )
-        orchestrator = Orchestrator(
-            workspace,
-            additional_roots=additional_roots,
-            remote_access=remote_access,
-        )
-        forced_mode = Mode(mode) if mode else None
-        previous = self.conversations.previous_provider(conversation_id)
-        baseline = orchestrator.router.route(
-            request,
-            forced_agent=agent,
-            forced_mode=forced_mode,
-            previous_provider=previous,
-        )
-        return classify_route_request(
-            request,
-            baseline,
-            orchestrator.providers,
-            cached_usage_status(),
-            workspace,
-            forced_agent=bool(agent),
-            forced_mode=forced_mode is not None,
-        )
+        ).needs_full_access
 
     def _execute(
         self,
@@ -468,7 +563,7 @@ class RunManager:
         model: str | None,
         effort: str | None,
         execution_mode: str | None,
-        classification: RouteClassification | None = None,
+        decision: RunDecision | None = None,
     ) -> None:
         try:
             if run.not_before:
@@ -492,7 +587,7 @@ class RunManager:
                 workspace,
                 additional_roots,
                 remote_access,
-                project_execution_mode,
+                _ai_access_level,
             ) = self._project_scope(run.conversation_id)
             workspace = run.workspace or workspace
             conversation = self.conversations.get(run.conversation_id) or {}
@@ -509,49 +604,25 @@ class RunManager:
                 additional_roots=additional_roots + attachment_roots,
                 remote_access=remote_access,
             )
-            routing_started = time.monotonic()
-            forced_mode = Mode(mode) if mode else None
-            reserved_provider = self._project_quota_provider(run.conversation_id)
-            wait_for_provider = not agent and bool(reserved_provider)
-            effective_agent = reserved_provider if wait_for_provider else agent
-            if classification is None:
-                baseline = orchestrator.router.route(
+            # La décision a déjà été prise avant l'autorisation : on la
+            # consomme telle quelle. Elle n'est recalculée qu'après une attente
+            # de fenêtre de quota, où re-décider est la bonne sémantique.
+            if decision is None:
+                decision = self.decide(
                     run.request,
-                    forced_agent=effective_agent,
-                    forced_mode=forced_mode,
-                    previous_provider=self.conversations.previous_provider(
-                        run.conversation_id
-                    ),
+                    run.conversation_id,
+                    agent,
+                    mode,
+                    model,
+                    effort,
+                    execution_mode,
                 )
-                classification = classify_route_request(
-                    run.request,
-                    baseline,
-                    orchestrator.providers,
-                    cached_usage_status(),
-                    workspace,
-                    forced_agent=bool(effective_agent),
-                    forced_mode=forced_mode is not None,
-                )
-            decision = resolve_route(
-                orchestrator.router,
-                run.request,
-                cached_usage_status(),
-                forced_agent=effective_agent,
-                forced_mode=forced_mode,
-                previous_provider=self.conversations.previous_provider(
-                    run.conversation_id
-                ),
-                classification=classification,
-                wait_for_provider=wait_for_provider,
-            )
             route = decision.route
+            classification = decision.classification
             quota_admission = decision.quota_admission
-            execution_mode = _resolve_execution_mode(
-                execution_mode,
-                project_execution_mode,
-                route,
-                run.request,
-            )
+            execution_mode = decision.execution_mode
+            model = decision.model
+            effort = decision.effort
             run.track_changes = (
                 (
                     route.intent is Intent.MODIFY
@@ -559,22 +630,6 @@ class RunManager:
                 )
                 or _write_enabled(execution_mode)
             )
-            if classification is not None:
-                effort = effort or classification.effort
-                model = model or select_model_tier(
-                    route.primary,
-                    classification.model_tier,
-                )
-            elif _complex_request(run.request, route):
-                effort = effort or "high"
-                model = model or select_model(route.primary, complex_request=True)
-            elif route.mode is Mode.FAST:
-                effort = effort or "low"
-                model = model or select_model(route.primary, complex_request=False)
-            if "health-check" in route.reason:
-                effort = effort or "low"
-                if route.primary == "gemini":
-                    model = model or "gemini-3-flash-preview"
             run.emit(
                 {
                     "type": "route",
@@ -586,11 +641,11 @@ class RunManager:
                     "model": model,
                     "effort": effort,
                     "execution_mode": execution_mode,
-                    "routing_ms": round(
-                        (time.monotonic() - routing_started) * 1000
-                    ),
+                    "routing_ms": decision.routing_ms,
                     "health_check": "health-check" in route.reason,
                     "profile": self.profile,
+                    "decided_by": decision.decided_by,
+                    "local_action": decision.local_action or None,
                     "classifier": (
                         classification.payload() if classification else None
                     ),
@@ -617,13 +672,7 @@ class RunManager:
                             str(quota_admission["message"]),
                         )
                         return self._execute(
-                            run,
-                            agent,
-                            mode,
-                            None,
-                            None,
-                            execution_mode,
-                            None,
+                            run, agent, mode, None, None, execution_mode, None
                         )
                     raise RuntimeError(quota_admission["message"])
             run.emit(
@@ -652,6 +701,8 @@ class RunManager:
                 f"The active workspace is {workspace}. Use only instructions and "
                 "skills whose repository scope matches this workspace. Never apply "
                 "a skill belonging to another project."
+                + _permission_context(execution_mode)
+                + _QUESTION_CONTEXT
                 + self._attachment_context(attachments)
             )
             if self._project_uses_quota_automation(run.conversation_id):
@@ -663,16 +714,19 @@ class RunManager:
                     "validated step. If the provider session stops on quota, Joe "
                     "will retain the task and resume it after the next known reset."
                 )
-            response, log = orchestrator.execute(
-                run.request,
-                route,
-                model=model,
-                effort=effort,
-                execution_mode=execution_mode,
-                extra_context=evidence_context,
-                cancel_event=run.cancel_event,
-                on_event=lambda event: self._emit_run_event(run, event),
-            )
+            if decision.local_action:
+                response, log = self._run_local_action(run, decision)
+            else:
+                response, log = orchestrator.execute(
+                    run.request,
+                    route,
+                    model=model,
+                    effort=effort,
+                    execution_mode=execution_mode,
+                    extra_context=evidence_context,
+                    cancel_event=run.cancel_event,
+                    on_event=lambda event: self._emit_run_event(run, event),
+                )
             git_report = self._capture_git_report(run)
             self._update_task_git(run, git_report)
             self._deliver_if_enabled(run, git_report)
@@ -723,13 +777,7 @@ class RunManager:
                         "Quota atteint pendant l’exécution ; reprise au prochain reset",
                     )
                     return self._execute(
-                        run,
-                        agent,
-                        mode,
-                        None,
-                        None,
-                        execution_mode,
-                        None,
+                        run, agent, mode, None, None, execution_mode, None
                     )
             git_report = self._capture_git_report(run)
             self._update_task_git(run, git_report)
@@ -985,7 +1033,9 @@ class RunManager:
                 != "off"
                 and bool(project.get("web_access", True))
             ),
-            str(project.get("default_execution_mode", "")),
+            _ai_access(
+                project.get("ai_access"), project.get("default_execution_mode")
+            ),
         )
 
     def _project_uses_worktree(self, conversation_id: str) -> bool:
@@ -1741,13 +1791,6 @@ def _complex_request(request: str, route: Route) -> bool:
     )
 
 
-def _latest_model(provider: str) -> str | None:
-    if provider not in {"codex", "claude"}:
-        return None
-    models = cached_provider_capabilities().get(provider, {}).get("models", [])
-    return str(models[0]["id"]) if models else None
-
-
 def _existing_directory(value: Any) -> Path | None:
     if not value:
         return None
@@ -1767,17 +1810,24 @@ def _write_enabled(execution_mode: str | None) -> bool:
 
 def _resolve_execution_mode(
     explicit: str | None,
-    project_default: str | None,
+    ai_access: str,
     route: Route,
-    request: str,
 ) -> str | None:
+    """Translate the project's single access level into a provider mode.
+
+    L'ancienne version dépendait de l'intention détectée : une demande
+    d'analyse retombait en lecture seule même quand y répondre exigeait de
+    lancer une commande. Le niveau d'accès du projet décide seul désormais ;
+    l'intention ne sert plus qu'au routage.
+    """
     if route.mode is Mode.CONSENSUS:
         return None
     if explicit:
         return explicit
-    if route.intent is Intent.MODIFY or _operational_validation(request):
-        return project_default or None
-    return None
+    if ai_access == "read_only":
+        return "read-only"
+    # manual et auto accordent le même périmètre ; seule l'approbation change.
+    return "workspace-write"
 
 
 def _run_summary(run: LiveRun) -> dict[str, Any]:
@@ -1924,7 +1974,66 @@ def _task_pipeline(task: dict[str, Any]) -> list[dict[str, str]]:
     ]
 
 
+# Convention de question : le modèle n'a aucun canal interactif, mais il peut
+# terminer son tour sur une question fermée que Joe rend cliquable. La réponse
+# repart comme message utilisateur, donc sans blocage ni protocole.
+_QUESTION_CONTEXT = """
+
+# Demander un avis à l'utilisateur
+Si un choix t'appartient mal — arbitrage produit, priorité, option ambiguë —
+termine ta réponse par un bloc de code balisé `joe:question` contenant un JSON
+`{"question": "...", "options": ["...", "..."]}` (2 à 4 options courtes).
+Joe l'affichera comme des boutons ; le clic renverra l'option choisie comme
+message suivant. N'utilise ce bloc que lorsque la réponse change réellement la
+suite du travail, jamais pour demander une permission d'exécution.
+"""
+
+
+def _permission_context(execution_mode: str | None) -> str:
+    """State the real permission level, and that no approval channel exists.
+
+    Joe fixe les permissions au lancement du processus fournisseur et n'a aucun
+    canal pour transmettre une demande d'autorisation en cours de run : la
+    seule approbation existante (`428`) est décidée AVANT le démarrage et ne
+    concerne que l'accès complet. Sans cette précision, un agent en lecture
+    seule annonce « approuve la commande » — une invite que l'utilisateur ne
+    recevra jamais.
+    """
+    read_only = _access_level(execution_mode, modifying=False) == "read"
+    level = execution_mode or "lecture seule (défaut)"
+    lines = [
+        "\n\n# Permissions de ce run\n",
+        f"Niveau accordé : {level}. ",
+        "Joe fixe ce niveau au lancement et ne peut PAS te transmettre une "
+        "demande d'autorisation en cours d'exécution : il n'existe aucune "
+        "invite d'approbation interactive. ",
+    ]
+    if read_only:
+        lines.append(
+            "Tu ne peux exécuter aucune commande. Si répondre en exige une, "
+            "dis-le explicitement, classe le point en Refusé, et indique à "
+            "l'utilisateur le réglage à changer — « Permissions » de la "
+            "conversation, ou « Permission des validations opérationnelles » "
+            "du projet. Ne demande jamais d'approuver une commande : personne "
+            "ne recevra la demande."
+        )
+    else:
+        lines.append(
+            "Exécute directement les commandes nécessaires dans ce périmètre, "
+            "sans demander d'autorisation préalable."
+        )
+    return "".join(lines)
+
+
 def _operational_validation(request: str) -> bool:
+    """Requests that can only be answered by running something.
+
+    Inspecter une file d'attente, rapatrier des résultats ou lire l'état d'un
+    job distant sont des validations opérationnelles au même titre qu'une suite
+    de tests : sans exécution, la réponse ne peut être que déduite. Sans ces
+    marqueurs, la demande retombait en intention d'analyse, donc en accès
+    lecture seule — mode dans lequel aucune commande ne peut tourner.
+    """
     lower = request.lower()
     markers = (
         "audit",
@@ -1938,6 +2047,24 @@ def _operational_validation(request: str) -> bool:
         "origin/main",
         "origin/dev",
         "authentification",
+        # Ordonnanceur et travaux distants.
+        "squeue",
+        "sacct",
+        "sbatch",
+        "slurm",
+        "jean zay",
+        "jean-zay",
+        "jz.sh",
+        "walltime",
+        "quota",
+        # Rapatriement et état des runs.
+        "pull-all",
+        "rapatrie",
+        "rapatrier",
+        "état des runs",
+        "etat des runs",
+        "runs qui tournent",
+        "jobs qui tournent",
     )
     return any(marker in lower for marker in markers)
 
