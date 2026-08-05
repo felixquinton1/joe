@@ -1454,34 +1454,9 @@ async function startRun(
     conversation_id: conversationId,
     ...settings
   };
-  let response = await joeFetch("/api/runs", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  if (response.status === 428) {
-    const pending = await response.json();
-    const approved = await confirmFullAccess();
-    if (!approved) {
-      await loadTasks();
-      return;
-    }
-    await joeFetch(`/api/approvals/${encodeURIComponent(pending.approval_id)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decision: "approved" })
-    });
-    response = await joeFetch("/api/runs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...payload, approval_id: pending.approval_id })
-    });
-  }
-  if (!response.ok) {
-    const error = await response.json();
-    window.alert(error.error || response.statusText);
-    return;
-  }
+  // Rendu optimiste immédiat : dès le clic sur « Envoyer », on affiche le
+  // message de l'utilisateur et une bulle placeholder, sans attendre la
+  // réponse du serveur (le routage peut prendre un instant à démarrer).
   const visible = conversationId === state.activeConversationId;
   if (visible) {
     state.agents.clear();
@@ -1502,6 +1477,46 @@ async function startRun(
         { forceScroll: true }
       )
     : null;
+  // Comme l'affichage précède désormais l'appel réseau, tout échec doit
+  // remettre l'UI dans un état cohérent au lieu de laisser la bulle en attente.
+  const failVisibly = message => {
+    if (finalBubble) {
+      finalBubble.textContent = message;
+      finalBubble.dataset.source = message;
+      finishRun(conversationId, false);
+    } else {
+      window.alert(message);
+    }
+  };
+  let response = await joeFetch("/api/runs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (response.status === 428) {
+    const pending = await response.json();
+    const approved = await confirmFullAccess();
+    if (!approved) {
+      failVisibly("Demande annulée : accès complet refusé.");
+      await loadTasks();
+      return;
+    }
+    await joeFetch(`/api/approvals/${encodeURIComponent(pending.approval_id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision: "approved" })
+    });
+    response = await joeFetch("/api/runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, approval_id: pending.approval_id })
+    });
+  }
+  if (!response.ok) {
+    const error = await response.json();
+    failVisibly(error.error || response.statusText);
+    return;
+  }
   const { run_id } = await response.json();
   selectedFileIds.clear();
   renderAttachmentChips();
