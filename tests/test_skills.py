@@ -150,7 +150,6 @@ def test_local_skill_run_reports_routing_and_closes_the_stage(tmp_path):
         instructions="Répondre avec le marqueur exact SKILL_TEST_ACTIF.",
         global_scope=False,
         classification=None,
-        decided_by="lexical",
     )
 
     _await_run(run)
@@ -207,7 +206,6 @@ def test_local_skill_run_surfaces_the_llm_router_decision(tmp_path):
         instructions="Vérifier les tests.",
         global_scope=False,
         classification=classification,
-        decided_by="classifier",
     )
 
     _await_run(run)

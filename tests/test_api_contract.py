@@ -2,27 +2,20 @@ import http.client
 import base64
 import json
 import threading
+
+from conftest import build_test_server
 import time
 from types import SimpleNamespace
 
 from joe import __version__
 from joe.auth import LocalAuth
 from joe.http_utils import MAX_JSON_BODY_BYTES
-from joe.web import Handler, JoeServer, LiveRun, RunManager
+from joe.web import LiveRun, RunManager
 from joe.web_server import API_VERSION
 
 
 def start_server(tmp_path):
-    server = JoeServer(("127.0.0.1", 0), Handler)
-    server.auth = LocalAuth()
-    server.manager = RunManager(tmp_path)
-    # Les tests qui n'exercent pas la porte d'approbation travaillent en accès
-    # automatique ; ceux qui la testent règlent ai_access explicitement.
-    for project in server.manager.conversations.list_projects():
-        server.manager.conversations.update_project(project["id"], {"ai_access": "auto"})
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    return server, thread
+    return build_test_server(tmp_path)
 
 
 def json_request(connection, method, path, payload=None):

@@ -76,10 +76,6 @@ class RunDecision:
             return False
         return self.ai_access == "manual"
 
-    # Compatibilité : l'ancien nom désignait la même porte d'approbation.
-    @property
-    def needs_full_access(self) -> bool:
-        return self.needs_approval
 
 
 # Pseudo-fournisseur des actions que Joe exécute lui-même.
@@ -252,7 +248,7 @@ class RunManager:
             run_id,
             request,
             conversation_id,
-            str(conversation.get("project_id", "main")),
+            str(conversation.get("project_id", FREE_PROJECT_ID)),
             workspace=workspace,
             base_workspace=base_workspace,
             isolated=isolated,
@@ -347,7 +343,6 @@ class RunManager:
         instructions: str,
         global_scope: bool,
         classification: RouteClassification | None = None,
-        decided_by: str = "lexical",
     ) -> LiveRun:
         """Create a skill as a local Joe action, through the normal run cycle.
 
@@ -565,25 +560,6 @@ class RunManager:
             plan_stage=plan_stage,
         )
 
-    def requires_full_access_approval(
-        self,
-        request: str,
-        conversation_id: str,
-        agent: str | None,
-        mode: str | None,
-        execution_mode: str | None,
-        classification: RouteClassification | None = None,
-    ) -> bool:
-        """Kept for callers that only need the gate answer."""
-        return self.decide(
-            request,
-            conversation_id,
-            agent,
-            mode,
-            execution_mode=execution_mode,
-            classification=classification,
-        ).needs_full_access
-
     def _execute(
         self,
         run: LiveRun,
@@ -657,7 +633,7 @@ class RunManager:
                     route.intent is Intent.MODIFY
                     and route.mode is not Mode.CONSENSUS
                 )
-                or _write_enabled(execution_mode)
+                or decision.will_execute
             )
             run.emit(
                 {
@@ -912,7 +888,7 @@ class RunManager:
     ) -> None:
         conversation = self.conversations.get(run.conversation_id) or {}
         project = self.conversations.get_project(
-            str(conversation.get("project_id", "main"))
+            str(conversation.get("project_id", FREE_PROJECT_ID))
         ) or {}
         if not project.get("auto_commit_push"):
             return
@@ -1038,7 +1014,7 @@ class RunManager:
     ) -> tuple[Path, tuple[Path, ...], bool, str]:
         conversation = self.conversations.get(conversation_id) or {}
         project = self.conversations.get_project(
-            str(conversation.get("project_id", "main"))
+            str(conversation.get("project_id", FREE_PROJECT_ID))
         ) or {}
         configured_workspace = project.get("workspace_root")
         workspace = _existing_directory(configured_workspace)
@@ -1072,20 +1048,20 @@ class RunManager:
 
     def _project_uses_worktree(self, conversation_id: str) -> bool:
         conversation = self.conversations.get(conversation_id) or {}
-        project = self.conversations.get_project(conversation.get("project_id", "main")) or {}
+        project = self.conversations.get_project(conversation.get("project_id", FREE_PROJECT_ID)) or {}
         return bool(project.get("isolated_worktrees"))
 
     def _project_uses_quota_automation(self, conversation_id: str) -> bool:
         conversation = self.conversations.get(conversation_id) or {}
         project = self.conversations.get_project(
-            conversation.get("project_id", "main")
+            conversation.get("project_id", FREE_PROJECT_ID)
         ) or {}
         return bool(project.get("quota_automation", True))
 
     def _project_quota_provider(self, conversation_id: str) -> str | None:
         conversation = self.conversations.get(conversation_id) or {}
         project = self.conversations.get_project(
-            conversation.get("project_id", "main")
+            conversation.get("project_id", FREE_PROJECT_ID)
         ) or {}
         provider = str(project.get("quota_provider", ""))
         return provider or None
@@ -1098,7 +1074,7 @@ class RunManager:
         conversation = self.conversations.get(conversation_id)
         if not conversation:
             raise ValueError("Choisis une conversation valide.")
-        project_id = str(conversation.get("project_id", "main"))
+        project_id = str(conversation.get("project_id", FREE_PROJECT_ID))
         raw_steps = payload.get("steps")
         if not isinstance(raw_steps, list):
             raise ValueError("Les étapes du plan sont invalides.")
@@ -1830,16 +1806,6 @@ def _existing_directory(value: Any) -> Path | None:
     return path if path.is_dir() else None
 
 
-def _write_enabled(execution_mode: str | None) -> bool:
-    return execution_mode in {
-        "workspace-write",
-        "danger-full-access",
-        "acceptEdits",
-        "auto_edit",
-        "modify",
-    }
-
-
 def _resolve_execution_mode(
     explicit: str | None,
     ai_access: str,
@@ -2070,50 +2036,6 @@ def _permission_context(execution_mode: str | None) -> str:
             "sans demander d'autorisation préalable."
         )
     return "".join(lines)
-
-
-def _operational_validation(request: str) -> bool:
-    """Requests that can only be answered by running something.
-
-    Inspecter une file d'attente, rapatrier des résultats ou lire l'état d'un
-    job distant sont des validations opérationnelles au même titre qu'une suite
-    de tests : sans exécution, la réponse ne peut être que déduite. Sans ces
-    marqueurs, la demande retombait en intention d'analyse, donc en accès
-    lecture seule — mode dans lequel aucune commande ne peut tourner.
-    """
-    lower = request.lower()
-    markers = (
-        "audit",
-        "pytest",
-        "suite de tests",
-        "exécute les tests",
-        "lance les tests",
-        "smoke test",
-        "git fetch",
-        "fetch ",
-        "origin/main",
-        "origin/dev",
-        "authentification",
-        # Ordonnanceur et travaux distants.
-        "squeue",
-        "sacct",
-        "sbatch",
-        "slurm",
-        "jean zay",
-        "jean-zay",
-        "jz.sh",
-        "walltime",
-        "quota",
-        # Rapatriement et état des runs.
-        "pull-all",
-        "rapatrie",
-        "rapatrier",
-        "état des runs",
-        "etat des runs",
-        "runs qui tournent",
-        "jobs qui tournent",
-    )
-    return any(marker in lower for marker in markers)
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:

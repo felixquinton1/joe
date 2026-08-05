@@ -11,8 +11,10 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from . import __version__
 from .auth import LocalAuth, auth_token_path, rotate_token
+from .conversations import FREE_PROJECT_ID
 from .doctor import doctor_report
 from .files import MAX_FILE_BYTES
+from .models import Mode
 from .http_utils import RequestBodyError, read_json_body, validate_bind
 from .provider_registry import get_provider_catalog, get_provider_names
 from .providers import NETWORK_CONTROLLED_PROVIDERS
@@ -118,7 +120,7 @@ class Handler(BaseHTTPRequestHandler):
                 ),
                 "providers": get_provider_names(),
                 "provider_catalog": get_provider_catalog(),
-                "modes": ["fast", "review", "consensus"],
+                "modes": [item.value for item in Mode],
                 "auth_required": self.server.auth.enabled,
                 "profile": self.server.auth.role,
                 "network_control_providers": list(NETWORK_CONTROLLED_PROVIDERS),
@@ -518,7 +520,7 @@ class Handler(BaseHTTPRequestHandler):
             plan_stage = "propose" if payload.get("plan") is True else ""
             if agent is not None and agent not in set(get_provider_names()):
                 raise ValueError("invalid agent")
-            if mode not in {None, "fast", "review", "consensus"}:
+            if mode not in {None, *(item.value for item in Mode)}:
                 raise ValueError("invalid mode")
         except ValueError as exc:
             return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
@@ -527,7 +529,6 @@ class Handler(BaseHTTPRequestHandler):
         skill_request = parse_skill_request(request)
         decision = None
         classification = None
-        decided_by = "lexical"
         if skill_request is None:
             decision = self.server.manager.decide(
                 request,
@@ -540,7 +541,6 @@ class Handler(BaseHTTPRequestHandler):
                 plan_stage=plan_stage,
             )
             classification = decision.classification
-            decided_by = decision.decided_by
             if (
                 classification is not None
                 and classification.action == "create_skill"
@@ -576,15 +576,14 @@ class Handler(BaseHTTPRequestHandler):
                     instructions=skill_request["instructions"],
                     global_scope=skill_request["scope"] == "global",
                     classification=classification,
-                    decided_by=decided_by,
                 )
             except ActiveConversationError as exc:
                 return self._json({"error": str(exc)}, HTTPStatus.CONFLICT)
             return self._json({"run_id": run.run_id}, HTTPStatus.ACCEPTED)
         # Celle que l'on autorise ici est exactement celle qui sera exécutée :
         # le garde-fou et l'exécution ne peuvent plus diverger.
-        needs_full_access = decision.needs_full_access
-        if needs_full_access and not self.server.auth.allows("maintainer"):
+        needs_approval = decision.needs_approval
+        if needs_approval and not self.server.auth.allows("maintainer"):
             return self._json(
                 {"error": "Le profil maintainer est requis pour cet accès."},
                 HTTPStatus.FORBIDDEN,
@@ -597,7 +596,7 @@ class Handler(BaseHTTPRequestHandler):
             conversation_id,
             request,
         )
-        if needs_full_access and not approved:
+        if needs_approval and not approved:
             conversation = self.server.manager.conversations.get(
                 conversation_id
             ) or {}
@@ -610,7 +609,7 @@ class Handler(BaseHTTPRequestHandler):
             approval = self.server.manager.approvals.create(
                 "run",
                 conversation_id,
-                str(conversation.get("project_id", "free")),
+                str(conversation.get("project_id", FREE_PROJECT_ID)),
                 {
                     **{
                         key: value

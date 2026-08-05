@@ -1,20 +1,16 @@
 import http.client
 import json
 import stat
-import threading
 
-from joe.auth import LocalAuth, load_or_create_token, required_role, rotate_token
-from joe.web import Handler, JoeServer, RunManager
+from conftest import build_test_server
+
+from joe.auth import load_or_create_token, required_role, rotate_token
+from joe.web import RunManager
 
 
 def start_server(tmp_path, role):
-    server = JoeServer(("127.0.0.1", 0), Handler)
-    server.manager = RunManager(tmp_path)
-    server.auth = LocalAuth("test-token", role, True)
-    server.auth_path = tmp_path / "auth-token"
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    return server, thread
+    # Ces tests exercent la porte d'approbation : accès manuel explicite.
+    return build_test_server(tmp_path, role=role, ai_access="manual")
 
 
 def request(server, method, path, payload=None, token=None, headers=None):

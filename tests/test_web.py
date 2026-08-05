@@ -1,6 +1,8 @@
 import http.client
 import json
 import threading
+
+from conftest import build_test_server
 import time
 from types import SimpleNamespace
 
@@ -14,7 +16,6 @@ from joe.web import (
     LiveRun,
     RunManager,
     _complex_request,
-    _operational_validation,
     build_quota_notice,
 )
 from joe.http_utils import MAX_JSON_BODY_BYTES, validate_bind
@@ -23,16 +24,7 @@ from joe.web_server import API_VERSION
 
 
 def start_server(tmp_path):
-    server = JoeServer(("127.0.0.1", 0), Handler)
-    server.auth = LocalAuth()
-    server.manager = RunManager(tmp_path)
-    # Les tests qui n'exercent pas la porte d'approbation travaillent en accès
-    # automatique ; ceux qui la testent règlent ai_access explicitement.
-    for project in server.manager.conversations.list_projects():
-        server.manager.conversations.update_project(project["id"], {"ai_access": "auto"})
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    return server, thread
+    return build_test_server(tmp_path)
 
 
 def test_web_status_and_assets(tmp_path, monkeypatch):
@@ -759,14 +751,6 @@ def test_project_scope_uses_only_explicit_roots(tmp_path, monkeypatch):
     assert manager._project_scope(conversation["id"])[2] is False
 
 
-def test_only_explicit_operational_checks_use_project_validation_permission():
-    assert _operational_validation(
-        "Fais un audit global et exécute la suite de tests"
-    )
-    assert _operational_validation("git fetch puis vérifie origin/main")
-    assert not _operational_validation("Explique-moi l’architecture de Joe")
-
-
 def test_project_access_level_drives_the_execution_mode():
     """Le niveau du projet décide seul : l'intention ne s'en mêle plus."""
     for intent in (Intent.MODIFY, Intent.ANALYZE, Intent.ANSWER):
@@ -793,9 +777,8 @@ def test_full_access_approval_is_required_before_start(tmp_path, monkeypatch):
         "Implémente et teste cette fonctionnalité",
         "Explique cette fonctionnalité",
     ):
-        assert manager.requires_full_access_approval(
-            request, conversation["id"], "claude", "fast", None
-        ), request
+        decision = manager.decide(request, conversation["id"], "claude", "fast")
+        assert decision.needs_approval, request
 
 
 def test_consensus_remains_read_only_despite_project_default():
@@ -1071,19 +1054,6 @@ def test_pasted_diagnostic_does_not_raise_effort():
     )
 
     assert _complex_request(request, route) is False
-
-
-def test_cluster_inspection_is_an_operational_validation():
-    """Sans exécution, l'état d'un job distant ne peut être que déduit."""
-    assert _operational_validation(
-        "il y a 8 runs qui tournent depuis 8h sur JZ, check leur état"
-    )
-    assert _operational_validation("lance squeue puis sacct sur les 8 job IDs")
-    assert _operational_validation("rapatrie les résultats avec jz.sh pull-all")
-    assert _operational_validation("vérifie le quota et la walltime sur jean-zay")
-    # Une vraie question d'analyse reste en lecture seule.
-    assert not _operational_validation("Explique-moi l’architecture de Joe")
-    assert not _operational_validation("résume les résultats de la campagne")
 
 
 def test_read_only_runs_are_told_no_approval_channel_exists():
