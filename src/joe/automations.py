@@ -15,6 +15,9 @@ PLAN_STATUSES = {
 }
 
 
+START_MODES = {"at", "quota_reset"}
+
+
 class AutomationStore:
     """Durable, deliberately small sequential automation plans."""
 
@@ -38,6 +41,7 @@ class AutomationStore:
         conversation_id: str,
         steps: list[str],
         scheduled_for: float,
+        start_mode: str = "at",
         provider: str = "",
         mode: str = "review",
         execution_mode: str = "workspace-write",
@@ -56,6 +60,10 @@ class AutomationStore:
             "conversation_id": conversation_id,
             "status": "scheduled",
             "scheduled_for": max(now, float(scheduled_for)),
+            # « quota_reset » ne peut pas être converti en date à la création :
+            # l'échéance n'est parfois pas encore exposée. Le planificateur la
+            # résout quand elle apparaît.
+            "start_mode": start_mode if start_mode in START_MODES else "at",
             "provider": provider,
             "mode": mode if mode in {"fast", "review", "consensus"} else "review",
             "execution_mode": execution_mode,
@@ -68,6 +76,7 @@ class AutomationStore:
                 {"id": index + 1, "prompt": prompt, "status": "pending", "attempts": 0}
                 for index, prompt in enumerate(clean_steps)
             ],
+            "report": None,
             "created_at": now,
             "updated_at": now,
         }
@@ -98,6 +107,7 @@ class AutomationStore:
                 return None
             allowed = {
                 "status", "scheduled_for", "current_step", "current_run_id", "error",
+                "start_mode", "report",
             }
             plan.update({key: value for key, value in changes.items() if key in allowed})
             if plan.get("status") not in PLAN_STATUSES:

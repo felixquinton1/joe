@@ -243,7 +243,8 @@
         </label>
       </fieldset>
       <label>Titre<input id="automation-title" maxlength="80" placeholder="Ex. Campagne de tests nocturne"></label>
-      <label>Démarrage<input id="automation-when" type="datetime-local"><small>Vide : dès maintenant.</small></label>
+      <label>Démarrage<select id="automation-start"><option value="now">Dès maintenant</option><option value="at">À une date précise</option><option value="quota_reset">Au rechargement des quotas (+1 min)</option></select></label>
+      <label id="automation-when-label">Date<input id="automation-when" type="datetime-local"></label>
       <label>Étapes<textarea id="automation-steps" rows="7" placeholder="Une étape par ligne :&#10;Implémenter la fonctionnalité&#10;Exécuter les tests&#10;Analyser les résultats et corriger&#10;Relancer les validations"></textarea></label>
       <div class="automation-options">
         <label>Workflow<select id="automation-mode"><option value="review">Relecture</option><option value="fast">Rapide</option><option value="consensus">Consensus</option></select></label>

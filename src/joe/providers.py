@@ -141,10 +141,15 @@ class Provider:
         model: str | None,
         effort: str | None,
     ) -> list[str]:
+        # `acceptEdits` n'auto-accepte que l'ÉDITION de fichiers : pytest, npm et
+        # curl restent refusés, et `--print` n'offre aucun canal d'approbation
+        # en cours de run. Un accès en écriture qui ne peut pas lancer les tests
+        # qu'il vient d'écrire ne tient pas sa promesse : on ajoute Bash
+        # explicitement. Le mode `auto` du CLI ne change rien (vérifié).
         permission = {
             "read": "plan",
             "write": "acceptEdits",
-            "project-full": "acceptEdits",
+            "project-full": "bypassPermissions",
             "restricted": "dontAsk",
         }[access]
         command = [
@@ -152,6 +157,8 @@ class Provider:
             "--verbose",
             "--permission-mode", permission, "--no-session-persistence",
         ]
+        if access == "write":
+            command.extend(["--allowedTools", "Bash"])
         command.extend(self._roots("--add-dir"))
         if effort:
             command.extend(["--effort", effort])
@@ -167,10 +174,12 @@ class Provider:
         model: str | None,
         effort: str | None,
     ) -> list[str]:
+        # Même écart que pour Claude : `auto_edit` n'auto-approuve que les outils
+        # d'édition. `yolo` est le seul mode de Gemini qui autorise le shell.
         approval = {
             "read": "plan",
-            "write": "auto_edit",
-            "project-full": "auto_edit",
+            "write": "yolo",
+            "project-full": "yolo",
             "restricted": "plan",
         }[access]
         command = [
@@ -191,9 +200,7 @@ class Provider:
         effort: str | None,
     ) -> list[str]:
         allow_modify = access in {"write", "project-full"}
-        # Copilot has no project-scoped shell sandbox: keep it disabled
-        # for confirmed project access instead of widening to the host.
-        allow_shell = access == "write"
+        allow_shell = allow_modify
         args = [
             self.executable, "--silent", "--no-color",
             "--no-remote", "--no-remote-export", "--no-ask-user",

@@ -1070,6 +1070,18 @@ def test_read_only_runs_are_told_no_approval_channel_exists():
     assert "Ne demande jamais" not in writable
 
 
+def _grants_commands(name: str, argv: list[str]) -> bool:
+    """Le fournisseur peut-il exécuter une commande avec cet argv ?"""
+    if name == "codex":
+        return argv[argv.index("--sandbox") + 1] != "read-only"
+    if name == "claude":
+        mode = argv[argv.index("--permission-mode") + 1]
+        return mode == "bypassPermissions" or "Bash" in argv
+    if name == "gemini":
+        return argv[argv.index("--approval-mode") + 1] == "yolo"
+    return "--allow-tool=shell" in argv
+
+
 def test_three_access_levels_are_provider_independent():
     """Le niveau du projet décide, quel que soit le fournisseur."""
     from pathlib import Path
@@ -1080,10 +1092,10 @@ def test_three_access_levels_are_provider_independent():
     attendu = {
         "read_only": {"codex": "read-only", "claude": "plan", "gemini": "plan"},
         "manual": {
-            "codex": "workspace-write", "claude": "acceptEdits", "gemini": "auto_edit"
+            "codex": "workspace-write", "claude": "acceptEdits", "gemini": "yolo"
         },
         "auto": {
-            "codex": "workspace-write", "claude": "acceptEdits", "gemini": "auto_edit"
+            "codex": "workspace-write", "claude": "acceptEdits", "gemini": "yolo"
         },
     }
     for level, par_fournisseur in attendu.items():
@@ -1095,6 +1107,10 @@ def test_three_access_levels_are_provider_independent():
                     "p", Path("/tmp"), intent, execution_mode=mode
                 )
                 assert expected in argv, (level, name, intent)
+                # Un accès en écriture doit pouvoir lancer une commande, sinon
+                # « lance les tests » revient « Refusé par le sandbox ».
+                if level != "read_only":
+                    assert _grants_commands(name, argv), (level, name, intent)
             decision = RunDecision(route=route, execution_mode=mode, ai_access=level)
             assert decision.needs_approval is (level == "manual")
 

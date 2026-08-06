@@ -299,3 +299,42 @@ def test_go_never_matches_as_a_substring():
         "go voir le logo",
     ):
         assert Router().route(request).intent is not Intent.MODIFY, request
+
+
+def test_a_long_specification_mentioning_fonctionne_is_not_a_health_check():
+    """Le health-check REMPLACE la demande par « calcule 17 × 23 ».
+
+    La recherche en sous-chaîne déclenchait la sonde sur toute demande citant
+    « fonctionne » ou « marche » dès qu'un fournisseur était nommé : une
+    spécification entière était alors jetée et l'utilisateur recevait « 391 ».
+    """
+    request = (
+        "J'aimerai tester la partie planifier un travail autonome, pour cela "
+        "j'aimerai que l'option plan soit compatible. Il faut que joe soit en "
+        "mode automatique pour accepter les changements. Ca doit etre "
+        "compatible avec toutes les ia mais principalement a destination de "
+        "claude car il fonctionne par fenetre de 5h."
+    )
+
+    route = Router().route(request)
+
+    assert "health-check" not in route.reason
+    assert route.primary == "claude"
+
+
+def test_words_containing_a_probe_phrase_do_not_trigger_the_probe():
+    route = Router().route(
+        "claude, documente la demarche de reprise apres quota, en detaillant "
+        "le marche a suivre et les tests de non-regression associes"
+    )
+
+    assert "health-check" not in route.reason
+
+
+def test_short_availability_probes_still_reach_the_provider():
+    for request in (
+        "Fais-moi un petit test de Gemini",
+        "claude tu fonctionnes ?",
+        "codex est disponible ?",
+    ):
+        assert "health-check" in Router().route(request).reason

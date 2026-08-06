@@ -1,5 +1,8 @@
 window.createAutomationModule = ({ state, $, fetcher }) => {
   let plans = [];
+  // Rappel de celui qui a ouvert le formulaire : un plan confié au
+  // planificateur ne doit plus rester affiché comme « à valider ».
+  let onScheduled = null;
 
   const formatDate = value => value
     ? new Date(Number(value) * 1000).toLocaleString()
@@ -49,7 +52,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     render();
   }
 
-  async function open() {
+  async function open(prefill = {}) {
     const project = activeProject();
     if (!project || !state.activeConversationId) {
       window.alert("Choisis d’abord une conversation.");
@@ -57,11 +60,20 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     }
     $("automation-project").textContent = project.name;
     $("automation-provider").value = project.quota_provider || "";
-    $("automation-title").value = "";
-    $("automation-steps").value = "";
+    $("automation-title").value = prefill.title || "";
+    $("automation-steps").value = (prefill.steps || []).join("\n");
     $("automation-when").value = "";
+    $("automation-start").value = "now";
+    onScheduled = prefill.onScheduled || null;
+    syncStartFields();
     await load();
     $("automation-dialog").showModal();
+  }
+
+  // La date n'a de sens que pour un départ daté : « au rechargement des quotas »
+  // se résout côté serveur, l'échéance n'étant pas toujours publiée d'avance.
+  function syncStartFields() {
+    $("automation-when-label").hidden = $("automation-start").value !== "at";
   }
 
   async function save(event) {
@@ -83,6 +95,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
       .split(/\n+/)
       .map(step => step.replace(/^\s*(?:[-*]|\d+[.)])\s*/, "").trim())
       .filter(Boolean);
+    const start = $("automation-start").value;
     const when = $("automation-when").value;
     const response = await fetcher("/api/automations", {
       method: "POST",
@@ -91,7 +104,10 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
         title: $("automation-title").value,
         conversation_id: state.activeConversationId,
         steps,
-        scheduled_for: when ? new Date(when).getTime() / 1000 : Date.now() / 1000,
+        start_mode: start === "quota_reset" ? "quota_reset" : "at",
+        scheduled_for: start === "at" && when
+          ? new Date(when).getTime() / 1000
+          : Date.now() / 1000,
         mode: $("automation-mode").value,
         execution_mode: $("automation-execution").value,
         max_retries: Number($("automation-retries").value),
@@ -105,8 +121,13 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     }
     $("automation-title").value = "";
     $("automation-steps").value = "";
+    if (onScheduled) {
+      const notify = onScheduled;
+      onScheduled = null;
+      await notify();
+    }
     await load();
   }
 
-  return { load, open, save };
+  return { load, open, save, syncStartFields };
 };

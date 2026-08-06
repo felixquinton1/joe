@@ -148,5 +148,20 @@
     };
   }
 
-  window.JoeMarkdown = { renderMarkdown, isTableSeparator, extractQuestion };
+  // Étapes d'un plan : ce qui est écrit en liste devient une étape autonome.
+  // Le plan vient de Joe (mode plan) ou de l'utilisateur ; les deux passent ici.
+  function planSteps(markdown) {
+    const steps = [];
+    for (const line of String(markdown || "").split("\n")) {
+      const item = line.match(/^\s*(?:[-*+]|\d+[.)])\s+(.*\S)/);
+      if (!item) continue;
+      const step = item[1].replace(/\*\*/g, "").replace(/`/g, "").trim();
+      if (step) steps.push(step);
+    }
+    return steps;
+  }
+
+  window.JoeMarkdown = {
+    renderMarkdown, isTableSeparator, extractQuestion, planSteps
+  };
 }());

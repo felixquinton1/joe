@@ -122,10 +122,23 @@ CAPABILITY_QUESTION_PHRASES = {
     "est il possible", "puis-je", "puis je", "dois-je", "dois je",
     "est-ce que ça", "est ce que ça", "que se passe-t-il",
 }
-HEALTH_CHECK_PHRASES = {
-    "petit test", "teste ", "test de ", "test du ", "fonctionne",
-    "est disponible", "marche",
-}
+# Sonde de disponibilité. Le health-check REMPLACE la demande de l'utilisateur
+# par « calcule 17 × 23 » : le déclencher à tort détruit la demande. Deux
+# garde-fous, parce que la recherche en sous-chaîne a déjà transformé une
+# spécification de 700 caractères contenant « il fonctionne par fenêtre de 5h »
+# en test de disponibilité.
+HEALTH_CHECK_MAX_CHARS = 120
+HEALTH_CHECK_PATTERNS = tuple(
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"\bpetit\s+test\b",
+        r"\btest(?:e|es)?\s+(?:de|du|d['’])\b",
+        r"\bfonctionnes?\b",
+        r"\best\s+disponible\b",
+        r"\b(?:ça|ca|il|elle)\s+marche\b",
+    )
+)
+
 READ_ONLY_DIRECTIVES = (
     r"\bne\s+(?:modifie|change|touche)\s+(?:rien|aucun(?:e)?\s+\w+)",
     r"\bn['’](?:écris|ecris)\s+(?:rien|dans\s+aucun(?:e)?\s+\w+)",
@@ -180,6 +193,15 @@ def _is_go_continuation(text: str) -> bool:
     return bool(words) and "go" in words and set(words) <= GO_CONTINUATION_FILLERS
 
 
+def _is_health_check(text: str, explicit_provider: bool) -> bool:
+    """An availability probe is short, names one provider, and asks nothing else."""
+    if not explicit_provider:
+        return False
+    if len(text.strip()) > HEALTH_CHECK_MAX_CHARS:
+        return False
+    return any(pattern.search(text) for pattern in HEALTH_CHECK_PATTERNS)
+
+
 def _intent_text(text: str) -> tuple[str, bool]:
     actionable = text
     read_only = False
@@ -216,9 +238,7 @@ class Router:
         explicit_provider = (
             next(iter(named_providers)) if len(named_providers) == 1 else None
         )
-        health_check = bool(explicit_provider) and any(
-            phrase in lower for phrase in HEALTH_CHECK_PHRASES
-        )
+        health_check = _is_health_check(routing_text, bool(explicit_provider))
         capability_question = any(
             phrase in lower for phrase in CAPABILITY_QUESTION_PHRASES
         )

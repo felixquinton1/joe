@@ -116,3 +116,26 @@ test("ignores a malformed or single-option question block", () => {
     null
   );
 });
+
+test("turns a validated plan into autonomous steps", () => {
+  const steps = window.JoeMarkdown.planSteps(
+    "# Plan\n\nContexte à ignorer.\n\n"
+    + "1. **Corriger** le routeur\n"
+    + "2) Lancer `pytest`\n"
+    + "- Documenter la reprise\n"
+    + "\nUne phrase de conclusion."
+  );
+  // Seules les lignes de liste deviennent des étapes ; le gras et les backticks
+  // ne doivent pas se retrouver dans le prompt envoyé au fournisseur.
+  assert.deepEqual(steps, [
+    "Corriger le routeur",
+    "Lancer pytest",
+    "Documenter la reprise"
+  ]);
+});
+
+test("reports no step when the plan has no list", () => {
+  assert.deepEqual(window.JoeMarkdown.planSteps("Juste un paragraphe."), []);
+  assert.deepEqual(window.JoeMarkdown.planSteps(""), []);
+  assert.deepEqual(window.JoeMarkdown.planSteps(null), []);
+});

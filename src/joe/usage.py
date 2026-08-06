@@ -399,6 +399,34 @@ def admit_route(
     }
 
 
+def next_window_reset(
+    provider: str | None = None,
+    *,
+    now: float | None = None,
+) -> float | None:
+    """Quand la prochaine fenêtre de quota se recharge-t-elle ?
+
+    Sert à programmer un travail autonome « juste après le rechargement ».
+    Contrairement à `_next_quota_reset`, aucun seuil : on veut la bascule de
+    fenêtre elle-même, y compris quand il reste du quota. Claude expose des
+    fenêtres de 5 h ; les fournisseurs qui n'annoncent pas d'échéance
+    renvoient None, et l'appelant réessaie plus tard.
+    """
+    moment = time.time() if now is None else now
+    resets = [
+        float(window["resets_at"])
+        # `usage_status` garde son propre cache de 60 s : s'appuyer sur
+        # `cached_usage_status` figerait un instantané périmé et un plan calé
+        # sur le rechargement n'y trouverait jamais d'échéance à venir.
+        for status in usage_status()
+        if not provider or status.get("provider") == provider
+        for window in status.get("windows") or []
+        if isinstance(window.get("resets_at"), (int, float))
+        and float(window["resets_at"]) > moment
+    ]
+    return min(resets) if resets else None
+
+
 def _next_quota_reset(
     statuses: list[dict[str, Any]],
     *,

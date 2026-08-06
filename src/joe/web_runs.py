@@ -13,7 +13,7 @@ from typing import Any
 
 from .capabilities import select_model, select_model_tier
 from .approvals import ApprovalStore
-from .automations import AutomationStore
+from .automations import AutomationStore, START_MODES
 from .conversations import ConversationStore, FREE_PROJECT_ID, _ai_access
 from .documents import extract_document_text
 from .files import FileLibrary
@@ -29,7 +29,12 @@ from .route_classifier import (
 )
 from .skills import create_skill
 from .tasks import TaskStore
-from .usage import _next_quota_reset, cached_usage_status, usage_status
+from .usage import (
+    _next_quota_reset,
+    cached_usage_status,
+    next_window_reset,
+    usage_status,
+)
 from .worktrees import Worktree, WorktreeError, WorktreeManager
 
 
@@ -1087,12 +1092,16 @@ class RunManager:
             raise ValueError(
                 "Un plan autonome accepte uniquement lecture seule ou écriture projet."
             )
+        start_mode = str(payload.get("start_mode", "at"))
+        if start_mode not in START_MODES:
+            raise ValueError("Mode de départ inconnu.")
         return self.automations.create(
             title=str(payload.get("title", "")),
             project_id=project_id,
             conversation_id=conversation_id,
             steps=[str(step) for step in raw_steps],
             scheduled_for=float(payload.get("scheduled_for", time.time())),
+            start_mode=start_mode,
             mode=str(payload.get("mode", "review")),
             execution_mode=execution_mode,
             max_retries=int(payload.get("max_retries", 2)),
@@ -1121,11 +1130,16 @@ class RunManager:
         for plan in self.automations.list():
             if plan.get("status") in {"completed", "cancelled", "blocked"}:
                 continue
+            if plan.get("start_mode") == "quota_reset":
+                if not self._resolve_quota_start(plan, timestamp):
+                    continue
+                plan = self.automations.get(plan["id"]) or plan
             if float(plan.get("scheduled_for", 0)) > timestamp:
                 continue
             index = int(plan.get("current_step", 0))
             steps = plan.get("steps") or []
             if index >= len(steps):
+                self._publish_automation_report(plan)
                 self.automations.update(
                     plan["id"], status="completed", current_run_id=None, error=None
                 )
@@ -1231,6 +1245,55 @@ class RunManager:
             self.automations.update(
                 plan["id"], status="running", current_run_id=run.run_id, error=None
             )
+
+    def _resolve_quota_start(self, plan: dict[str, Any], now: float) -> bool:
+        """Fixer l'heure de départ d'un plan calé sur le rechargement des quotas.
+
+        L'échéance n'est pas toujours publiée au moment où l'utilisateur
+        programme le plan : tant qu'elle manque, le plan attend sans démarrer,
+        et le planificateur réessaie au tour suivant.
+        """
+        reset = next_window_reset(str(plan.get("provider") or "") or None, now=now)
+        if reset is None:
+            self.automations.update(plan["id"], status="waiting")
+            return False
+        # Une minute de marge : la fenêtre doit être effectivement ouverte.
+        self.automations.update(
+            plan["id"],
+            scheduled_for=reset + 60,
+            start_mode="at",
+            status="scheduled",
+        )
+        return True
+
+    def _publish_automation_report(self, plan: dict[str, Any]) -> None:
+        """Clore un plan autonome par un compte rendu, comme un run normal.
+
+        Le travail s'est déroulé sans personne devant l'écran : sans cette
+        synthèse, l'utilisateur ne retrouve que des réponses d'étapes isolées.
+        """
+        if plan.get("report"):
+            return
+        steps = plan.get("steps") or []
+        lines = [f"# Plan autonome terminé — {plan.get('title', '')}", ""]
+        for position, step in enumerate(steps, start=1):
+            state = str(step.get("status", "pending"))
+            mark = "✅" if state == "completed" else "⚠️"
+            lines.append(f"{mark} **Étape {position}.** {step.get('prompt', '')}")
+            attempts = int(step.get("attempts", 0))
+            if attempts > 1:
+                lines.append(f"   · {attempts} tentatives")
+            if step.get("error"):
+                lines.append(f"   · {step['error']}")
+        done = sum(1 for step in steps if step.get("status") == "completed")
+        lines += ["", f"**{done}/{len(steps)} étapes menées à leur terme.**"]
+        if plan.get("error"):
+            lines.append(f"\nDernière erreur signalée : {plan['error']}")
+        report = "\n".join(lines)
+        self.automations.update(plan["id"], report=report)
+        self.conversations.append_message(
+            str(plan["conversation_id"]), "assistant", report
+        )
 
     def _wait_for_quota_window(
         self,

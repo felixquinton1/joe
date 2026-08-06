@@ -201,11 +201,50 @@ def test_generic_write_modes_are_translated_for_non_codex_clis():
         "p", cwd, Intent.ANALYZE, execution_mode="workspace-write"
     )
 
-    assert claude[claude.index("--permission-mode") + 1] == "acceptEdits"
+    assert claude[claude.index("--permission-mode") + 1] == "bypassPermissions"
     assert "--allow-dangerously-skip-permissions" not in claude
-    assert gemini[gemini.index("--approval-mode") + 1] == "auto_edit"
+    assert gemini[gemini.index("--approval-mode") + 1] == "yolo"
     assert "--allow-tool=write" in copilot
     assert "--allow-tool=shell" in copilot
+
+
+def test_write_access_can_actually_run_commands_on_every_cli():
+    """Écrire sans pouvoir lancer les tests écrits n'est pas un accès en écriture.
+
+    `acceptEdits` (Claude) et `auto_edit` (Gemini) n'auto-approuvent que
+    l'édition de fichiers : pytest et npm y sont refusés, et le mode `--print`
+    n'offre aucun canal d'approbation en cours de run. Le symptôme observé
+    était « Refusé par le sandbox » sur un projet pourtant réglé en accès
+    automatique.
+    """
+    cwd = Path("/tmp/project")
+    claude = Provider("claude", "claude").command(
+        "p", cwd, Intent.MODIFY, execution_mode="workspace-write"
+    )
+    gemini = Provider("gemini", "gemini").command(
+        "p", cwd, Intent.MODIFY, execution_mode="workspace-write"
+    )
+    copilot = Provider("copilot", "copilot").command(
+        "p", cwd, Intent.MODIFY, execution_mode="workspace-write"
+    )
+
+    assert claude[claude.index("--allowedTools") + 1] == "Bash"
+    assert gemini[gemini.index("--approval-mode") + 1] == "yolo"
+    assert "--allow-tool=shell" in copilot
+
+
+def test_read_only_access_never_grants_commands():
+    cwd = Path("/tmp/project")
+    claude = Provider("claude", "claude").command(
+        "p", cwd, Intent.MODIFY, execution_mode="read-only"
+    )
+    gemini = Provider("gemini", "gemini").command(
+        "p", cwd, Intent.MODIFY, execution_mode="read-only"
+    )
+
+    assert "--allowedTools" not in claude
+    assert claude[claude.index("--permission-mode") + 1] == "plan"
+    assert gemini[gemini.index("--approval-mode") + 1] == "plan"
 
 
 def test_full_access_remains_scoped_to_declared_project_roots():
@@ -225,11 +264,11 @@ def test_full_access_remains_scoped_to_declared_project_roots():
     )
 
     assert codex[codex.index("--sandbox") + 1] == "workspace-write"
-    assert claude[claude.index("--permission-mode") + 1] == "acceptEdits"
+    assert claude[claude.index("--permission-mode") + 1] == "bypassPermissions"
     assert "--allow-dangerously-skip-permissions" not in claude
-    assert gemini[gemini.index("--approval-mode") + 1] == "auto_edit"
+    assert gemini[gemini.index("--approval-mode") + 1] == "yolo"
     assert "--allow-tool=write" in copilot
-    assert "--allow-tool=shell" not in copilot
+    assert "--allow-tool=shell" in copilot
     for command, flag in (
         (codex, "--add-dir"),
         (claude, "--add-dir"),

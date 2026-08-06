@@ -1,4 +1,4 @@
-const APP_VERSION = "0.31.0";
+const APP_VERSION = "0.32.0";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -258,6 +258,7 @@ function planControls(approval) {
   const done = () => dropPlanControls(approval.id);
   actions.append(
     taskAction("Refuser", () => decideApproval(approval, "refused").then(done), "danger"),
+    taskAction("Planifier…", () => schedulePlan(approval)),
     taskAction(
       "Autoriser avec modifications",
       () => decideApproval(approval, "approved", notes.value.trim()).then(done)
@@ -289,6 +290,35 @@ function attachPlanControls(conversationId, bubble) {
   const wrapper = bubble.closest(".message") || bubble.parentElement;
   if (!wrapper || wrapper.querySelector(".plan-controls")) return;
   wrapper.appendChild(planControls(approval));
+}
+
+// Un plan validé peut partir tout de suite (« Autoriser ») ou être confié au
+// planificateur autonome : mêmes étapes, exécutées sans personne devant l'écran.
+// Le plan vient de Joe (mode plan) ou de l'utilisateur, qui écrit ses étapes
+// directement dans le formulaire — les deux aboutissent au même endroit.
+async function schedulePlan(approval) {
+  const payload = approval.payload || {};
+  const steps = window.JoeMarkdown.planSteps(payload.plan);
+  if (!steps.length) {
+    window.alert(
+      "Ce plan n’expose aucune étape en liste : ajoute-les à la main dans le formulaire."
+    );
+  }
+  await automation.open({
+    title: (payload.request || "Plan autonome").slice(0, 80),
+    steps,
+    // Le plan part au planificateur : l'approbation est honorée, sans lancer
+    // de run immédiat — c'est tout l'intérêt d'un travail différé.
+    onScheduled: async () => {
+      await joeFetch(`/api/approvals/${encodeURIComponent(approval.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision: "approved" })
+      });
+      dropPlanControls(approval.id);
+      await loadTasks();
+    }
+  });
 }
 
 async function decideApproval(approval, decision, notes = "") {
@@ -1816,6 +1846,7 @@ $("refresh-usage").onclick = () => loadUsage(true).catch(error => {
 $("open-preferences").onclick = () => openPreferences().catch(
   error => window.alert(error.message)
 );
+$("automation-start").onchange = () => automation.syncStartFields();
 $("open-automation").onclick = () => automation.open().catch(
   error => window.alert(error.message)
 );
