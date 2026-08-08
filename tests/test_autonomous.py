@@ -61,6 +61,18 @@ def test_autonomous_store_persists_time_and_data_boundaries(tmp_path: Path):
     assert campaign["deadline_at"] is None
 
 
+def test_autonomous_store_persists_durable_context_and_research_cadence(tmp_path: Path):
+    values = campaign_values() | {
+        "campaign_context": "Official URLs and local environment contract",
+        "research_refresh_interval": 3,
+    }
+    store = AutonomousStore(tmp_path)
+    store.ensure()
+    campaign = store.create(**values)
+    assert campaign["campaign_context"].startswith("Official URLs")
+    assert campaign["research_refresh_interval"] == 3
+
+
 def test_scheduled_campaign_requires_checkpoint_contract(tmp_path: Path):
     values = campaign_values()
     values["schedule"] = {
@@ -145,7 +157,10 @@ def test_autonomous_prompt_leaves_method_and_reporting_choices_to_agent():
         "objective": "Solve the public challenge",
         "research_protocol": "Read the official rules",
         "data_policy": "Local data only",
+        "campaign_context": "Official challenge URL",
     }
     prompt = RunManager._autonomous_research_prompt(campaign)
     assert "détermine toi-même" in prompt
     assert "aucune méthode" in prompt
+    assert "Official challenge URL" in prompt
+    assert "brief durable" in prompt.lower()

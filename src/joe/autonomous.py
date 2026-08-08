@@ -62,6 +62,10 @@ class AutonomousStore:
             "objective": objective[:8000],
             "research_protocol": str(values.get("research_protocol", ""))[:8000],
             "data_policy": str(values.get("data_policy", ""))[:4000],
+            "campaign_context": str(values.get("campaign_context", ""))[:12000],
+            "research_refresh_interval": max(
+                1, min(20, int(values.get("research_refresh_interval", 3)))
+            ),
             "command": command[:32],
             "working_directory": str(values.get("working_directory", ".")),
             "metrics_path": str(values.get("metrics_path", "metrics.json")),

@@ -1174,6 +1174,8 @@ class RunManager:
             objective=payload.get("objective", ""),
             research_protocol=payload.get("research_protocol", ""),
             data_policy=payload.get("data_policy", ""),
+            campaign_context=payload.get("campaign_context", ""),
+            research_refresh_interval=payload.get("research_refresh_interval", 3),
             command=payload.get("command"),
             working_directory=payload.get("working_directory", "."),
             metrics_path=payload.get("metrics_path", "metrics.json"),
@@ -1280,7 +1282,11 @@ class RunManager:
                             "attempts": summary.get("attempts") or [],
                         },
                     )
-                    next_phase = "planning" if campaign.get("phase") == "research" else "experiment"
+                    next_phase = (
+                        "planning"
+                        if campaign.get("phase") in {"research", "research_refresh"}
+                        else "experiment"
+                    )
                     self.autonomous.update(
                         campaign["id"], status="scheduled", phase=next_phase,
                         current_run_id=None, error=None,
@@ -1296,11 +1302,12 @@ class RunManager:
                 continue
             if self.has_active_conversation(str(campaign["conversation_id"])):
                 continue
-            iteration = int(campaign.get("iteration", 0)) + 1
-            if phase == "research":
+            iteration = int(campaign.get("iteration", 0))
+            if phase in {"research", "research_refresh"}:
                 prompt = self._autonomous_research_prompt(campaign)
                 status = "researching"
             else:
+                iteration += 1
                 prompt = self._autonomous_iteration_prompt(campaign, iteration)
                 status = "planning"
             try:
@@ -1440,18 +1447,28 @@ class RunManager:
                 error=None,
             )
         else:
+            interval = int(campaign.get("research_refresh_interval", 3))
+            next_phase = (
+                "research_refresh"
+                if int(campaign.get("iteration", 0)) % interval == 0
+                else "planning"
+            )
             self.autonomous.update(
-                campaign["id"], status="scheduled", phase="planning",
+                campaign["id"], status="scheduled", phase=next_phase,
                 best_metric=best, current_experiment_id=None, error=None,
             )
 
     @staticmethod
     def _autonomous_research_prompt(campaign: dict[str, Any]) -> str:
+        refresh = campaign.get("phase") == "research_refresh"
         return (
-            f"Campagne Autonomous « {campaign['title']} » — phase de recherche.\n\n"
+            f"Campagne Autonomous « {campaign['title']} » — "
+            f"{'réévaluation bibliographique' if refresh else 'phase de recherche initiale'}.\n\n"
             f"Objectif : {campaign['objective']}\n\n"
+            f"Brief durable à relire intégralement :\n{campaign.get('campaign_context') or 'Aucun contexte supplémentaire.'}\n\n"
             f"Protocole : {campaign.get('research_protocol') or 'Consulte la documentation publique et les approches comparables.'}\n\n"
             f"Politique de données impérative : {campaign.get('data_policy') or 'Ne transmets aucune donnée privée ou restreinte à un fournisseur IA.'}\n\n"
+            "Vérifie que l'état courant reste aligné avec le brief durable et les règles officielles. "
             "Recherche uniquement des sources publiques. Consigne une synthèse sourcée dans "
             "AUTONOMOUS_RESEARCH.md. N'inspecte, ne joins et ne recopie aucune donnée restreinte. "
             "Ne lance pas encore l'expérience. À partir des règles officielles, détermine toi-même "
@@ -1474,11 +1491,14 @@ class RunManager:
         return (
             f"Campagne Autonomous « {campaign['title']} » — itération {iteration}/{campaign['max_iterations']}.\n\n"
             f"Objectif : {campaign['objective']}\n"
+            f"Brief durable à relire intégralement avant toute décision :\n{campaign.get('campaign_context') or 'Aucun contexte supplémentaire.'}\n\n"
             f"Politique de données : {campaign.get('data_policy')}\n\n"
             f"Dernier résultat structuré : {feedback}\n\n"
             f"Contrat de reprise : sauvegarde régulièrement dans {campaign.get('checkpoint_path') or 'le checkpoint configuré'}, "
             f"surveille le signal {campaign.get('stop_signal_path') or 'STOP_REQUESTED'} et quitte proprement après l'avoir détecté. "
-            "Lis AUTONOMOUS_RESEARCH.md et l'état actuel du projet. Fais une seule amélioration "
+            "Relis AUTONOMOUS_RESEARCH.md, le brief durable et l'état actuel du projet. Vérifie "
+            "explicitement l'alignement avec l'objectif et décide si une recherche publique "
+            "complémentaire est nécessaire avant de coder. Fais une seule amélioration "
             "méthodologique ciblée ou corrige le crash observé. Tu peux modifier le code et lancer "
             "des tests courts, mais ne lance pas la commande d'expérience principale : Joe la lancera "
             "et détectera seul succès, crash ou timeout. Choisis et justifie toi-même la validation, "

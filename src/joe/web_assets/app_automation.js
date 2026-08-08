@@ -128,6 +128,19 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
         objective: "Traiter de manière autonome le DaT Parkinson's Challenge à partir de ses pages et règles officielles. Concevoir, implémenter et évaluer localement des solutions; choisir les validations, indicateurs, comparaisons et visualisations utiles; fournir les fichiers au format demandé par le challenge, mais ne jamais effectuer de soumission.",
         research_protocol: "Commencer par consulter les pages publiques officielles du challenge et son leaderboard, puis effectuer la recherche bibliographique publique jugée utile. Expliquer les sources, options et raisons de chaque choix dans la conversation.",
         data_policy: "Les données DrivenData restent exclusivement sur ce PC. Ne jamais transmettre de scan, ligne individuelle, identifiant, métadonnée privée ou extrait de fichier à une IA. Les processus locaux peuvent lire les données; les IA ne reçoivent que du code, de la documentation publique, des métriques agrégées et des erreurs nettoyées.",
+        campaign_context: `Challenge officiel : DaT Parkinson's Challenge de DrivenData.
+Pages publiques à consulter :
+- accueil : https://www.drivendata.org/competitions/311/dat-parkinsons-challenge/page/987/
+- description : https://www.drivendata.org/competitions/311/dat-parkinsons-challenge/page/990/
+- format d'exécution : https://www.drivendata.org/competitions/311/dat-parkinsons-challenge/page/989/
+- règles : https://www.drivendata.org/competitions/311/dat-parkinsons-challenge/rules/
+- leaderboard : https://www.drivendata.org/competitions/311/dat-parkinsons-challenge/leaderboard/
+- données : https://www.drivendata.org/competitions/311/dat-parkinsons-challenge/data/
+Les données privées sont déjà disponibles uniquement pour les processus locaux via DAT_PARKINSON_DATA_ROOT. N'en lis jamais le contenu dans une session IA : écris des scripts locaux qui ne renvoient que des agrégats nettoyés.
+Environnement : Windows, GPU NVIDIA RTX A5000 Laptop 16 Go. Utilise un environnement Python isolé dans le projet.
+Le dépôt Git privé avec son remote origin est déjà provisionné comme workspace actif. Travaille directement dedans. Teste, commit et push chaque changement cohérent; ne commit jamais données, checkpoints, modèles, artefacts médicaux, secrets ou résultats individuels.
+Crée et maintiens toi-même le code Python, le lanceur autonomous_run.ps1, les checkpoints reprenables, les métriques agrégées, les visualisations pertinentes et les fichiers finaux au format du challenge. Tu peux consulter le leaderboard mais ne dois jamais soumettre automatiquement.`,
+        research_refresh_interval: 3,
         command: ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "autonomous_run.ps1"],
         working_directory: ".",
         metrics_path: "artifacts/metrics.json",

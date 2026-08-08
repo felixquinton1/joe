@@ -32,6 +32,25 @@ def test_windows_resolver_prefers_npm_cmd_shim():
     ) == "C:/npm/codex.cmd"
 
 
+def test_windows_resolver_prefers_managed_exe_over_extensionless_alias(tmp_path):
+    managed = tmp_path / "Programs" / "Joe" / "bin" / "codex.exe"
+    managed.parent.mkdir(parents=True)
+    managed.write_text("binary")
+
+    class Windows:
+        name = "nt"
+        environ = {"LOCALAPPDATA": str(tmp_path)}
+
+    class Resolver:
+        @staticmethod
+        def which(name):
+            return "C:/WindowsApps/codex" if name == "codex" else None
+
+    assert windows_aware_executable(
+        "codex", os_module=Windows, shutil_module=Resolver
+    ) == str(managed)
+
+
 class ScriptProvider(Provider):
     def __init__(
         self, script: str, name: str = "fake", watchdog_seconds: float = 90

@@ -47,9 +47,21 @@ NETWORK_CONTROLLED_PROVIDERS = ("codex",)
 def windows_aware_executable(
     name: str, *, os_module=os, shutil_module=shutil
 ) -> str | None:
-    """Resolve npm CLI shims to their executable Windows batch wrapper."""
+    """Resolve an executable Windows shim without selecting an ACL-blocked alias."""
     if os_module.name == "nt":
         command = shutil_module.which(f"{name}.cmd")
+        if command:
+            return command
+        environment = getattr(os_module, "environ", {})
+        override = environment.get(f"JOE_{name.upper()}_EXECUTABLE")
+        if override and Path(override).is_file():
+            return override
+        local_app_data = environment.get("LOCALAPPDATA")
+        if local_app_data:
+            managed = Path(local_app_data) / "Programs" / "Joe" / "bin" / f"{name}.exe"
+            if managed.is_file():
+                return str(managed)
+        command = shutil_module.which(f"{name}.exe")
         if command:
             return command
     return shutil_module.which(name)
