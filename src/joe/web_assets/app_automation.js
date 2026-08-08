@@ -53,6 +53,9 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
       card.querySelector("strong").textContent = campaign.title;
       card.querySelector("span").textContent = campaign.status;
       card.querySelector("small").textContent = `itération ${campaign.iteration}/${campaign.max_iterations} · phase ${campaign.phase}`;
+      if (campaign.status === "paused" && campaign.next_start_at) {
+        card.querySelector("small").textContent += ` · reprise ${formatDate(campaign.next_start_at)}`;
+      }
       const button = card.querySelector("button");
       button.hidden = ["completed", "cancelled", "blocked"].includes(campaign.status);
       button.onclick = async () => {
@@ -75,6 +78,10 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
 
   async function startParkinsons() {
     if (!state.activeConversationId) return;
+    const scheduled = $("autonomous-schedule-enabled").checked;
+    const days = $("autonomous-window-days").value === "weekdays"
+      ? [0, 1, 2, 3, 4]
+      : [0, 1, 2, 3, 4, 5, 6];
     const response = await fetcher("/api/autonomous", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -91,8 +98,20 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
         metric_direction: "min",
         timeout_seconds: 480,
         max_iterations: 20,
-        max_duration_seconds: 3600,
+        max_duration_seconds: Number($("autonomous-budget-minutes").value) * 60,
         restricted_data: true,
+        schedule: {
+          timezone: "Europe/Paris",
+          windows: scheduled ? [{
+            days,
+            start: $("autonomous-window-start").value,
+            end: $("autonomous-window-end").value
+          }] : []
+        },
+        checkpoint_path: "checkpoints/latest.pt",
+        resume_command: ["python", "experiment.py", "--resume", "checkpoints/latest.pt"],
+        stop_signal_path: "artifacts/STOP_REQUESTED",
+        stop_grace_seconds: 30,
         mode: "review",
         execution_mode: "workspace-write"
       })

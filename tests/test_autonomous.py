@@ -1,10 +1,15 @@
 import json
 import sys
+import threading
+import time
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from joe.autonomous import AutonomousStore
+from joe.autonomous_schedule import normalize_schedule, schedule_state
 from joe.experiment_runner import run_experiment
 
 
@@ -48,6 +53,18 @@ def test_autonomous_store_persists_time_and_data_boundaries(tmp_path: Path):
     assert campaign["deadline_at"] is None
 
 
+def test_scheduled_campaign_requires_checkpoint_contract(tmp_path: Path):
+    values = campaign_values()
+    values["schedule"] = {
+        "timezone": "Europe/Paris",
+        "windows": [{"days": [0], "start": "08:00", "end": "18:00"}],
+    }
+    store = AutonomousStore(tmp_path)
+    store.ensure()
+    with pytest.raises(ValueError, match="checkpoint"):
+        store.create(**values)
+
+
 def test_runner_collects_metrics_and_logs(tmp_path: Path):
     script = tmp_path / "experiment.py"
     script.write_text(
@@ -77,3 +94,38 @@ def test_runner_detects_crash(tmp_path: Path):
 def test_runner_rejects_working_directory_escape(tmp_path: Path):
     with pytest.raises(ValueError):
         run_experiment([sys.executable, "-V"], tmp_path, tmp_path / "out", working_directory="..")
+
+
+def test_schedule_supports_daily_and_overnight_windows():
+    schedule = normalize_schedule({
+        "timezone": "Europe/Paris",
+        "windows": [{"days": list(range(7)), "start": "22:00", "end": "06:00"}],
+    })
+    zone = ZoneInfo("Europe/Paris")
+    active = datetime(2026, 8, 10, 23, 0, tzinfo=zone).timestamp()
+    inactive = datetime(2026, 8, 10, 12, 0, tzinfo=zone).timestamp()
+    assert schedule_state(schedule, active)["active"] is True
+    waiting = schedule_state(schedule, inactive)
+    assert waiting["active"] is False
+    assert waiting["next_start"] == datetime(2026, 8, 10, 22, 0, tzinfo=zone).timestamp()
+
+
+def test_runner_interrupts_after_checkpoint_signal(tmp_path: Path):
+    script = tmp_path / "experiment.py"
+    script.write_text(
+        "import pathlib,time\n"
+        "signal=pathlib.Path('artifacts/STOP_REQUESTED')\n"
+        "while not signal.exists(): time.sleep(.02)\n"
+        "pathlib.Path('checkpoints').mkdir(exist_ok=True)\n"
+        "pathlib.Path('checkpoints/latest.pt').write_text('checkpoint')\n",
+        encoding="utf-8",
+    )
+    cancel = threading.Event()
+    threading.Timer(.1, cancel.set).start()
+    result = run_experiment(
+        [sys.executable, "experiment.py"], tmp_path, tmp_path / "out",
+        cancel_event=cancel, checkpoint_path="checkpoints/latest.pt",
+        stop_grace_seconds=2,
+    )
+    assert result["status"] == "interrupted"
+    assert result["checkpoint_available"] is True

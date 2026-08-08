@@ -257,7 +257,15 @@
       <section>
         <div class="skill-manager-head"><span>Mode Autonomous (expérimental)</span></div>
         <p class="dialog-intro">Boucle bornée recherche → code → expérience → analyse. Cette démo n'utilise que des données synthétiques.</p>
-        <button id="start-parkinsons-autonomous" type="button" class="subtle-action">Lancer la démo DaT Parkinson (3 itérations)</button>
+        <div class="automation-options">
+          <label>Début quotidien<input id="autonomous-window-start" type="time" value="08:00"></label>
+          <label>Fin quotidienne<input id="autonomous-window-end" type="time" value="18:00"></label>
+          <label>Jours<select id="autonomous-window-days"><option value="everyday">Tous les jours</option><option value="weekdays">Du lundi au vendredi</option></select></label>
+          <label>Budget actif (min)<input id="autonomous-budget-minutes" type="number" min="1" max="10080" value="60"></label>
+        </div>
+        <label class="check-label"><input id="autonomous-schedule-enabled" type="checkbox"> Respecter cette fenêtre et reprendre automatiquement au prochain créneau</label>
+        <small class="setting-help">Une heure de fin antérieure au début crée une fenêtre nocturne. Les runs reçoivent un signal d'arrêt, sauvegardent leur checkpoint puis reprennent au créneau suivant.</small>
+        <button id="start-parkinsons-autonomous" type="button" class="subtle-action">Lancer le pilote DaT Parkinson</button>
         <div id="autonomous-list" class="automation-list"></div>
       </section>
       <div class="dialog-actions"><button value="cancel">Fermer</button><button id="save-automation" value="default">Programmer</button></div>

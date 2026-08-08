@@ -9,10 +9,12 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from .autonomous_schedule import normalize_schedule
+
 
 TERMINAL_STATUSES = {"completed", "cancelled", "blocked"}
 STATUSES = TERMINAL_STATUSES | {
-    "scheduled", "researching", "planning", "experimenting", "evaluating"
+    "scheduled", "paused", "researching", "planning", "experimenting", "evaluating"
 }
 
 
@@ -34,12 +36,23 @@ class AutonomousStore:
     def create(self, **values: Any) -> dict[str, Any]:
         objective = " ".join(str(values.get("objective", "")).split()).strip()
         command = values.get("command")
+        resume_command = values.get("resume_command") or []
         if not objective:
             raise ValueError("Décris l'objectif de la campagne.")
         if not isinstance(command, list) or not command or not all(
             isinstance(part, str) and part for part in command
         ):
             raise ValueError("La commande d'expérience doit être une liste non vide.")
+        if not isinstance(resume_command, list) or not all(
+            isinstance(part, str) and part for part in resume_command
+        ):
+            raise ValueError("La commande de reprise Autonomous est invalide.")
+        schedule = normalize_schedule(values.get("schedule"))
+        checkpoint_path = str(values.get("checkpoint_path", ""))
+        if schedule["windows"] and (not resume_command or not checkpoint_path):
+            raise ValueError(
+                "Une campagne programmée exige un checkpoint et une commande de reprise."
+            )
         now = time.time()
         campaign = {
             "id": uuid.uuid4().hex,
@@ -60,6 +73,15 @@ class AutonomousStore:
                 60, min(604800, int(values.get("max_duration_seconds", 3600)))
             ),
             "restricted_data": bool(values.get("restricted_data", False)),
+            "schedule": schedule,
+            "resume_command": resume_command[:32],
+            "checkpoint_path": checkpoint_path,
+            "stop_signal_path": str(
+                values.get("stop_signal_path", "artifacts/STOP_REQUESTED")
+            ),
+            "stop_grace_seconds": max(
+                1, min(120, int(values.get("stop_grace_seconds", 30)))
+            ),
             "mode": str(values.get("mode", "review")),
             "execution_mode": str(values.get("execution_mode", "workspace-write")),
             "status": "scheduled",
@@ -69,6 +91,9 @@ class AutonomousStore:
             "current_experiment_id": None,
             "started_at": None,
             "deadline_at": None,
+            "active_elapsed_seconds": 0.0,
+            "active_window_started_at": None,
+            "next_start_at": None,
             "best_metric": None,
             "history": [],
             "error": None,
@@ -98,6 +123,7 @@ class AutonomousStore:
             "status", "phase", "iteration", "current_run_id",
             "current_experiment_id", "best_metric", "history", "error",
             "started_at", "deadline_at",
+            "active_elapsed_seconds", "active_window_started_at", "next_start_at",
         }
         with self.lock:
             payload = self._read()

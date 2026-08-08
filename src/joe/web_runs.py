@@ -15,6 +15,7 @@ from .capabilities import select_model, select_model_tier
 from .approvals import ApprovalStore
 from .automations import AutomationStore, START_MODES
 from .autonomous import AutonomousStore, TERMINAL_STATUSES
+from .autonomous_schedule import schedule_state
 from .experiment_runner import run_experiment
 from .conversations import ConversationStore, FREE_PROJECT_ID, _ai_access
 from .documents import extract_document_text
@@ -160,6 +161,7 @@ class RunManager:
         self.autonomous = AutonomousStore(self.orchestrator.memory.root)
         self.autonomous.ensure()
         self._autonomous_experiments: set[str] = set()
+        self._autonomous_experiment_cancels: dict[str, threading.Event] = {}
         for task in self.tasks.list():
             if task.get("status") in {"integrating", "resolving"}:
                 if (
@@ -1181,6 +1183,11 @@ class RunManager:
             max_iterations=payload.get("max_iterations", 3),
             max_duration_seconds=payload.get("max_duration_seconds", 3600),
             restricted_data=payload.get("restricted_data", False),
+            schedule=payload.get("schedule"),
+            resume_command=payload.get("resume_command"),
+            checkpoint_path=payload.get("checkpoint_path", ""),
+            stop_signal_path=payload.get("stop_signal_path", "artifacts/STOP_REQUESTED"),
+            stop_grace_seconds=payload.get("stop_grace_seconds", 30),
             mode=payload.get("mode", "review"),
             execution_mode=execution_mode,
         )
@@ -1191,6 +1198,9 @@ class RunManager:
             return None
         if campaign.get("current_run_id"):
             self.cancel(str(campaign["current_run_id"]))
+        event = self._autonomous_experiment_cancels.get(campaign_id)
+        if event:
+            event.set()
         return self.autonomous.cancel(campaign_id)
 
     def _advance_autonomous(self) -> None:
@@ -1198,17 +1208,32 @@ class RunManager:
             if campaign.get("status") in TERMINAL_STATUSES:
                 continue
             now = time.time()
-            if campaign.get("started_at") is None:
-                deadline = now + int(campaign.get("max_duration_seconds", 3600))
+            window = schedule_state(campaign.get("schedule") or {}, now)
+            if not window["active"]:
+                self._pause_autonomous(campaign, now, window.get("next_start"))
+                continue
+            if campaign.get("active_window_started_at") is None:
                 campaign = self.autonomous.update(
-                    campaign["id"], started_at=now, deadline_at=deadline
+                    campaign["id"],
+                    started_at=campaign.get("started_at") or now,
+                    active_window_started_at=now,
+                    next_start_at=None,
+                    status="scheduled" if campaign.get("status") == "paused" else campaign.get("status"),
                 ) or campaign
-            if float(campaign.get("deadline_at") or 0) <= now:
+            elapsed = float(campaign.get("active_elapsed_seconds", 0)) + max(
+                0.0, now - float(campaign.get("active_window_started_at") or now)
+            )
+            budget = int(campaign.get("max_duration_seconds", 3600))
+            if budget and elapsed >= budget:
                 if campaign.get("current_run_id"):
                     self.cancel(str(campaign["current_run_id"]))
+                event = self._autonomous_experiment_cancels.get(str(campaign["id"]))
+                if event:
+                    event.set()
                 self.autonomous.update(
                     campaign["id"], status="completed", phase="time_budget_reached",
-                    current_run_id=None, error=None,
+                    current_run_id=None, error=None, active_elapsed_seconds=elapsed,
+                    active_window_started_at=None,
                 )
                 self.conversations.append_message(
                     str(campaign["conversation_id"]), "assistant",
@@ -1271,23 +1296,69 @@ class RunManager:
                 iteration=(0 if phase == "research" else iteration), error=None,
             )
 
+    def _pause_autonomous(
+        self, campaign: dict[str, Any], now: float, next_start: float | None
+    ) -> None:
+        if campaign.get("status") == "paused" and campaign.get("next_start_at") == next_start:
+            return
+        elapsed = float(campaign.get("active_elapsed_seconds", 0))
+        if campaign.get("active_window_started_at") is not None:
+            elapsed += max(0.0, now - float(campaign["active_window_started_at"]))
+        if campaign.get("current_run_id"):
+            self.cancel(str(campaign["current_run_id"]))
+        event = self._autonomous_experiment_cancels.get(str(campaign["id"]))
+        if event:
+            event.set()
+        self.autonomous.update(
+            campaign["id"], status="paused", current_run_id=None,
+            active_elapsed_seconds=elapsed, active_window_started_at=None,
+            next_start_at=next_start, error=None,
+        )
+        self.autonomous.add_event(
+            str(campaign["id"]), "paused",
+            {"next_start_at": next_start, "active_elapsed_seconds": round(elapsed, 3)},
+        )
+
     def _start_autonomous_experiment(self, campaign: dict[str, Any]) -> None:
         campaign_id = str(campaign["id"])
         self._autonomous_experiments.add(campaign_id)
+        cancel_event = threading.Event()
+        self._autonomous_experiment_cancels[campaign_id] = cancel_event
         self.autonomous.update(campaign_id, status="experimenting")
 
         def execute() -> None:
             try:
                 workspace, _, _, _ = self._project_scope(str(campaign["conversation_id"]))
+                history = campaign.get("history") or []
+                previous = next(
+                    (item for item in reversed(history) if item.get("kind") == "experiment"),
+                    {},
+                )
+                resume = (
+                    previous.get("status") == "interrupted"
+                    and previous.get("checkpoint_available")
+                    and campaign.get("resume_command")
+                )
+                command = list(campaign["resume_command"] if resume else campaign["command"])
+                current_window = schedule_state(campaign.get("schedule") or {}, time.time())
+                limits = [int(campaign.get("timeout_seconds", 600))]
+                if current_window.get("window_end"):
+                    limits.append(max(5, int(current_window["window_end"] - time.time())))
+                budget = int(campaign.get("max_duration_seconds", 3600))
+                if budget:
+                    used = float(campaign.get("active_elapsed_seconds", 0)) + max(
+                        0.0, time.time() - float(campaign.get("active_window_started_at") or time.time())
+                    )
+                    limits.append(max(5, int(budget - used)))
                 result = run_experiment(
-                    list(campaign["command"]), workspace,
+                    command, workspace,
                     self.orchestrator.memory.root / "autonomous" / campaign_id / "experiments",
                     working_directory=str(campaign.get("working_directory", ".")),
                     metrics_path=str(campaign.get("metrics_path", "metrics.json")),
-                    timeout_seconds=max(5, min(
-                        int(campaign.get("timeout_seconds", 600)),
-                        int(float(campaign.get("deadline_at") or time.time() + 5) - time.time()),
-                    )),
+                    timeout_seconds=max(5, min(limits)), cancel_event=cancel_event,
+                    stop_signal_path=str(campaign.get("stop_signal_path", "artifacts/STOP_REQUESTED")),
+                    stop_grace_seconds=int(campaign.get("stop_grace_seconds", 30)),
+                    checkpoint_path=str(campaign.get("checkpoint_path", "")),
                 )
                 self.autonomous.add_event(campaign_id, "experiment", result)
                 self.autonomous.update(
@@ -1300,6 +1371,7 @@ class RunManager:
                 )
             finally:
                 self._autonomous_experiments.discard(campaign_id)
+                self._autonomous_experiment_cancels.pop(campaign_id, None)
 
         threading.Thread(target=execute, daemon=True).start()
 
@@ -1320,6 +1392,17 @@ class RunManager:
             f"`{json.dumps(result.get('metrics') or {}, ensure_ascii=False)}`."
         )
         self.conversations.append_message(str(campaign["conversation_id"]), "assistant", message)
+        if result.get("status") == "interrupted":
+            self.autonomous.update(
+                campaign["id"], status="scheduled",
+                phase=(
+                    "experiment"
+                    if result.get("checkpoint_available") and campaign.get("resume_command")
+                    else "planning"
+                ),
+                current_experiment_id=None, error=None,
+            )
+            return
         if int(campaign.get("iteration", 0)) >= int(campaign.get("max_iterations", 1)):
             self.autonomous.update(
                 campaign["id"], status="completed", phase="done", best_metric=best,
@@ -1359,6 +1442,8 @@ class RunManager:
             f"Objectif : {campaign['objective']}\n"
             f"Politique de données : {campaign.get('data_policy')}\n\n"
             f"Dernier résultat structuré : {feedback}\n\n"
+            f"Contrat de reprise : sauvegarde régulièrement dans {campaign.get('checkpoint_path') or 'le checkpoint configuré'}, "
+            f"surveille le signal {campaign.get('stop_signal_path') or 'STOP_REQUESTED'} et quitte proprement après l'avoir détecté. "
             "Lis AUTONOMOUS_RESEARCH.md et l'état actuel du projet. Fais une seule amélioration "
             "méthodologique ciblée ou corrige le crash observé. Tu peux modifier le code et lancer "
             "des tests courts, mais ne lance pas la commande d'expérience principale : Joe la lancera "
