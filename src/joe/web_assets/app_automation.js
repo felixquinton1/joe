@@ -89,8 +89,10 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
         metrics_path: "metrics.json",
         metric_name: "log_loss",
         metric_direction: "min",
-        timeout_seconds: 120,
-        max_iterations: 3,
+        timeout_seconds: 480,
+        max_iterations: 20,
+        max_duration_seconds: 3600,
+        restricted_data: true,
         mode: "review",
         execution_mode: "workspace-write"
       })

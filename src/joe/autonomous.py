@@ -56,6 +56,10 @@ class AutonomousStore:
             "metric_direction": "min" if values.get("metric_direction") == "min" else "max",
             "timeout_seconds": max(5, min(10800, int(values.get("timeout_seconds", 600)))),
             "max_iterations": max(1, min(50, int(values.get("max_iterations", 3)))),
+            "max_duration_seconds": max(
+                60, min(604800, int(values.get("max_duration_seconds", 3600)))
+            ),
+            "restricted_data": bool(values.get("restricted_data", False)),
             "mode": str(values.get("mode", "review")),
             "execution_mode": str(values.get("execution_mode", "workspace-write")),
             "status": "scheduled",
@@ -63,6 +67,8 @@ class AutonomousStore:
             "iteration": 0,
             "current_run_id": None,
             "current_experiment_id": None,
+            "started_at": None,
+            "deadline_at": None,
             "best_metric": None,
             "history": [],
             "error": None,
@@ -91,6 +97,7 @@ class AutonomousStore:
         allowed = {
             "status", "phase", "iteration", "current_run_id",
             "current_experiment_id", "best_metric", "history", "error",
+            "started_at", "deadline_at",
         }
         with self.lock:
             payload = self._read()

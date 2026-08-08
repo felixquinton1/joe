@@ -37,6 +37,17 @@ def test_autonomous_store_bounds_iterations(tmp_path: Path):
     assert store.create(**values)["max_iterations"] == 50
 
 
+def test_autonomous_store_persists_time_and_data_boundaries(tmp_path: Path):
+    values = campaign_values()
+    values.update({"max_duration_seconds": 3600, "restricted_data": True})
+    store = AutonomousStore(tmp_path)
+    store.ensure()
+    campaign = store.create(**values)
+    assert campaign["max_duration_seconds"] == 3600
+    assert campaign["restricted_data"] is True
+    assert campaign["deadline_at"] is None
+
+
 def test_runner_collects_metrics_and_logs(tmp_path: Path):
     script = tmp_path / "experiment.py"
     script.write_text(

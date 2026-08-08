@@ -1179,6 +1179,8 @@ class RunManager:
             metric_direction=payload.get("metric_direction", "max"),
             timeout_seconds=payload.get("timeout_seconds", 600),
             max_iterations=payload.get("max_iterations", 3),
+            max_duration_seconds=payload.get("max_duration_seconds", 3600),
+            restricted_data=payload.get("restricted_data", False),
             mode=payload.get("mode", "review"),
             execution_mode=execution_mode,
         )
@@ -1194,6 +1196,24 @@ class RunManager:
     def _advance_autonomous(self) -> None:
         for campaign in self.autonomous.list():
             if campaign.get("status") in TERMINAL_STATUSES:
+                continue
+            now = time.time()
+            if campaign.get("started_at") is None:
+                deadline = now + int(campaign.get("max_duration_seconds", 3600))
+                campaign = self.autonomous.update(
+                    campaign["id"], started_at=now, deadline_at=deadline
+                ) or campaign
+            if float(campaign.get("deadline_at") or 0) <= now:
+                if campaign.get("current_run_id"):
+                    self.cancel(str(campaign["current_run_id"]))
+                self.autonomous.update(
+                    campaign["id"], status="completed", phase="time_budget_reached",
+                    current_run_id=None, error=None,
+                )
+                self.conversations.append_message(
+                    str(campaign["conversation_id"]), "assistant",
+                    f"### Autonomous terminé — budget de {int(campaign.get('max_duration_seconds', 3600)) // 60} minutes atteint.",
+                )
                 continue
             run_id = campaign.get("current_run_id")
             if run_id:
@@ -1264,7 +1284,10 @@ class RunManager:
                     self.orchestrator.memory.root / "autonomous" / campaign_id / "experiments",
                     working_directory=str(campaign.get("working_directory", ".")),
                     metrics_path=str(campaign.get("metrics_path", "metrics.json")),
-                    timeout_seconds=int(campaign.get("timeout_seconds", 600)),
+                    timeout_seconds=max(5, min(
+                        int(campaign.get("timeout_seconds", 600)),
+                        int(float(campaign.get("deadline_at") or time.time() + 5) - time.time()),
+                    )),
                 )
                 self.autonomous.add_event(campaign_id, "experiment", result)
                 self.autonomous.update(
@@ -1323,7 +1346,14 @@ class RunManager:
     @staticmethod
     def _autonomous_iteration_prompt(campaign: dict[str, Any], iteration: int) -> str:
         last = next((item for item in reversed(campaign.get("history") or []) if item.get("kind") == "experiment"), None)
-        feedback = json.dumps(last or {}, ensure_ascii=False)[:10000]
+        safe_last = dict(last or {})
+        if campaign.get("restricted_data"):
+            safe_last = {
+                key: safe_last.get(key)
+                for key in ("kind", "status", "exit_code", "duration_seconds", "metrics", "error")
+                if key in safe_last
+            }
+        feedback = json.dumps(safe_last, ensure_ascii=False)[:10000]
         return (
             f"Campagne Autonomous « {campaign['title']} » — itération {iteration}/{campaign['max_iterations']}.\n\n"
             f"Objectif : {campaign['objective']}\n"
