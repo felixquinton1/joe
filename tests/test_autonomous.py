@@ -168,6 +168,25 @@ def test_runner_collects_metrics_and_logs(tmp_path: Path):
     assert "done" in result["stdout_tail"]
 
 
+def test_runner_recovers_sanitized_metrics_from_stdout(tmp_path: Path):
+    script = tmp_path / "experiment.py"
+    script.write_text(
+        "import json\n"
+        "print('setup complete')\n"
+        "print(json.dumps({'kind': 'experiment', 'status': 'completed', "
+        "'metrics': {'log_loss': .42}}))\n",
+        encoding="utf-8",
+    )
+    checkpoint = tmp_path / "checkpoints" / "latest"
+    checkpoint.mkdir(parents=True)
+    result = run_experiment(
+        [sys.executable, "experiment.py"], tmp_path, tmp_path / "artifacts",
+        metrics_path="artifacts/missing.json", checkpoint_path="checkpoints/latest",
+    )
+    assert result["metrics"] == {"log_loss": .42}
+    assert result["checkpoint_available"] is True
+
+
 def test_runner_detects_crash(tmp_path: Path):
     script = tmp_path / "experiment.py"
     script.write_text("raise RuntimeError('boom')\n", encoding="utf-8")

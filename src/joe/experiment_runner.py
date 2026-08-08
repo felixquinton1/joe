@@ -89,6 +89,8 @@ def run_experiment(
         except (OSError, json.JSONDecodeError) as exc:
             error = f"Métriques illisibles : {exc}"
             status = "crashed"
+    if not metrics:
+        metrics = _metrics_from_stdout(stdout)
     result = {
         "id": experiment_id, "status": status, "exit_code": exit_code,
         "duration_seconds": round(time.time() - started, 3), "metrics": metrics,
@@ -106,4 +108,19 @@ def _checkpoint_available(cwd: Path, checkpoint_path: str) -> bool:
     checkpoint = (cwd / checkpoint_path).resolve()
     if cwd not in (checkpoint, *checkpoint.parents):
         raise ValueError("Le checkpoint doit rester dans le projet.")
-    return checkpoint.is_file()
+    return checkpoint.exists()
+
+
+def _metrics_from_stdout(stdout: str) -> dict[str, Any]:
+    """Recover a runner's final sanitized metric envelope when no file was found."""
+    for line in reversed(stdout.splitlines()):
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(value, dict) or value.get("kind") != "experiment":
+            continue
+        metrics = value.get("metrics")
+        if isinstance(metrics, dict):
+            return metrics
+    return {}
