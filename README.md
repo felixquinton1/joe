@@ -14,6 +14,11 @@ GitHub Copilot CLI. It routes a natural-language request without requiring
 workflow verbs, carries compact project context between providers, and stores
 full run logs outside the active prompt.
 
+Joe is open source under the [Mozilla Public License 2.0](LICENSE). Copyright
+© 2026 Félix Quinton. The license covers the code, not the Joe name, logo or
+identity of the official project; see [TRADEMARKS.md](TRADEMARKS.md). External
+code contributions are governed by [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Install
 
 Joe supports Python 3.10+ on Linux, macOS, and Windows. The repository package

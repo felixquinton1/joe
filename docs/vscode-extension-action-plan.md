@@ -192,7 +192,7 @@ version.
 
 | Décision | Échéance | Proposition |
 |---|---|---|
-| Licence publique | avant redistribution large | droits réservés jusque-là |
+| Licence publique | décidé | MPL-2.0 ; identité Joe distincte ; accord contributeur avant contributions externes |
 | Webview riche | après pilote | rester natif si les besoins restent couverts |
 | Profils/capacités | décidé | viewer/operator/maintainer |
 | Auth locale | décidé | secret local `0600`, cookie HttpOnly ou Bearer |

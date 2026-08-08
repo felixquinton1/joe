@@ -7,11 +7,13 @@ name = "joe-orchestrator"
 version = "0.32.0"
 description = "Lightweight local multi-AI CLI orchestrator"
 readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.10"
 authors = [{name = "Felix Quinton"}]
 keywords = ["ai", "cli", "codex", "claude", "gemini", "orchestrator"]
 classifiers = [
     "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
     "Environment :: Console",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",

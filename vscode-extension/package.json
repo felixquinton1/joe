@@ -4,7 +4,7 @@
   "description": "Start, open, restart and stop the local Joe Web interface.",
   "version": "0.4.3",
   "publisher": "felixquinton",
-  "license": "UNLICENSED",
+  "license": "MPL-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/felixquinton1/joe.git"
