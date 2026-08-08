@@ -9,6 +9,31 @@ from pathlib import Path
 from typing import Any
 
 
+def validate_experiment_command(command: list[str], cwd: Path) -> str | None:
+    """Return a user-facing error when a command references a missing entrypoint."""
+    if not command:
+        return "La commande d'expérience est vide."
+    lowered = [part.lower() for part in command]
+    candidate: str | None = None
+    if "-file" in lowered:
+        index = lowered.index("-file") + 1
+        if index < len(command):
+            candidate = command[index]
+    elif len(command) > 1 and Path(command[1]).suffix.lower() in {".py", ".ps1", ".cmd", ".bat"}:
+        candidate = command[1]
+    if not candidate:
+        return None
+    entrypoint = Path(candidate)
+    if not entrypoint.is_absolute():
+        entrypoint = cwd / entrypoint
+    if not entrypoint.is_file():
+        return (
+            f"Point d'entrée d'expérience introuvable : {candidate}. "
+            "Le runner contractuel doit exister avant le lancement."
+        )
+    return None
+
+
 def run_experiment(
     command: list[str], workspace: Path, output_root: Path, *,
     working_directory: str = ".", metrics_path: str = "metrics.json",
@@ -37,6 +62,20 @@ def run_experiment(
     exit_code: int | None = None
     error = None
     stdout_path, stderr_path = output / "stdout.log", output / "stderr.log"
+    validation_error = validate_experiment_command(command, cwd)
+    if validation_error:
+        result = {
+            "id": experiment_id, "status": "crashed", "exit_code": None,
+            "duration_seconds": round(time.time() - started, 3), "metrics": {},
+            "stdout_tail": "", "stderr_tail": validation_error,
+            "error": validation_error, "artifacts": str(output),
+            "checkpoint_available": _checkpoint_available(cwd, checkpoint_path),
+            "failure_signature": f"missing-entrypoint:{validation_error}",
+        }
+        (output / "result.json").write_text(
+            json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        return result
     with stdout_path.open("w", encoding="utf-8") as stdout_file, stderr_path.open(
         "w", encoding="utf-8"
     ) as stderr_file:
@@ -98,8 +137,15 @@ def run_experiment(
         "artifacts": str(output),
         "checkpoint_available": _checkpoint_available(cwd, checkpoint_path),
     }
+    if status == "crashed":
+        result["failure_signature"] = _failure_signature(exit_code, stderr, error)
     (output / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     return result
+
+
+def _failure_signature(exit_code: int | None, stderr: str, error: str | None) -> str:
+    tail = " ".join(stderr.split())[-500:]
+    return f"exit:{exit_code}|{tail or error or 'unknown'}"
 
 
 def _checkpoint_available(cwd: Path, checkpoint_path: str) -> bool:

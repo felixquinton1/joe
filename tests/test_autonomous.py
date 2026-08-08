@@ -10,7 +10,7 @@ import pytest
 
 from joe.autonomous import AutonomousStore, build_autonomous_skill
 from joe.autonomous_schedule import normalize_schedule, schedule_state
-from joe.experiment_runner import run_experiment
+from joe.experiment_runner import run_experiment, validate_experiment_command
 from joe.web_runs import RunManager
 
 
@@ -195,6 +195,23 @@ def test_runner_detects_crash(tmp_path: Path):
     )
     assert result["status"] == "crashed"
     assert result["exit_code"] != 0
+
+
+def test_runner_rejects_missing_contractual_entrypoint_without_spawning(tmp_path: Path):
+    result = run_experiment(
+        ["powershell", "-NoProfile", "-File", "autonomous_run.ps1"],
+        tmp_path, tmp_path / "artifacts",
+    )
+    assert result["status"] == "crashed"
+    assert result["exit_code"] is None
+    assert result["failure_signature"].startswith("missing-entrypoint:")
+
+
+def test_command_validation_accepts_existing_powershell_entrypoint(tmp_path: Path):
+    (tmp_path / "autonomous_run.ps1").write_text("exit 0\n", encoding="utf-8")
+    assert validate_experiment_command(
+        ["powershell", "-File", "autonomous_run.ps1"], tmp_path
+    ) is None
 
 
 def test_runner_rejects_working_directory_escape(tmp_path: Path):

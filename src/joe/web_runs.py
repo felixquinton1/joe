@@ -1528,6 +1528,27 @@ class RunManager:
             f"`{json.dumps(result.get('metrics') or {}, ensure_ascii=False)}`."
         )
         self.conversations.append_message(str(campaign["conversation_id"]), "assistant", message)
+        if result.get("status") == "crashed":
+            signature = result.get("failure_signature")
+            previous_crashes = [
+                item for item in history[:-1]
+                if item.get("kind") == "experiment" and item.get("status") == "crashed"
+            ]
+            if signature and previous_crashes and previous_crashes[-1].get("failure_signature") == signature:
+                error = (
+                    "Campagne bloquée après deux crashs identiques. "
+                    f"Cause : {result.get('error') or signature}"
+                )
+                self.conversations.append_message(
+                    str(campaign["conversation_id"]), "assistant",
+                    "### Autonomous — arrêt de sécurité\n\n" + error
+                    + "\nAucune nouvelle itération ne sera consommée avant correction du contrat d'exécution.",
+                )
+                self.autonomous.update(
+                    campaign["id"], status="blocked", phase="planning",
+                    best_metric=best, current_experiment_id=None, error=error,
+                )
+                return
         if result.get("status") == "interrupted":
             self.autonomous.update(
                 campaign["id"], status="scheduled",
@@ -1592,8 +1613,14 @@ class RunManager:
                 if key in safe_last
             }
         feedback = json.dumps(safe_last, ensure_ascii=False)[:10000]
+        command_contract = json.dumps(campaign.get("command") or [], ensure_ascii=False)
         return (
             f"<autonomous_skill>\n{skill}\n</autonomous_skill>\n\n"
+            f"<experiment_contract>Commande obligatoire : {command_contract}; "
+            f"dossier relatif : {campaign.get('working_directory') or '.'}. "
+            "Crée exactement le point d'entrée référencé, vérifie son existence et sa liaison "
+            "au code voulu avant de terminer ce tour. Un lanceur alternatif ne remplace pas ce contrat."
+            "</experiment_contract>\n\n"
             "Instruction prioritaire : relis et applique intégralement le skill Autonomous ci-dessus.\n\n"
             f"Campagne Autonomous « {campaign['title']} » — itération {iteration}/{campaign['max_iterations']}.\n\n"
             f"Objectif : {campaign['objective']}\n"
