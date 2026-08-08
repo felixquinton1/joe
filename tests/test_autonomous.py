@@ -43,6 +43,26 @@ def test_autonomous_store_bounds_iterations(tmp_path: Path):
     assert store.create(**values)["max_iterations"] == 50
 
 
+def test_completed_campaign_can_resume_without_losing_history(tmp_path: Path):
+    store = AutonomousStore(tmp_path)
+    store.ensure()
+    campaign = store.create(**campaign_values())
+    store.add_event(campaign["id"], "experiment", {"status": "completed"})
+    store.update(
+        campaign["id"], status="completed", phase="done", iteration=3,
+        active_elapsed_seconds=3600, error="old error",
+    )
+
+    resumed = store.resume(campaign["id"])
+
+    assert resumed["status"] == "scheduled"
+    assert resumed["phase"] == "planning"
+    assert resumed["iteration"] == 3
+    assert resumed["max_iterations"] == 6
+    assert resumed["active_elapsed_seconds"] == 0
+    assert resumed["history"][0]["kind"] == "experiment"
+
+
 def test_autonomous_store_accepts_consensus_and_rejects_unknown_mode(tmp_path: Path):
     store = AutonomousStore(tmp_path)
     store.ensure()

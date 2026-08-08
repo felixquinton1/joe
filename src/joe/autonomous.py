@@ -73,6 +73,7 @@ class AutonomousStore:
             "metric_direction": "min" if values.get("metric_direction") == "min" else "max",
             "timeout_seconds": max(5, min(10800, int(values.get("timeout_seconds", 600)))),
             "max_iterations": max(1, min(50, int(values.get("max_iterations", 3)))),
+            "iteration_chunk": max(1, min(50, int(values.get("max_iterations", 3)))),
             "max_duration_seconds": max(
                 60, min(604800, int(values.get("max_duration_seconds", 3600)))
             ),
@@ -132,6 +133,7 @@ class AutonomousStore:
             "current_experiment_id", "best_metric", "history", "error",
             "started_at", "deadline_at",
             "active_elapsed_seconds", "active_window_started_at", "next_start_at",
+            "max_iterations", "resume_count", "resumed_at",
         }
         with self.lock:
             payload = self._read()
@@ -155,6 +157,45 @@ class AutonomousStore:
 
     def cancel(self, campaign_id: str) -> dict[str, Any] | None:
         return self.update(campaign_id, status="cancelled", error=None)
+
+    def resume(self, campaign_id: str) -> dict[str, Any] | None:
+        item = self.get(campaign_id)
+        if not item:
+            return None
+        if item.get("status") not in TERMINAL_STATUSES:
+            raise ValueError("Cette campagne est déjà active.")
+        iteration = int(item.get("iteration", 0))
+        maximum = int(item.get("max_iterations", 1))
+        chunk = int(item.get("iteration_chunk", maximum or 1))
+        if iteration >= maximum:
+            maximum = iteration + max(1, chunk)
+        history = item.get("history") or []
+        previous = next(
+            (event for event in reversed(history) if event.get("kind") == "experiment"),
+            {},
+        )
+        phase = (
+            "experiment"
+            if previous.get("status") == "interrupted"
+            and previous.get("checkpoint_available")
+            and item.get("resume_command")
+            else "planning"
+        )
+        return self.update(
+            campaign_id,
+            status="scheduled",
+            phase=phase,
+            error=None,
+            current_run_id=None,
+            current_experiment_id=None,
+            active_elapsed_seconds=0.0,
+            active_window_started_at=None,
+            next_start_at=None,
+            started_at=None,
+            max_iterations=maximum,
+            resume_count=int(item.get("resume_count", 0)) + 1,
+            resumed_at=time.time(),
+        )
 
     def _read(self) -> dict[str, Any]:
         for path in (self.path, self.backup_path):

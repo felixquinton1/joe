@@ -119,7 +119,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     for (const campaign of campaigns.slice(0, 8)) {
       const card = document.createElement("article");
       card.className = `automation-card ${campaign.status}`;
-      card.innerHTML = `<div><strong></strong><span></span></div><small></small><p class="autonomous-activity" role="status"><i></i><b></b></p><button type="button">Annuler</button>`;
+      card.innerHTML = `<div><strong></strong><span></span></div><small></small><p class="autonomous-activity" role="status"><i></i><b></b></p><div class="autonomous-actions"><button type="button" data-action="cancel">Annuler</button><button type="button" data-action="resume">Reprendre</button></div>`;
       card.querySelector("strong").textContent = campaign.title;
       card.querySelector("span").textContent = campaign.status;
       card.querySelector("small").textContent = `itération ${campaign.iteration}/${campaign.max_iterations} · phase ${campaign.phase}`;
@@ -149,10 +149,20 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
       }
       journal.append(summary, list);
       card.appendChild(journal);
-      const button = card.querySelector("button");
-      button.hidden = ["completed", "cancelled", "blocked"].includes(campaign.status);
-      button.onclick = async () => {
+      const terminal = ["completed", "cancelled", "blocked"].includes(campaign.status);
+      const cancelButton = card.querySelector('[data-action="cancel"]');
+      cancelButton.hidden = terminal;
+      cancelButton.onclick = async () => {
+        if (!window.confirm("Interrompre cette campagne Autonomous ?")) return;
         await fetcher(`/api/autonomous/${campaign.id}/cancel`, { method: "POST" });
+        await load();
+      };
+      const resumeButton = card.querySelector('[data-action="resume"]');
+      resumeButton.hidden = !terminal;
+      resumeButton.onclick = async () => {
+        const response = await fetcher(`/api/autonomous/${campaign.id}/resume`, { method: "POST" });
+        const payload = await response.json();
+        if (!response.ok) return window.alert(payload.error || "Impossible de reprendre la campagne.");
         await load();
       };
       autonomousTarget.appendChild(card);

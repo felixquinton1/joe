@@ -1205,6 +1205,29 @@ class RunManager:
             event.set()
         return self.autonomous.cancel(campaign_id)
 
+    def resume_autonomous(self, campaign_id: str) -> dict[str, Any] | None:
+        campaign = self.autonomous.resume(campaign_id)
+        if not campaign:
+            return None
+        self.autonomous.add_event(
+            campaign_id,
+            "resumed",
+            {
+                "iteration": campaign.get("iteration", 0),
+                "phase": campaign.get("phase"),
+                "resume_count": campaign.get("resume_count", 1),
+            },
+        )
+        self.conversations.append_message(
+            str(campaign["conversation_id"]),
+            "assistant",
+            "### Autonomous — campagne reprise\n\n"
+            f"Reprise à l’itération {campaign.get('iteration', 0)}, phase "
+            f"**{campaign.get('phase')}**. Le dépôt, l’historique, les métriques "
+            "et les checkpoints existants sont conservés.",
+        )
+        return self.autonomous.get(campaign_id)
+
     def _advance_autonomous(self) -> None:
         for campaign in self.autonomous.list():
             if campaign.get("status") in TERMINAL_STATUSES:
@@ -1331,6 +1354,19 @@ class RunManager:
                     "mode": task.get("mode") or campaign.get("mode"),
                 },
             )
+            phase_label = {
+                "research": "recherche bibliographique",
+                "research_refresh": "réévaluation bibliographique",
+                "planning": "analyse et implémentation",
+            }.get(phase, phase)
+            self.conversations.append_message(
+                str(campaign["conversation_id"]),
+                "assistant",
+                "### Autonomous — étape lancée\n\n"
+                f"Codex démarre **{phase_label}** pour l’itération "
+                f"{iteration if phase == 'planning' else campaign.get('iteration', 0)}. "
+                "La prochaine mise à jour sera publiée à la fin de cette étape.",
+            )
 
     def _pause_autonomous(
         self, campaign: dict[str, Any], now: float, next_start: float | None
@@ -1361,6 +1397,16 @@ class RunManager:
         cancel_event = threading.Event()
         self._autonomous_experiment_cancels[campaign_id] = cancel_event
         self.autonomous.update(campaign_id, status="experimenting")
+        command = list(campaign.get("command") or [])
+        self.conversations.append_message(
+            str(campaign["conversation_id"]),
+            "assistant",
+            "### Autonomous — expérience lancée\n\n"
+            f"Joe lance `{command[0] if command else 'commande locale'}` pour "
+            f"l’itération {campaign.get('iteration', 0)}. Délai maximal : "
+            f"{int(campaign.get('timeout_seconds', 600)) // 60} min. "
+            "Le prochain message sera envoyé lorsque le résultat ou un crash sera récupéré.",
+        )
 
         def execute() -> None:
             try:
