@@ -102,6 +102,10 @@
         <div id="tasks" class="task-list"><span class="task-empty" data-i18n="no_tasks">Aucune tâche récente</span></div>
       </section>
       <div id="agents" class="agent-stack"></div>
+      <aside class="orchestrator-disclaimer" role="note">
+        <strong>Joe est un orchestrateur</strong>
+        <p>Les modèles et API restent des services tiers. Surveille tes quotas, crédits et runs actifs : fermer cette page n’arrête pas le travail en cours.</p>
+      </aside>
       <div class="diagnostic-store hidden" aria-hidden="true">
         <div id="evidence-log" class="evidence-log"></div>
         <pre id="raw-log"></pre>
@@ -128,6 +132,7 @@
         <small class="setting-help">Recommandé pour exécuter plusieurs tâches sans mélanger leurs fichiers.</small>
         <label class="check-label"><input id="project-quota-automation" type="checkbox" checked> Reprendre automatiquement après un reset de quota</label>
         <small class="setting-help">Joe conserve la tâche et la relance à la prochaine fenêtre disponible.</small>
+        <div class="risk-note"><strong>Coûts et actions externes</strong><p>Joe transmet tes demandes aux outils IA configurés et peut exécuter leurs commandes selon ce niveau d’accès. Tu restes responsable des crédits consommés, des permissions accordées et de l’arrêt des runs.</p></div>
       </fieldset>
       <fieldset class="dialog-section">
         <legend>Contexte</legend>
@@ -236,6 +241,7 @@
         <span class="eyebrow">Automatisation</span>
         <h2>Planifier un travail autonome</h2>
         <p class="dialog-intro">Projet : <strong id="automation-project"></strong>. Choisis le type d’automatisation à configurer.</p>
+        <div class="risk-note compact"><strong>Une automatisation continue côté serveur</strong><p>Elle peut appeler des services IA payants même si l’onglet ou VS Code est fermé. Fixe des limites, surveille tes quotas et utilise « Annuler » pour l’interrompre.</p></div>
       </header>
       <nav class="automation-tabs" aria-label="Type d’automatisation">
         <button id="automation-tab-plan" type="button" class="active" aria-selected="true"><b>Plan par étapes</b><small>Une liste d’actions déterministes</small></button>
@@ -279,6 +285,8 @@
           <small>Les runs sont interrompus proprement, sauvegardés puis repris au prochain créneau.</small>
         </fieldset>
         <div class="autonomous-note"><b>Traçabilité complète</b><p>Les recherches, modèles appelés, choix, commits, expériences et métriques apparaissent dans le journal.</p></div>
+        <div class="risk-note autonomous-risk" role="alert"><strong>Fonctionnalité expérimentale</strong><p>Autonomous peut enchaîner sans intervention des recherches, appels de modèles, commandes et expériences. Les limites réduisent le risque mais ne garantissent ni le coût, ni le résultat, ni l’absence d’erreur. Vérifie le budget et les permissions avant de lancer.</p></div>
+        <label class="check-label autonomous-consent"><input id="autonomous-risk-ack" type="checkbox"> J’ai compris que la campagne continue sans moi et peut consommer mes crédits IA.</label>
         <section class="automation-history"><div class="automation-section-head compact"><h3>Campagnes récentes</h3></div><div id="autonomous-list" class="automation-list"></div></section>
       </section>
       <footer class="dialog-actions automation-dialog-actions"><button value="cancel">Fermer</button><button id="save-automation" value="default">Programmer le plan</button><button id="start-parkinsons-autonomous" type="button" hidden>Lancer la campagne DaT Parkinson</button></footer>
@@ -289,6 +297,7 @@
       <span class="eyebrow">Bienvenue dans Joe</span>
       <h2>Tout est prêt ?</h2>
       <p>Joe vérifie localement les fournisseurs et le stockage. Aucun prompt de test n’est envoyé.</p>
+      <div class="risk-note"><strong>Avant de commencer</strong><p>Joe n’est pas un fournisseur d’IA : il orchestre les comptes, CLI et API que tu configures. Leur facturation et leurs quotas restent sous ta responsabilité. Un run peut continuer après la fermeture du navigateur.</p></div>
       <div id="doctor-status" class="doctor-status"><small>Diagnostic en cours…</small></div>
       <div class="dialog-actions"><button id="close-onboarding" value="default">Commencer</button></div>
     </form>

@@ -189,6 +189,11 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
 
   async function startParkinsons() {
     if (!state.activeConversationId) return;
+    if (!$("autonomous-risk-ack").checked) {
+      window.alert("Confirme d’abord que tu as compris le fonctionnement expérimental et le risque de consommation de crédits.");
+      $("autonomous-risk-ack").focus();
+      return;
+    }
     const scheduled = $("autonomous-schedule-enabled").checked;
     const days = $("autonomous-window-days").value === "weekdays"
       ? [0, 1, 2, 3, 4]
@@ -257,6 +262,7 @@ Crée et maintiens toi-même le code Python, le lanceur autonomous_run.ps1, les 
     $("automation-steps").value = (prefill.steps || []).join("\n");
     $("automation-when").value = "";
     $("automation-start").value = "now";
+    $("autonomous-risk-ack").checked = false;
     onScheduled = prefill.onScheduled || null;
     setView(prefill.view === "autonomous" ? "autonomous" : "plan");
     syncStartFields();

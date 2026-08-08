@@ -745,6 +745,12 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 .autonomous-note { display: grid; gap: 3px; padding: 12px 13px; border: 1px solid #dce9e3; border-radius: 11px; color: var(--green); background: var(--green-soft); }
 .autonomous-note b { font-size: 11px; }
 .autonomous-note p { margin: 0; color: var(--ink-soft); font-size: 10px; line-height: 1.45; }
+.risk-note { display: grid; gap: 3px; padding: 11px 12px; border: 1px solid #ead4bc; border-radius: 10px; color: #89531d; background: #fff8ed; }
+.risk-note strong { font-size: 11px; }
+.risk-note p { margin: 0; color: var(--ink-soft); font-size: 10px; line-height: 1.45; }
+.risk-note.compact { margin-top: 6px; padding: 8px 10px; }
+.autonomous-risk { border-color: #e5c1a1; background: #fff4e7; }
+.autonomous-consent { padding: 10px 12px; border-radius: 9px; background: #f7f5ef; font-weight: 650; }
 .automation-dialog-actions { position: relative; z-index: 3; margin: 0; padding: 12px 24px; border-top: 1px solid var(--line); background: #fff; }
 .automation-dialog-actions button[hidden] { display: none; }
 @media (max-width: 620px) {
@@ -1140,6 +1146,9 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
   animation: joe-spin .75s linear infinite;
 }
 .agent-stack { min-height: 0; display: grid; align-content: start; gap: 10px; overflow: auto; padding: 0 4px 8px; }
+.orchestrator-disclaimer { flex: 0 0 auto; margin: 8px 4px 0; padding: 9px 10px; border-top: 1px solid var(--line); color: var(--muted); }
+.orchestrator-disclaimer strong { color: var(--ink); font-size: 9px; letter-spacing: .04em; text-transform: uppercase; }
+.orchestrator-disclaimer p { margin: 3px 0 0; font-size: 8px; line-height: 1.45; }
 .agent-card { min-width: 0; padding: 13px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); transition: border-color .2s, box-shadow .2s; }
 .agent-card.active { border-color: #75a997; box-shadow: 0 0 0 3px var(--green-soft); }
 .agent-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

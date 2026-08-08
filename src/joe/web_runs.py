@@ -459,7 +459,11 @@ class RunManager:
                 response = (
                     f"Campagne Autonomous **{campaign['title']}** créée et planifiée.\n\n"
                     f"Durée maximale : {campaign['max_duration_seconds'] // 60} min · "
-                    f"{campaign['max_iterations']} itérations · charte dédiée créée."
+                    f"{campaign['max_iterations']} itérations · charte dédiée créée.\n\n"
+                    "⚠️ **Fonctionnalité expérimentale** — cette campagne peut appeler "
+                    "des services IA et exécuter des commandes sans nouvelle intervention. "
+                    "Elle continue si le navigateur est fermé. Surveille tes crédits et "
+                    "utilise **Plans autonomes → Annuler** pour l’interrompre."
                 )
             else:
                 created = create_skill(

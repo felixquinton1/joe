@@ -1,5 +1,14 @@
 # Joe
 
+> [!IMPORTANT]
+> Joe is an orchestrator, not an AI provider or a billing intermediary. It calls
+> the third-party CLIs, accounts and APIs configured by the user. The user is
+> responsible for provider charges, quotas, granted permissions and stopping
+> active work. Closing Joe Web or VS Code does not necessarily stop a server-side
+> run. Autonomous features are experimental and can chain model calls, commands
+> and experiments without further intervention; always configure limits and
+> monitor active campaigns.
+
 Joe is a lightweight local orchestrator for Codex, Claude Code, Gemini CLI, and
 GitHub Copilot CLI. It routes a natural-language request without requiring
 workflow verbs, carries compact project context between providers, and stores

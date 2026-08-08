@@ -118,6 +118,14 @@ export function activate(context: vscode.ExtensionContext): void {
         );
         return;
       }
+      const confirmation = await vscode.window.showWarningMessage(
+        "Joe orchestre tes outils IA tiers. Les runs et campagnes peuvent continuer après la fermeture de VS Code et consommer leurs quotas ou crédits. Tu restes responsable de leur surveillance et de leur arrêt.",
+        { modal: true },
+        "Démarrer Joe"
+      );
+      if (confirmation !== "Démarrer Joe") {
+        return;
+      }
       const endpoint = new URL(serverUrl());
       try {
         await executeFile("joe", [
