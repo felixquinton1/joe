@@ -344,6 +344,10 @@ window.createJoeConversations = function createJoeConversations({
     let requestedMessage = null;
     let lastAssistantBubble = null;
     for (const [messageIndex, message] of conversation.messages.entries()) {
+      renderedMessageCount = messageIndex + 1;
+      if (message.role === "user" && message.content.startsWith("<autonomous_skill>")) {
+        continue;
+      }
       let bubble;
       if (message.role === "user") {
         bubble = addMessage(
@@ -366,7 +370,6 @@ window.createJoeConversations = function createJoeConversations({
       }
       const wrapper = bubble.closest(".message");
       wrapper.dataset.historyIndex = String(messageIndex);
-      renderedMessageCount = messageIndex + 1;
       if (message.run_id) wrapper.dataset.runId = message.run_id;
       if (!requestedMessage && runId && message.run_id === runId) {
         requestedMessage = wrapper;
@@ -435,6 +438,10 @@ window.createJoeConversations = function createJoeConversations({
     const follow = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 48;
     for (let index = renderedMessageCount; index < messages.length; index += 1) {
       const message = messages[index];
+      renderedMessageCount = index + 1;
+      if (message.role === "user" && message.content.startsWith("<autonomous_skill>")) {
+        continue;
+      }
       let bubble;
       if (message.role === "user") {
         bubble = addMessage("Toi", message.content, "user", { suppressScroll: true });
