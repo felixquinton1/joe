@@ -723,7 +723,16 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 .autonomous-activity i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); opacity: .45; }
 .autonomous-activity b { font-weight: 600; }
 .autonomous-activity.active { color: var(--green); }
-.autonomous-activity.active i { background: var(--green); opacity: 1; animation: pulse-dot 1.4s ease-in-out infinite; box-shadow: 0 0 0 3px var(--green-soft); }
+.autonomous-activity.active i {
+  box-sizing: border-box;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  background: transparent;
+  opacity: 1;
+  animation: joe-spin .75s linear infinite;
+}
 .automation-card:has(.autonomous-activity) button { grid-row: 1 / span 3; }
 .autonomous-actions { grid-column: 2; grid-row: 1 / span 3; display: flex; gap: 5px; align-self: center; }
 .automation-card .autonomous-actions button { grid-column: auto; grid-row: auto; padding: 5px 7px; border: 1px solid var(--line); border-radius: 7px; }
@@ -830,6 +839,21 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 }
 .task-card.review .task-card-head b { color: var(--orange); }
 .task-card.running .task-card-head b { color: var(--green); }
+.task-card.running .task-card-head b::before,
+.task-card.integrating .task-card-head b::before,
+.task-card.resolving .task-card-head b::before {
+  content: "";
+  display: inline-block;
+  box-sizing: border-box;
+  width: 8px;
+  height: 8px;
+  margin-right: 4px;
+  vertical-align: -1px;
+  border: 1.25px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: joe-spin .75s linear infinite;
+}
 .task-card.waiting_quota .task-card-head b { color: var(--orange); }
 .task-card.integrating .task-card-head b,
 .task-card.resolving .task-card-head b { color: var(--green); }
@@ -864,7 +888,15 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
   background: #d2d0c9;
 }
 .task-pipeline .complete i { background: var(--green); }
-.task-pipeline .running i { background: var(--green); animation: pulse-dot 1.4s ease-in-out infinite; }
+.task-pipeline .running i {
+  box-sizing: border-box;
+  width: 7px;
+  height: 7px;
+  border: 1.25px solid var(--green);
+  border-right-color: transparent;
+  background: transparent;
+  animation: joe-spin .75s linear infinite;
+}
 .task-pipeline .waiting i { background: var(--orange); }
 .task-pipeline .failed i { background: var(--danger); }
 .task-error {
