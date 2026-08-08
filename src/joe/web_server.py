@@ -318,6 +318,12 @@ class Handler(BaseHTTPRequestHandler):
             campaign or {}, HTTPStatus.ACCEPTED if campaign else HTTPStatus.NOT_FOUND,
         )
 
+    def _delete_autonomous(self, campaign_id: str) -> None:
+        deleted = self.server.manager.delete_autonomous(campaign_id)
+        self._json(
+            {"deleted": deleted}, HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND,
+        )
+
     def _post_automation_cancel(self, plan_id: str) -> None:
         plan = self.server.manager.cancel_automation(plan_id)
         self._json(

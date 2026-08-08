@@ -1228,6 +1228,14 @@ class RunManager:
         )
         return self.autonomous.get(campaign_id)
 
+    def delete_autonomous(self, campaign_id: str) -> bool:
+        campaign = self.autonomous.get(campaign_id)
+        if not campaign:
+            return False
+        if campaign.get("status") not in TERMINAL_STATUSES:
+            raise ValueError("Annule la campagne avant de la supprimer.")
+        return self.autonomous.delete(campaign_id)
+
     def _advance_autonomous(self) -> None:
         for campaign in self.autonomous.list():
             if campaign.get("status") in TERMINAL_STATUSES:

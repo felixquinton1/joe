@@ -35,6 +35,18 @@ def test_autonomous_store_is_durable(tmp_path: Path):
     assert restored["history"][0]["kind"] == "experiment"
 
 
+def test_terminal_campaign_can_be_deleted_with_its_private_skill(tmp_path: Path):
+    store = AutonomousStore(tmp_path)
+    store.ensure()
+    campaign = store.create(**campaign_values())
+    skill = tmp_path / campaign["skill_path"]
+    store.cancel(campaign["id"])
+
+    assert store.delete(campaign["id"]) is True
+    assert store.get(campaign["id"]) is None
+    assert not skill.exists()
+
+
 def test_autonomous_store_bounds_iterations(tmp_path: Path):
     values = campaign_values()
     values["max_iterations"] = 999

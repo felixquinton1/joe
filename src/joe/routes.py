@@ -156,6 +156,10 @@ ROUTES: tuple[Route, ...] = (
     _route("PATCH", "/api/projects/{project_id}", "_patch_project", "maintainer"),
     # --- Suppression -----------------------------------------------------
     _route("DELETE", "/api/tasks/{task_id}", "_delete_task", "maintainer"),
+    _route(
+        "DELETE", "/api/autonomous/{campaign_id}",
+        "_delete_autonomous", "maintainer",
+    ),
     _route("DELETE", "/api/files/{item_id}", "_delete_file", "operator"),
     _route(
         "DELETE",

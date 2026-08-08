@@ -187,6 +187,19 @@ class AutonomousStore:
     def cancel(self, campaign_id: str) -> dict[str, Any] | None:
         return self.update(campaign_id, status="cancelled", error=None)
 
+    def delete(self, campaign_id: str) -> bool:
+        with self.lock:
+            payload = self._read()
+            before = len(payload["campaigns"])
+            payload["campaigns"] = [
+                item for item in payload["campaigns"] if item.get("id") != campaign_id
+            ]
+            if len(payload["campaigns"]) == before:
+                return False
+            self._write(payload)
+        shutil.rmtree(self.root / "autonomous" / campaign_id, ignore_errors=True)
+        return True
+
     def resume(self, campaign_id: str) -> dict[str, Any] | None:
         item = self.get(campaign_id)
         if not item:
