@@ -1218,7 +1218,7 @@ class RunManager:
             research_protocol=payload.get("research_protocol", ""),
             data_policy=payload.get("data_policy", ""),
             campaign_context=payload.get("campaign_context", ""),
-            research_refresh_interval=payload.get("research_refresh_interval", 3),
+            research_refresh_interval=payload.get("research_refresh_interval", 0),
             command=payload.get("command"),
             working_directory=payload.get("working_directory", "."),
             metrics_path=payload.get("metrics_path", "metrics.json"),
@@ -1545,10 +1545,10 @@ class RunManager:
                 error=None,
             )
         else:
-            interval = int(campaign.get("research_refresh_interval", 3))
+            interval = int(campaign.get("research_refresh_interval", 0))
             next_phase = (
                 "research_refresh"
-                if int(campaign.get("iteration", 0)) % interval == 0
+                if interval > 0 and int(campaign.get("iteration", 0)) % interval == 0
                 else "planning"
             )
             self.autonomous.update(
@@ -1574,7 +1574,9 @@ class RunManager:
             "AUTONOMOUS_RESEARCH.md. N'inspecte, ne joins et ne recopie aucune donnée restreinte. "
             "Ne lance pas encore l'expérience. À partir des règles officielles, détermine toi-même "
             "la stratégie expérimentale et la manière rigoureuse d'en rendre compte; aucune méthode, "
-            "métrique secondaire ou visualisation ne t'est imposée. Explique dans ta réponse visible "
+            "métrique secondaire ou visualisation ne t'est imposée. Établis aussi un plan de budget "
+            "temps/calcul/tokens avec des jalons de montée en échelle, afin que les modèles les plus "
+            "prometteurs soient réellement testés avant la fin de la campagne. Explique dans ta réponse visible "
             "les sources consultées, les options envisagées et les raisons de tes choix."
         )
 
@@ -1604,12 +1606,16 @@ class RunManager:
             "explicitement l'alignement avec l'objectif et décide si une recherche publique "
             "complémentaire est nécessaire avant de coder. Un plateau, un résultat surprenant, "
             "une hypothèse contredite ou des échecs répétés imposent une nouvelle recherche, "
-            "sans attendre la réévaluation périodique. Fais une seule amélioration "
-            "méthodologique ciblée ou corrige le crash observé. Tu peux modifier le code et lancer "
+            "sans attendre une réévaluation périodique. Évite toutefois une nouvelle recherche si les "
+            "sources existantes répondent déjà à la décision. Réalise dans ce tour un lot cohérent de "
+            "travail à forte valeur : regroupe les corrections mécaniques liées, implémente la prochaine "
+            "étape méthodologique et prépare un batch d'expériences comparables lorsque c'est sûr. Tu peux modifier le code et lancer "
             "des tests courts, mais ne lance pas la commande d'expérience principale : Joe la lancera "
             "et détectera seul succès, crash ou timeout. Choisis et justifie toi-même la validation, "
             "la montée en échelle des smoke tests vers des runs complets selon le matériel vérifié, "
             "la fenêtre active et le budget restant, "
+            "l'utilisation effective des accélérateurs pertinents, l'économie de prompts et le meilleur "
+            "compromis entre nombre de variantes et information gagnée, "
             "les indicateurs, les comparaisons pertinentes avec le challenge et les visualisations "
             "utiles. Dans ta réponse visible, détaille ce que tu as implémenté, l'expérience préparée, "
             "les résultats analysés et la raison de l'étape suivante. Produis un rendu compréhensible "

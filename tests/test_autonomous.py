@@ -121,10 +121,15 @@ def test_autonomous_skill_keeps_objective_and_invariants_in_every_prompt():
 
     assert "Improve a synthetic baseline" in skill
     assert "Never replace, weaken" in skill
+    assert "best rigorously validated primary metric" in skill
+    assert "Minimize model calls" in skill
+    assert "accelerated approach" in skill
     assert "substantive runs" in skill
     assert "results plateau" in skill
     assert skill in research
     assert skill in iteration
+    assert "lot cohérent" in iteration
+    assert "économie de prompts" in iteration
 
 
 def test_autonomous_scheduler_hides_internal_skill_prompt_from_chat(tmp_path, monkeypatch):

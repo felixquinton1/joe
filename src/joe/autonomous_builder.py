@@ -52,7 +52,8 @@ def build_campaign_payload(
             "Commencer par les sources officielles publiques, identifier les règles, "
             "les métriques et les approches comparables, puis justifier chaque choix. "
             "Revenir à la bibliographie après un plateau, un résultat surprenant, une "
-            "incertitude méthodologique ou des échecs répétés."
+            "incertitude méthodologique ou des échecs répétés, pas selon une cadence "
+            "fixe qui consomme des prompts sans signal nouveau."
         ),
         "data_policy": (
             "Les données privées restent locales. Ne transmettre à une IA que du code, "
@@ -63,9 +64,12 @@ def build_campaign_payload(
             "Brief original fourni par l’utilisateur :\n"
             f"{request.strip()}\n\nSources explicites :\n{sources}\n\n"
             "Joe doit découvrir et formaliser les détails propres au projet avant de coder. "
-            "Le workspace Git de la conversation est le dépôt actif."
+            "Le workspace Git de la conversation est le dépôt actif. Il doit viser la "
+            "meilleure performance validée dans le budget imparti, mesurer les ressources "
+            "disponibles et consacrer l'essentiel du temps aux expériences locales plutôt "
+            "qu'aux appels de modèles."
         ),
-        "research_refresh_interval": 3,
+        "research_refresh_interval": 0,
         "command": [sys.executable, "autonomous_run.py"],
         "resume_command": [sys.executable, "autonomous_run.py", "--resume"],
         "working_directory": ".",

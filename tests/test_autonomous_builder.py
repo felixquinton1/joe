@@ -33,3 +33,5 @@ def test_generic_payload_creates_cross_platform_runner_and_safe_charter():
     assert payload["max_duration_seconds"] == 1800
     assert "sans autorisation explicite" in payload["data_policy"]
     assert "plateau" in payload["research_protocol"]
+    assert payload["research_refresh_interval"] == 0
+    assert "meilleure performance validée" in payload["campaign_context"]

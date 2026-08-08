@@ -30,15 +30,22 @@ def build_autonomous_skill(values: dict[str, Any]) -> str:
         f"## Data policy\n{values.get('data_policy') or 'Do not disclose private data.'}\n\n"
         "## Invariants\n"
         "- Never replace, weaken or silently reinterpret the primary objective.\n"
+        "- Optimize for the best rigorously validated primary metric achievable within the remaining wall-clock, compute and model-token budgets; activity alone is not progress.\n"
         "- Before acting, verify that the next step directly advances the objective.\n"
         "- Treat previous summaries as fallible; check the repository and structured results.\n"
         "- Distinguish verified facts, hypotheses, implemented changes and measured results.\n"
         "- Use the configured local runner for main experiments; detect completion or crash.\n"
         "- Use progressive experimental scale: smoke test, intermediate validation, then full runs once stable.\n"
         "- Scale run duration and model size to the verified hardware, active window and remaining budget.\n"
+        "- Inspect available CPU, RAM and accelerators at startup. When an accelerator is relevant, benchmark at least one suitable accelerated approach instead of leaving it idle without a measured reason.\n"
+        "- Keep simple baselines short: use them to validate data, splits and metrics, then move promptly to the model families most likely to win. Do not exhaustively tune a clearly capacity-limited baseline.\n"
+        "- Distinguish reuse of a public architecture from reuse of pretrained weights: an architecture can be implemented and trained locally while weight provenance and licensing are audited separately.\n"
+        "- Minimize model calls. Batch related diagnosis, implementation and short tests into one coherent turn, and make the local runner evaluate a checkpointed batch of informative variants when safe.\n"
+        "- Parallelize independent preparation or experiments only when resources, data isolation and metric validity remain controlled; avoid GPU oversubscription.\n"
+        "- Prefer fewer high-information experiments over many tiny prompts or low-impact tweaks. Timebox plumbing and repeated failures, then change strategy.\n"
         "- Long campaigns must perform substantive runs; do not remain indefinitely in toy-test mode.\n"
         "- Revisit public literature whenever results plateau, contradict assumptions, reveal uncertainty or repeat failures.\n"
-        "- Research refreshes are event-driven as well as periodic; update the methodology from new evidence.\n"
+        "- Research refreshes are event-driven by new evidence; do not spend a model call on a periodic refresh without a decision it can change.\n"
         "- Preserve resumable checkpoints and the Git history after coherent changes.\n"
         "- Respect the data policy and all explicit prohibitions for every iteration.\n"
         "- Report meaningful transitions: step start, experiment start, result, analysis and next decision.\n"
@@ -93,7 +100,7 @@ class AutonomousStore:
             "data_policy": str(values.get("data_policy", ""))[:4000],
             "campaign_context": str(values.get("campaign_context", ""))[:12000],
             "research_refresh_interval": max(
-                1, min(20, int(values.get("research_refresh_interval", 3)))
+                0, min(20, int(values.get("research_refresh_interval", 0)))
             ),
             "command": command[:32],
             "working_directory": str(values.get("working_directory", ".")),
