@@ -680,11 +680,39 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 /* Activity and usage */
 .activity-tools { flex: 0 0 auto; display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin: 0 4px 20px; }
 
-.automation-dialog { width: min(680px, calc(100vw - 28px)); }
-.automation-dialog form { max-height: min(820px, calc(100vh - 40px)); overflow-y: auto; }
-.dialog-intro { margin: -4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
-.automation-options { display: grid; grid-template-columns: 1fr 1fr 120px; gap: 10px; }
-.automation-list { display: grid; gap: 7px; max-height: 180px; overflow-y: auto; }
+.project-dialog.automation-dialog { width: min(760px, calc(100vw - 28px)); padding: 0; overflow: hidden; }
+.project-dialog.automation-dialog form { width: 100%; height: min(760px, calc(100vh - 40px)); max-height: none; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 0; overflow: hidden; padding: 0; }
+.automation-dialog-head { display: grid; gap: 5px; padding: 22px 24px 15px; border-bottom: 1px solid var(--line); }
+.automation-dialog-head h2 { font-size: 21px; }
+.dialog-intro { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.automation-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 10px 24px; border-bottom: 1px solid var(--line); background: #f7f6f2; }
+.automation-tabs button { min-width: 0; display: grid; gap: 2px; justify-items: start; padding: 10px 12px; border: 1px solid transparent; border-radius: 10px; color: var(--muted); background: transparent; text-align: left; cursor: pointer; }
+.automation-tabs button.active { border-color: #c8d9d1; color: var(--green); background: #fff; box-shadow: 0 2px 8px rgba(31, 69, 54, .06); }
+.automation-tabs b { color: inherit; font-size: 12px; }
+.automation-tabs small { overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.automation-pane { min-height: 0; display: grid; align-content: start; gap: 15px; overflow-y: auto; padding: 18px 24px 24px; }
+.automation-pane[hidden] { display: none; }
+.automation-section-head { display: grid; gap: 3px; }
+.automation-section-head h3 { margin: 0; color: var(--ink); font-size: 14px; }
+.automation-section-head p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.automation-section-head.compact { margin-bottom: 8px; }
+.automation-options { min-width: 0; display: grid; gap: 10px; }
+.automation-options > label { min-width: 0; }
+.plan-schedule-grid { grid-template-columns: 1fr 1fr; }
+.plan-controls-grid { grid-template-columns: 1fr 1fr 130px; }
+.autonomous-main-grid { grid-template-columns: 1.5fr 1fr; }
+.autonomous-window-grid { grid-template-columns: 1fr 1fr 1.35fr; }
+.autonomous-window-grid.is-disabled { opacity: .45; }
+.automation-dialog .dialog-section { margin: 0; padding: 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); }
+.automation-dialog .dialog-section legend { padding: 0 6px; color: var(--ink); font-size: 10px; font-weight: 700; }
+.automation-dialog .dialog-section > small { display: block; margin-top: 7px; color: var(--muted); font-size: 9px; line-height: 1.45; }
+.automation-policy { display: grid; gap: 5px; }
+.automation-check-row { display: grid; gap: 4px; padding: 11px 12px; border-radius: 10px; background: var(--soft); }
+.automation-dialog .check-label { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--ink); font-size: 10px; letter-spacing: 0; text-transform: none; }
+.automation-dialog .check-label input { flex: 0 0 auto; width: 15px; height: 15px; margin: 0; }
+.automation-check-row > small { padding-left: 23px; color: var(--muted); font-size: 9px; }
+.automation-history { min-width: 0; padding-top: 2px; }
+.automation-list { display: grid; gap: 7px; max-height: 190px; overflow-y: auto; }
 .automation-card { display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }
 .automation-card > div { display: flex; gap: 7px; align-items: baseline; min-width: 0; }
 .automation-card strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -696,7 +724,20 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 .autonomous-journal ol { margin: 7px 0 0; padding-left: 20px; display: grid; gap: 6px; }
 .autonomous-journal li { color: var(--muted); font-size: 11px; }
 .autonomous-journal b { color: var(--text); }
-@media (max-width: 620px) { .automation-options { grid-template-columns: 1fr; } }
+.autonomous-schedule-card { display: grid; gap: 12px; }
+.autonomous-note { display: grid; gap: 3px; padding: 12px 13px; border: 1px solid #dce9e3; border-radius: 11px; color: var(--green); background: var(--green-soft); }
+.autonomous-note b { font-size: 11px; }
+.autonomous-note p { margin: 0; color: var(--ink-soft); font-size: 10px; line-height: 1.45; }
+.automation-dialog-actions { position: relative; z-index: 3; margin: 0; padding: 12px 24px; border-top: 1px solid var(--line); background: #fff; }
+.automation-dialog-actions button[hidden] { display: none; }
+@media (max-width: 620px) {
+  .project-dialog.automation-dialog form { height: calc(100vh - 20px); }
+  .automation-dialog-head, .automation-pane { padding-left: 16px; padding-right: 16px; }
+  .automation-tabs { padding-left: 16px; padding-right: 16px; }
+  .automation-tabs small { display: none; }
+  .automation-options, .plan-schedule-grid, .plan-controls-grid, .autonomous-main-grid, .autonomous-window-grid { grid-template-columns: 1fr; }
+  .automation-dialog-actions { padding: 10px 16px; }
+}
 .tasks-panel {
   flex: 0 0 auto;
   min-height: 0;

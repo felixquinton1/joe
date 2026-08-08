@@ -1847,6 +1847,9 @@ $("open-preferences").onclick = () => openPreferences().catch(
   error => window.alert(error.message)
 );
 $("automation-start").onchange = () => automation.syncStartFields();
+$("autonomous-schedule-enabled").onchange = () => automation.syncAutonomousSchedule();
+$("automation-tab-plan").onclick = () => automation.setView("plan");
+$("automation-tab-autonomous").onclick = () => automation.setView("autonomous");
 $("open-automation").onclick = () => automation.open().catch(
   error => window.alert(error.message)
 );

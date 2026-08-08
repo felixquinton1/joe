@@ -232,44 +232,56 @@
   </dialog>
   <dialog id="automation-dialog" class="project-dialog automation-dialog">
     <form method="dialog">
-      <span class="eyebrow">Automatisation</span>
-      <h2>Planifier un travail autonome</h2>
-      <p class="dialog-intro">Projet : <strong id="automation-project"></strong>. Une étape démarre lorsque la précédente est validée ; Joe attend les resets de quota si nécessaire.</p>
-      <fieldset class="dialog-section automation-policy">
-        <legend>Stratégie de quotas du projet</legend>
-        <label>IA réservée
-          <select id="automation-provider"><option value="">Équilibrage automatique</option><option value="claude">Claude</option><option value="codex">Codex</option><option value="gemini">Gemini</option><option value="copilot">Copilot</option></select>
-          <small>Joe attend sa prochaine fenêtre pour le rôle principal. Une relecture ou un consensus peut encore appeler une autre IA.</small>
-        </label>
-      </fieldset>
-      <label>Titre<input id="automation-title" maxlength="80" placeholder="Ex. Campagne de tests nocturne"></label>
-      <label>Démarrage<select id="automation-start"><option value="now">Dès maintenant</option><option value="at">À une date précise</option><option value="quota_reset">Au rechargement des quotas (+1 min)</option></select></label>
-      <label id="automation-when-label">Date<input id="automation-when" type="datetime-local"></label>
-      <label>Étapes<textarea id="automation-steps" rows="7" placeholder="Une étape par ligne :&#10;Implémenter la fonctionnalité&#10;Exécuter les tests&#10;Analyser les résultats et corriger&#10;Relancer les validations"></textarea></label>
-      <div class="automation-options">
-        <label>Workflow<select id="automation-mode"><option value="review">Relecture</option><option value="fast">Rapide</option><option value="consensus">Consensus</option></select></label>
-        <label>Accès<select id="automation-execution"><option value="workspace-write">Écriture projet</option><option value="read-only">Lecture seule</option></select></label>
-        <label>Corrections max<input id="automation-retries" type="number" min="0" max="5" value="2"></label>
-      </div>
-      <label class="check-label"><input id="automation-integrate" type="checkbox" checked> Intégrer automatiquement chaque worktree validé</label>
-      <small class="setting-help">Joe s’arrête sur conflit, permission manquante ou après le nombre maximal de corrections. Le push reste régi par le réglage du projet.</small>
-      <section><div class="skill-manager-head"><span>Plans récents</span></div><div id="automation-list" class="automation-list"></div></section>
-      <section>
-        <div class="skill-manager-head"><span>Mode Autonomous (expérimental)</span></div>
-        <p class="dialog-intro">Boucle bornée recherche → code → expérience → analyse. Chaque choix et chaque appel de modèle reste visible dans le journal.</p>
-        <div class="automation-options">
-          <label>Raisonnement<select id="autonomous-mode"><option value="fast">Une IA</option><option value="review">Une IA + relecture</option><option value="consensus">Consensus multi-IA</option></select></label>
-          <label>Début quotidien<input id="autonomous-window-start" type="time" value="08:00"></label>
-          <label>Fin quotidienne<input id="autonomous-window-end" type="time" value="18:00"></label>
-          <label>Jours<select id="autonomous-window-days"><option value="everyday">Tous les jours</option><option value="weekdays">Du lundi au vendredi</option></select></label>
-          <label>Budget actif (min)<input id="autonomous-budget-minutes" type="number" min="1" max="10080" value="60"></label>
+      <header class="automation-dialog-head">
+        <span class="eyebrow">Automatisation</span>
+        <h2>Planifier un travail autonome</h2>
+        <p class="dialog-intro">Projet : <strong id="automation-project"></strong>. Choisis le type d’automatisation à configurer.</p>
+      </header>
+      <nav class="automation-tabs" aria-label="Type d’automatisation">
+        <button id="automation-tab-plan" type="button" class="active" aria-selected="true"><b>Plan par étapes</b><small>Une liste d’actions déterministes</small></button>
+        <button id="automation-tab-autonomous" type="button" aria-selected="false"><b>Campagne Autonomous</b><small>Recherche et expérimentation en boucle</small></button>
+      </nav>
+      <section id="automation-pane-plan" class="automation-pane active">
+        <div class="automation-section-head"><h3>Configuration du plan</h3><p>Chaque étape démarre après validation de la précédente.</p></div>
+        <fieldset class="dialog-section automation-policy">
+          <legend>Stratégie de quotas</legend>
+          <label>IA réservée<select id="automation-provider"><option value="">Équilibrage automatique</option><option value="claude">Claude</option><option value="codex">Codex</option><option value="gemini">Gemini</option><option value="copilot">Copilot</option></select></label>
+          <small>Joe peut attendre la prochaine fenêtre de quota. Une relecture ou un consensus peut appeler une autre IA.</small>
+        </fieldset>
+        <label>Titre<input id="automation-title" maxlength="80" placeholder="Ex. Campagne de tests nocturne"></label>
+        <div class="automation-options plan-schedule-grid">
+          <label>Démarrage<select id="automation-start"><option value="now">Dès maintenant</option><option value="at">À une date précise</option><option value="quota_reset">Au rechargement des quotas (+1 min)</option></select></label>
+          <label id="automation-when-label">Date<input id="automation-when" type="datetime-local"></label>
         </div>
-        <label class="check-label"><input id="autonomous-schedule-enabled" type="checkbox"> Respecter cette fenêtre et reprendre automatiquement au prochain créneau</label>
-        <small class="setting-help">Une heure de fin antérieure au début crée une fenêtre nocturne. Les runs reçoivent un signal d'arrêt, sauvegardent leur checkpoint puis reprennent au créneau suivant.</small>
-        <button id="start-parkinsons-autonomous" type="button" class="subtle-action">Lancer le pilote DaT Parkinson</button>
-        <div id="autonomous-list" class="automation-list"></div>
+        <label>Étapes<textarea id="automation-steps" rows="6" placeholder="Une étape par ligne :&#10;Implémenter la fonctionnalité&#10;Exécuter les tests&#10;Analyser les résultats et corriger"></textarea></label>
+        <div class="automation-options plan-controls-grid">
+          <label>Workflow<select id="automation-mode"><option value="review">Relecture</option><option value="fast">Rapide</option><option value="consensus">Consensus</option></select></label>
+          <label>Accès<select id="automation-execution"><option value="workspace-write">Écriture projet</option><option value="read-only">Lecture seule</option></select></label>
+          <label>Corrections max<input id="automation-retries" type="number" min="0" max="5" value="2"></label>
+        </div>
+        <div class="automation-check-row"><label class="check-label"><input id="automation-integrate" type="checkbox" checked> Intégrer automatiquement chaque worktree validé</label><small>Le push reste régi par le réglage du projet.</small></div>
+        <section class="automation-history"><div class="automation-section-head compact"><h3>Plans récents</h3></div><div id="automation-list" class="automation-list"></div></section>
       </section>
-      <div class="dialog-actions"><button value="cancel">Fermer</button><button id="save-automation" value="default">Programmer</button></div>
+      <section id="automation-pane-autonomous" class="automation-pane" hidden>
+        <div class="automation-section-head"><h3>Campagne de recherche</h3><p>Boucle bornée : recherche → code → expérience → analyse.</p></div>
+        <div class="automation-options autonomous-main-grid">
+          <label>Raisonnement<select id="autonomous-mode"><option value="fast">Une IA</option><option value="review">Une IA + relecture</option><option value="consensus">Consensus multi-IA</option></select></label>
+          <label>Budget actif (minutes)<input id="autonomous-budget-minutes" type="number" min="1" max="10080" value="60"></label>
+        </div>
+        <fieldset class="dialog-section autonomous-schedule-card">
+          <legend>Fenêtre d’exécution</legend>
+          <label class="check-label"><input id="autonomous-schedule-enabled" type="checkbox"> Limiter la campagne à une plage quotidienne</label>
+          <div class="automation-options autonomous-window-grid">
+            <label>Début<input id="autonomous-window-start" type="time" value="08:00"></label>
+            <label>Fin<input id="autonomous-window-end" type="time" value="18:00"></label>
+            <label>Jours<select id="autonomous-window-days"><option value="everyday">Tous les jours</option><option value="weekdays">Du lundi au vendredi</option></select></label>
+          </div>
+          <small>Les runs sont interrompus proprement, sauvegardés puis repris au prochain créneau.</small>
+        </fieldset>
+        <div class="autonomous-note"><b>Traçabilité complète</b><p>Les recherches, modèles appelés, choix, commits, expériences et métriques apparaissent dans le journal.</p></div>
+        <section class="automation-history"><div class="automation-section-head compact"><h3>Campagnes récentes</h3></div><div id="autonomous-list" class="automation-list"></div></section>
+      </section>
+      <footer class="dialog-actions automation-dialog-actions"><button value="cancel">Fermer</button><button id="save-automation" value="default">Programmer le plan</button><button id="start-parkinsons-autonomous" type="button" hidden>Lancer la campagne DaT Parkinson</button></footer>
     </form>
   </dialog>
   <dialog id="onboarding-dialog" class="project-dialog onboarding-dialog">

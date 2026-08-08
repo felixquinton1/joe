@@ -34,6 +34,25 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     return `${event.kind || "événement"} · ${event.status || "enregistré"}`;
   }
 
+  function setView(view) {
+    const autonomous = view === "autonomous";
+    $("automation-tab-plan").classList.toggle("active", !autonomous);
+    $("automation-tab-plan").setAttribute("aria-selected", String(!autonomous));
+    $("automation-tab-autonomous").classList.toggle("active", autonomous);
+    $("automation-tab-autonomous").setAttribute("aria-selected", String(autonomous));
+    $("automation-pane-plan").hidden = autonomous;
+    $("automation-pane-autonomous").hidden = !autonomous;
+    $("save-automation").hidden = autonomous;
+    $("start-parkinsons-autonomous").hidden = !autonomous;
+  }
+
+  function syncAutonomousSchedule() {
+    const enabled = $("autonomous-schedule-enabled").checked;
+    const grid = document.querySelector(".autonomous-window-grid");
+    grid.classList.toggle("is-disabled", !enabled);
+    for (const control of grid.querySelectorAll("input, select")) control.disabled = !enabled;
+  }
+
   function render() {
     const target = $("automation-list");
     target.replaceChildren();
@@ -184,7 +203,9 @@ Crée et maintiens toi-même le code Python, le lanceur autonomous_run.ps1, les 
     $("automation-when").value = "";
     $("automation-start").value = "now";
     onScheduled = prefill.onScheduled || null;
+    setView(prefill.view === "autonomous" ? "autonomous" : "plan");
     syncStartFields();
+    syncAutonomousSchedule();
     await load();
     $("automation-dialog").showModal();
   }
@@ -248,5 +269,5 @@ Crée et maintiens toi-même le code Python, le lanceur autonomous_run.ps1, les 
     await load();
   }
 
-  return { load, open, save, syncStartFields, startParkinsons };
+  return { load, open, save, setView, syncAutonomousSchedule, syncStartFields, startParkinsons };
 };

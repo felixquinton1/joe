@@ -179,6 +179,10 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b'class="activity-tools"' in page
         assert b'id="preferences-dialog"' in page
         assert b'id="autonomous-mode"' in page
+        assert b'id="automation-tab-plan"' in page
+        assert b'id="automation-tab-autonomous"' in page
+        assert b'id="automation-pane-plan"' in page
+        assert b'id="automation-pane-autonomous"' in page
         assert b'id="open-preferences"' in page
         assert b'id="global-skills"' in page
         assert b'class="dialog-advanced"' in page
