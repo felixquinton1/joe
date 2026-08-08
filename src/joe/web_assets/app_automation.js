@@ -16,6 +16,24 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     return state.projects.find(item => item.id === conversation?.project_id);
   }
 
+  function journalLabel(event) {
+    if (event.kind === "agent_step") {
+      const actor = [event.provider, event.model].filter(Boolean).join(" / ") || "routage en cours";
+      const mode = event.mode === "consensus" ? "consensus multi-IA" : event.mode || "une IA";
+      const changes = event.files ? ` · ${event.files} fichier(s), +${event.insertions || 0}/-${event.deletions || 0}` : "";
+      const attempts = (event.attempts || []).map(item => [item.provider, item.model].filter(Boolean).join("/")).filter(Boolean);
+      const participants = attempts.length ? ` · appels ${attempts.join(", ")}` : "";
+      return `${event.phase || "étape IA"} · ${actor} · ${mode} · ${event.status}${participants}${changes}`;
+    }
+    if (event.kind === "experiment") {
+      const command = Array.isArray(event.command) ? event.command.join(" ") : "commande locale";
+      const metrics = Object.entries(event.metrics || {}).map(([key, value]) => `${key}=${value}`).join(", ");
+      return `expérience · ${command} · ${event.status} · ${event.duration_seconds || "?"} s${metrics ? ` · ${metrics}` : ""}`;
+    }
+    if (event.kind === "paused") return `pause planifiée · reprise ${formatDate(event.next_start_at)}`;
+    return `${event.kind || "événement"} · ${event.status || "enregistré"}`;
+  }
+
   function render() {
     const target = $("automation-list");
     target.replaceChildren();
@@ -56,6 +74,25 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
       if (campaign.status === "paused" && campaign.next_start_at) {
         card.querySelector("small").textContent += ` · reprise ${formatDate(campaign.next_start_at)}`;
       }
+      const journal = document.createElement("details");
+      journal.className = "autonomous-journal";
+      const summary = document.createElement("summary");
+      summary.textContent = `Journal détaillé · ${(campaign.history || []).length} événement(s)`;
+      const list = document.createElement("ol");
+      for (const event of (campaign.history || []).slice().reverse()) {
+        const item = document.createElement("li");
+        const when = document.createElement("b");
+        when.textContent = formatDate(event.at);
+        item.append(when, document.createTextNode(` · ${journalLabel(event)}`));
+        list.appendChild(item);
+      }
+      if (!list.childNodes.length) {
+        const item = document.createElement("li");
+        item.textContent = "La campagne n'a pas encore démarré.";
+        list.appendChild(item);
+      }
+      journal.append(summary, list);
+      card.appendChild(journal);
       const button = card.querySelector("button");
       button.hidden = ["completed", "cancelled", "blocked"].includes(campaign.status);
       button.onclick = async () => {
@@ -86,14 +123,14 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        title: "DaT Parkinson — démo synthétique",
+        title: "DaT Parkinson — Autonomous",
         conversation_id: state.activeConversationId,
-        objective: "Améliorer une baseline reproductible de classification binaire synthétique inspirée d'images DaT en minimisant la log loss, sans données restreintes.",
-        research_protocol: "Consulter les pages publiques officielles du challenge, documenter métrique, format et contraintes, puis rechercher des méthodes publiques comparables avec leurs sources.",
-        data_policy: "Ne jamais ouvrir, joindre, recopier ou envoyer les scans et fichiers restreints de DrivenData à une IA. Seulement code, données synthétiques, métriques agrégées et logs nettoyés.",
-        command: ["python", "experiment.py"],
-        working_directory: "templates/autonomous/dat-parkinsons",
-        metrics_path: "metrics.json",
+        objective: "Traiter de manière autonome le DaT Parkinson's Challenge à partir de ses pages et règles officielles. Concevoir, implémenter et évaluer localement des solutions; choisir les validations, indicateurs, comparaisons et visualisations utiles; fournir les fichiers au format demandé par le challenge, mais ne jamais effectuer de soumission.",
+        research_protocol: "Commencer par consulter les pages publiques officielles du challenge et son leaderboard, puis effectuer la recherche bibliographique publique jugée utile. Expliquer les sources, options et raisons de chaque choix dans la conversation.",
+        data_policy: "Les données DrivenData restent exclusivement sur ce PC. Ne jamais transmettre de scan, ligne individuelle, identifiant, métadonnée privée ou extrait de fichier à une IA. Les processus locaux peuvent lire les données; les IA ne reçoivent que du code, de la documentation publique, des métriques agrégées et des erreurs nettoyées.",
+        command: ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "autonomous_run.ps1"],
+        working_directory: ".",
+        metrics_path: "artifacts/metrics.json",
         metric_name: "log_loss",
         metric_direction: "min",
         timeout_seconds: 480,
@@ -109,10 +146,10 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
           }] : []
         },
         checkpoint_path: "checkpoints/latest.pt",
-        resume_command: ["python", "experiment.py", "--resume", "checkpoints/latest.pt"],
+        resume_command: ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "autonomous_run.ps1", "-Resume"],
         stop_signal_path: "artifacts/STOP_REQUESTED",
         stop_grace_seconds: 30,
-        mode: "review",
+        mode: $("autonomous-mode").value,
         execution_mode: "workspace-write"
       })
     });

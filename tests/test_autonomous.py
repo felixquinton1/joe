@@ -43,6 +43,13 @@ def test_autonomous_store_bounds_iterations(tmp_path: Path):
     assert store.create(**values)["max_iterations"] == 50
 
 
+def test_autonomous_store_accepts_consensus_and_rejects_unknown_mode(tmp_path: Path):
+    store = AutonomousStore(tmp_path)
+    store.ensure()
+    assert store.create(**(campaign_values() | {"mode": "consensus"}))["mode"] == "consensus"
+    assert store.create(**(campaign_values() | {"mode": "mystery"}))["mode"] == "review"
+
+
 def test_autonomous_store_persists_time_and_data_boundaries(tmp_path: Path):
     values = campaign_values()
     values.update({"max_duration_seconds": 3600, "restricted_data": True})

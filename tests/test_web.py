@@ -44,10 +44,10 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert payload["project"] == str(tmp_path.resolve())
         assert payload["version"]
         assert payload["api_version"] == API_VERSION
-        assert payload["conversation_store"].endswith(
+        assert payload["conversation_store"].replace("\\", "/").endswith(
             ".agentflow/conversations.json"
         )
-        assert "joe/backups" in payload["conversation_backup"]
+        assert "joe/backups" in payload["conversation_backup"].replace("\\", "/")
         assert "codex" in payload["providers"]
         assert {"id": "codex", "label": "Codex"} in payload["provider_catalog"]
 
@@ -178,6 +178,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b'class="raw-panel"' not in page
         assert b'class="activity-tools"' in page
         assert b'id="preferences-dialog"' in page
+        assert b'id="autonomous-mode"' in page
         assert b'id="open-preferences"' in page
         assert b'id="global-skills"' in page
         assert b'class="dialog-advanced"' in page

@@ -1260,6 +1260,26 @@ class RunManager:
                 if task.get("status") in {"running", "waiting_quota", "integrating", "resolving"}:
                     continue
                 if task.get("status") in {"completed", "integrated"}:
+                    conversation = self.conversations.get(str(campaign["conversation_id"])) or {}
+                    message = next(
+                        (item for item in reversed(conversation.get("messages") or [])
+                         if item.get("role") == "assistant" and item.get("run_id") == run_id),
+                        {},
+                    )
+                    summary = message.get("run_summary") or {}
+                    self.autonomous.add_event(
+                        str(campaign["id"]), "agent_step",
+                        {
+                            "phase": campaign.get("phase"), "run_id": run_id,
+                            "status": task.get("status"), "provider": task.get("provider"),
+                            "model": task.get("model"), "mode": task.get("mode"),
+                            "files": task.get("files", 0),
+                            "insertions": task.get("insertions", 0),
+                            "deletions": task.get("deletions", 0),
+                            "workflow": summary.get("workflow") or [],
+                            "attempts": summary.get("attempts") or [],
+                        },
+                    )
                     next_phase = "planning" if campaign.get("phase") == "research" else "experiment"
                     self.autonomous.update(
                         campaign["id"], status="scheduled", phase=next_phase,
@@ -1294,6 +1314,15 @@ class RunManager:
             self.autonomous.update(
                 campaign["id"], status=status, current_run_id=run.run_id,
                 iteration=(0 if phase == "research" else iteration), error=None,
+            )
+            task = self.tasks.get(run.run_id) or {}
+            self.autonomous.add_event(
+                str(campaign["id"]), "agent_step",
+                {
+                    "phase": phase, "run_id": run.run_id, "status": "running",
+                    "provider": task.get("provider"), "model": task.get("model"),
+                    "mode": task.get("mode") or campaign.get("mode"),
+                },
             )
 
     def _pause_autonomous(
@@ -1360,6 +1389,8 @@ class RunManager:
                     stop_grace_seconds=int(campaign.get("stop_grace_seconds", 30)),
                     checkpoint_path=str(campaign.get("checkpoint_path", "")),
                 )
+                result["command"] = command
+                result["working_directory"] = str(campaign.get("working_directory", "."))
                 self.autonomous.add_event(campaign_id, "experiment", result)
                 self.autonomous.update(
                     campaign_id, status="evaluating", phase="evaluation",
@@ -1425,7 +1456,8 @@ class RunManager:
             "AUTONOMOUS_RESEARCH.md. N'inspecte, ne joins et ne recopie aucune donnée restreinte. "
             "Ne lance pas encore l'expérience. À partir des règles officielles, détermine toi-même "
             "la stratégie expérimentale et la manière rigoureuse d'en rendre compte; aucune méthode, "
-            "métrique secondaire ou visualisation ne t'est imposée."
+            "métrique secondaire ou visualisation ne t'est imposée. Explique dans ta réponse visible "
+            "les sources consultées, les options envisagées et les raisons de tes choix."
         )
 
     @staticmethod
@@ -1451,7 +1483,9 @@ class RunManager:
             "des tests courts, mais ne lance pas la commande d'expérience principale : Joe la lancera "
             "et détectera seul succès, crash ou timeout. Choisis et justifie toi-même la validation, "
             "les indicateurs, les comparaisons pertinentes avec le challenge et les visualisations "
-            "utiles. Produis un rendu compréhensible des performances, sans soumettre au challenge. "
+            "utiles. Dans ta réponse visible, détaille ce que tu as implémenté, l'expérience préparée, "
+            "les résultats analysés et la raison de l'étape suivante. Produis un rendu compréhensible "
+            "des performances, sans soumettre au challenge. "
             "Termine par un résumé concis."
         )
 

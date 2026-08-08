@@ -82,7 +82,11 @@ class AutonomousStore:
             "stop_grace_seconds": max(
                 1, min(120, int(values.get("stop_grace_seconds", 30)))
             ),
-            "mode": str(values.get("mode", "review")),
+            "mode": (
+                str(values.get("mode"))
+                if str(values.get("mode")) in {"fast", "review", "consensus"}
+                else "review"
+            ),
             "execution_mode": str(values.get("execution_mode", "workspace-write")),
             "status": "scheduled",
             "phase": "research",
