@@ -145,7 +145,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
             end: $("autonomous-window-end").value
           }] : []
         },
-        checkpoint_path: "checkpoints/latest.pt",
+        checkpoint_path: "checkpoints/latest",
         resume_command: ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "autonomous_run.ps1", "-Resume"],
         stop_signal_path: "artifacts/STOP_REQUESTED",
         stop_grace_seconds: 30,
