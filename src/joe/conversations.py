@@ -238,6 +238,19 @@ class ConversationStore:
                 ),
             )
 
+    def list_summaries(self) -> list[dict[str, Any]]:
+        """Return sidebar metadata without retransmitting every message."""
+        summaries = []
+        for conversation in self.list():
+            summary = {
+                key: value
+                for key, value in conversation.items()
+                if key != "messages"
+            }
+            summary["message_count"] = len(conversation.get("messages") or [])
+            summaries.append(summary)
+        return summaries
+
     def search(self, query: str, project_id: str | None = None) -> list[dict[str, Any]]:
         """Search conversation titles and messages without external services."""
         needle = " ".join(query.casefold().split())

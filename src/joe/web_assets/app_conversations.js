@@ -18,6 +18,8 @@ window.createJoeConversations = function createJoeConversations({
   let draggedItem = null;
   let historyFilter = "";
   let searchTimer = null;
+  let renderedConversationId = null;
+  let renderedMessageCount = 0;
 
   $("history-search").addEventListener("input", event => {
     historyFilter = event.target.value.trim().toLocaleLowerCase();
@@ -336,10 +338,12 @@ window.createJoeConversations = function createJoeConversations({
     }
     renderConversations();
     clearConversation();
+    renderedConversationId = conversationId;
+    renderedMessageCount = 0;
     $("conversation-title").textContent = conversation.title;
     let requestedMessage = null;
     let lastAssistantBubble = null;
-    for (const message of conversation.messages) {
+    for (const [messageIndex, message] of conversation.messages.entries()) {
       let bubble;
       if (message.role === "user") {
         bubble = addMessage(
@@ -361,6 +365,8 @@ window.createJoeConversations = function createJoeConversations({
         lastAssistantBubble = bubble;
       }
       const wrapper = bubble.closest(".message");
+      wrapper.dataset.historyIndex = String(messageIndex);
+      renderedMessageCount = messageIndex + 1;
       if (message.run_id) wrapper.dataset.runId = message.run_id;
       if (!requestedMessage && runId && message.run_id === runId) {
         requestedMessage = wrapper;
@@ -408,6 +414,47 @@ window.createJoeConversations = function createJoeConversations({
       }
     }
     renderPromptQueue();
+  }
+
+  async function refreshActiveConversation() {
+    const conversationId = state.activeConversationId;
+    if (!conversationId) return;
+    const response = await fetcher(`/api/conversations/${conversationId}`);
+    if (!response.ok || conversationId !== state.activeConversationId) return;
+    const conversation = await response.json();
+    const messages = conversation.messages || [];
+    if (
+      renderedConversationId !== conversationId
+      || messages.length < renderedMessageCount
+    ) {
+      await selectConversation(conversationId);
+      return;
+    }
+    if (messages.length === renderedMessageCount) return;
+    const viewport = document.querySelector(".conversation");
+    const follow = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 48;
+    for (let index = renderedMessageCount; index < messages.length; index += 1) {
+      const message = messages[index];
+      let bubble;
+      if (message.role === "user") {
+        bubble = addMessage("Toi", message.content, "user", { suppressScroll: true });
+      } else {
+        bubble = addMessage("Joe · synthèse", "", "assistant", { suppressScroll: true });
+        renderHistoricalRunSummary(message, bubble);
+        renderMarkdown(bubble, message.content);
+        if (message.git_report) renderGitReport(message.git_report, message.run_id);
+      }
+      const wrapper = bubble.closest(".message");
+      wrapper.dataset.historyIndex = String(index);
+      if (message.run_id) wrapper.dataset.runId = message.run_id;
+    }
+    renderedMessageCount = messages.length;
+    const cached = state.conversations.find(item => item.id === conversationId);
+    if (cached) {
+      cached.updated_at = conversation.updated_at;
+      cached.message_count = messages.length;
+    }
+    if (follow) requestAnimationFrame(() => { viewport.scrollTop = viewport.scrollHeight; });
   }
 
   function preserveActivePanel() {
@@ -743,6 +790,7 @@ window.createJoeConversations = function createJoeConversations({
     createProject,
     deleteConversation,
     loadConversations,
+    refreshActiveConversation,
     moveConversation,
     openProject,
     renameConversation,

@@ -50,6 +50,20 @@ def test_conversations_default_to_pinned_then_most_recent(tmp_path):
     assert listed[0]["last_call_at"] == older["created_at"]
 
 
+def test_conversation_summaries_do_not_include_message_bodies(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+    conversation = store.create()
+    store.append_message(conversation["id"], "user", "contenu volumineux")
+
+    summary = store.list_summaries()[0]
+
+    assert "messages" not in summary
+    assert summary["message_count"] == 1
+
+
 def test_unscoped_conversations_use_the_free_project(tmp_path):
     root = tmp_path / ".agentflow"
     runs = root / "runs"

@@ -147,7 +147,7 @@ class Handler(BaseHTTPRequestHandler):
         self._json(_web_facade().usage_status(force=force))
 
     def _get_conversations(self) -> None:
-        self._json(self.server.manager.conversations.list())
+        self._json(self.server.manager.conversations.list_summaries())
 
     def _get_conversation(self, conversation_id: str) -> None:
         item = self.server.manager.conversations.get(conversation_id)

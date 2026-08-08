@@ -885,6 +885,7 @@ let createConversation;
 let createProject;
 let deleteConversation;
 let loadConversations;
+let refreshActiveConversation;
 let moveConversation;
 let openProject;
 let renameConversation;
@@ -1186,6 +1187,7 @@ function updateWorkflowFallback(provider, fallback) {
   createProject,
   deleteConversation,
   loadConversations,
+  refreshActiveConversation,
   moveConversation,
   openProject,
   renameConversation,
@@ -1960,7 +1962,12 @@ function toggleMobilePanel(panelSelector, buttonId) {
 setInterval(updateCountdowns, 1000);
 setInterval(() => loadUsage().catch(() => {}), 60000);
 setInterval(() => loadTasks().catch(() => {}), 10000);
-setInterval(() => automation.load().catch(() => {}), 10000);
+setInterval(() => {
+  Promise.all([
+    automation.load(),
+    refreshActiveConversation()
+  ]).catch(() => {});
+}, 5000);
 setupPanelResizers();
 resizeComposer();
 for (const select of document.querySelectorAll("select")) {
@@ -2016,7 +2023,7 @@ function reportStartupFailure(error) {
 
 window.JoeAuth.pairBrowser()
   .then(() => {
-    Promise.all([loadStatus(), loadActiveRuns(), loadTasks()])
+    Promise.all([loadStatus(), loadActiveRuns(), loadTasks(), automation.load()])
       .then(() => loadConversations())
       .then(connectActiveRuns)
       .then(loadDoctor)
