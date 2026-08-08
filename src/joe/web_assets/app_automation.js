@@ -9,6 +9,39 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     ? new Date(Number(value) * 1000).toLocaleString()
     : "Maintenant";
 
+  const formatElapsed = value => {
+    const seconds = Math.max(0, Math.floor(Date.now() / 1000 - Number(value || 0)));
+    if (seconds < 60) return `${seconds} s`;
+    const minutes = Math.floor(seconds / 60);
+    return minutes < 60 ? `${minutes} min ${seconds % 60} s` : `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
+  };
+
+  function campaignActivity(campaign) {
+    const activeStep = [...(campaign.history || [])].reverse().find(
+      event => event.kind === "agent_step" && event.status === "running"
+    );
+    if (campaign.current_run_id) {
+      const actor = activeStep?.provider ? activeStep.provider.toUpperCase() : "L’IA";
+      return {
+        active: true,
+        text: `${actor} travaille · ${campaign.phase} · en cours depuis ${formatElapsed(activeStep?.at || campaign.updated_at)}`
+      };
+    }
+    if (campaign.status === "experimenting") {
+      return { active: true, text: "Expérience locale en cours · commandes, sortie et métriques surveillées par Joe" };
+    }
+    if (campaign.status === "scheduled" && campaign.phase === "experiment") {
+      return { active: true, text: "Prochaine commande locale en préparation · lancement automatique imminent" };
+    }
+    if (campaign.status === "evaluating") {
+      return { active: true, text: "Résultats récupérés · prochaine analyse en préparation" };
+    }
+    if (campaign.status === "paused") {
+      return { active: false, text: `En pause planifiée${campaign.next_start_at ? ` · reprise ${formatDate(campaign.next_start_at)}` : ""}` };
+    }
+    return { active: false, text: campaign.error ? `Arrêté · ${campaign.error}` : "Aucune commande en cours" };
+  }
+
   function activeProject() {
     const conversation = state.conversations.find(
       item => item.id === state.activeConversationId
@@ -86,13 +119,17 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     for (const campaign of campaigns.slice(0, 8)) {
       const card = document.createElement("article");
       card.className = `automation-card ${campaign.status}`;
-      card.innerHTML = `<div><strong></strong><span></span></div><small></small><button type="button">Annuler</button>`;
+      card.innerHTML = `<div><strong></strong><span></span></div><small></small><p class="autonomous-activity" role="status"><i></i><b></b></p><button type="button">Annuler</button>`;
       card.querySelector("strong").textContent = campaign.title;
       card.querySelector("span").textContent = campaign.status;
       card.querySelector("small").textContent = `itération ${campaign.iteration}/${campaign.max_iterations} · phase ${campaign.phase}`;
       if (campaign.status === "paused" && campaign.next_start_at) {
         card.querySelector("small").textContent += ` · reprise ${formatDate(campaign.next_start_at)}`;
       }
+      const activity = campaignActivity(campaign);
+      const activityNode = card.querySelector(".autonomous-activity");
+      activityNode.classList.toggle("active", activity.active);
+      activityNode.querySelector("b").textContent = activity.text;
       const journal = document.createElement("details");
       journal.className = "autonomous-journal";
       const summary = document.createElement("summary");

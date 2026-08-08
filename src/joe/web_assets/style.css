@@ -719,6 +719,12 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 .automation-card span { color: var(--green); font-size: 10px; text-transform: uppercase; }
 .automation-card small { color: var(--muted); }
 .automation-card button { grid-column: 2; grid-row: 1 / span 2; align-self: center; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.autonomous-activity { grid-column: 1; display: flex; gap: 7px; align-items: center; margin: 5px 0 1px; color: var(--muted); font-size: 10px; }
+.autonomous-activity i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); opacity: .45; }
+.autonomous-activity b { font-weight: 600; }
+.autonomous-activity.active { color: var(--green); }
+.autonomous-activity.active i { background: var(--green); opacity: 1; animation: pulse-dot 1.4s ease-in-out infinite; box-shadow: 0 0 0 3px var(--green-soft); }
+.automation-card:has(.autonomous-activity) button { grid-row: 1 / span 3; }
 .autonomous-journal { grid-column: 1 / -1; margin-top: 4px; }
 .autonomous-journal summary { cursor: pointer; color: var(--muted); font-size: 11px; }
 .autonomous-journal ol { margin: 7px 0 0; padding-left: 20px; display: grid; gap: 6px; }
