@@ -208,6 +208,7 @@ class RunManager:
         decision: RunDecision | None = None,
         plan_stage: str = "",
         prompt_label: str = "",
+        record_user_message: bool = True,
         not_before: float | None = None,
         defer_count: int = 0,
     ) -> LiveRun:
@@ -280,7 +281,7 @@ class RunManager:
                 raise ActiveConversationError(
                     "Une tâche est déjà active dans cette conversation."
                 )
-            if not resumed:
+            if not resumed and record_user_message:
                 # Le modèle a reçu tout le `request` ; l'historique n'affiche que
                 # l'intitulé fourni quand il existe (ex. « implémente ce plan »),
                 # pour ne pas dupliquer un plan déjà lisible plus haut.
@@ -1346,6 +1347,7 @@ class RunManager:
                     prompt, str(campaign["conversation_id"]), None,
                     str(campaign.get("mode") or "review"), None, None,
                     str(campaign.get("execution_mode") or "workspace-write"),
+                    record_user_message=False,
                 )
             except ActiveConversationError:
                 continue

@@ -125,6 +125,14 @@ def test_autonomous_skill_keeps_objective_and_invariants_in_every_prompt():
     assert skill in iteration
 
 
+def test_autonomous_scheduler_hides_internal_skill_prompt_from_chat(tmp_path, monkeypatch):
+    source = Path(__file__).parents[1] / "src" / "joe" / "web_runs.py"
+    implementation = source.read_text(encoding="utf-8")
+
+    assert "record_user_message=False" in implementation
+    assert "if not resumed and record_user_message:" in implementation
+
+
 def test_scheduled_campaign_requires_checkpoint_contract(tmp_path: Path):
     values = campaign_values()
     values["schedule"] = {
