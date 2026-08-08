@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .routes import required_role
+from .text_encoding import read_utf8_compatible
 
 ROLES = ("viewer", "operator", "maintainer")
 _ROLE_LEVEL = {name: index for index, name in enumerate(ROLES)}
@@ -20,7 +21,7 @@ def auth_token_path() -> Path:
 def load_or_create_token(path: Path | None = None) -> str:
     target = path or auth_token_path()
     try:
-        token = target.read_text(encoding="utf-8").strip()
+        token = read_utf8_compatible(target).strip()
     except OSError:
         token = ""
     if token:

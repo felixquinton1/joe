@@ -7,6 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .text_encoding import read_utf8_compatible
+
 
 def record_usage(
     raw_output: str,
@@ -19,7 +21,7 @@ def record_usage(
         return
     try:
         payload = (
-            json.loads(target.read_text(encoding="utf-8"))
+            json.loads(read_utf8_compatible(target))
             if target.exists()
             else {}
         )

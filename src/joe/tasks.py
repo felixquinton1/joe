@@ -129,7 +129,7 @@ class TaskStore:
     def _read(self) -> dict[str, Any]:
         for path in (self.path, self.backup_path):
             try:
-                payload = json.loads(path.read_text(encoding="utf-8"))
+                payload = json.loads(read_utf8_compatible(path))
             except (OSError, json.JSONDecodeError):
                 continue
             if isinstance(payload, dict) and isinstance(payload.get("tasks"), list):
@@ -144,7 +144,7 @@ class TaskStore:
         )
         if self.path.exists():
             try:
-                current = json.loads(self.path.read_text(encoding="utf-8"))
+                current = json.loads(read_utf8_compatible(self.path))
                 if isinstance(current, dict) and isinstance(current.get("tasks"), list):
                     shutil.copy2(self.path, self.backup_path)
             except (OSError, json.JSONDecodeError):
@@ -162,3 +162,4 @@ class TaskStore:
 def _title(request: str) -> str:
     compact = " ".join(request.split())
     return compact[:77] + ("…" if len(compact) > 77 else "")
+from .text_encoding import read_utf8_compatible

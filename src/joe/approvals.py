@@ -140,7 +140,7 @@ class ApprovalStore:
 
     def _read(self) -> list[dict[str, Any]]:
         try:
-            payload = json.loads(self.path.read_text(encoding="utf-8"))
+            payload = json.loads(read_utf8_compatible(self.path))
             return payload if isinstance(payload, list) else []
         except (OSError, json.JSONDecodeError):
             return []
@@ -152,3 +152,4 @@ class ApprovalStore:
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         os.replace(temporary, self.path)
+from .text_encoding import read_utf8_compatible

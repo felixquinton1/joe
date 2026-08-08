@@ -134,7 +134,7 @@ class FileLibrary:
 
     def _read(self) -> list[dict[str, Any]]:
         try:
-            payload = json.loads(self.index.read_text(encoding="utf-8"))
+            payload = json.loads(read_utf8_compatible(self.index))
             return payload if isinstance(payload, list) else []
         except (OSError, json.JSONDecodeError):
             return []
@@ -150,3 +150,4 @@ class FileLibrary:
 
 def _safe(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9_-]+", "_", value)[:80] or "free"
+from .text_encoding import read_utf8_compatible
