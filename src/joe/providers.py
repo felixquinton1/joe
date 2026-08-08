@@ -154,7 +154,9 @@ class Provider:
         command.extend(self._roots("--add-dir"))
         if model:
             command.extend(["--model", model])
-        return [*command, "-C", str(cwd), prompt]
+        # A dash reads the prompt from stdin, avoiding Windows argv limits.
+        # The same transport is supported on macOS and Linux.
+        return [*command, "-C", str(cwd), "-"]
 
     def _argv_claude(
         self,
@@ -276,11 +278,20 @@ class Provider:
                 cwd=cwd,
                 env=env,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
+                stdin=(subprocess.PIPE if self.name == "codex" else None),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 bufsize=1,
                 **group_options,
             )
+            if self.name == "codex" and process.stdin is not None:
+                try:
+                    process.stdin.write(prompt)
+                    process.stdin.close()
+                except BrokenPipeError:
+                    pass
             stdout, stderr = _collect_streams(
                 process,
                 timeout,

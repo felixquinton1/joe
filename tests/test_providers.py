@@ -158,10 +158,33 @@ def test_commands_match_inspected_noninteractive_interfaces():
     cwd = Path("/tmp/project")
     codex = Provider("codex", "codex").command("p", cwd, Intent.ANALYZE)
     assert codex[:5] == ["codex", "--ask-for-approval", "never", "exec", "--json"]
+    assert codex[-1] == "-"
+    assert "p" not in codex
     assert "--print" in Provider("claude", "claude").command("p", cwd, Intent.ANALYZE)
     assert "stream-json" in Provider("claude", "claude").command("p", cwd, Intent.ANALYZE)
     assert "--prompt" in Provider("gemini", "gemini").command("p", cwd, Intent.ANALYZE)
     assert "--prompt" in Provider("copilot", "copilot").command("p", cwd, Intent.ANALYZE)
+
+
+def test_codex_prompt_uses_stdin_without_platform_command_line_limits(tmp_path):
+    class StdinCodex(Provider):
+        def command(
+            self, prompt, cwd, intent, model=None, effort=None, execution_mode=None
+        ):
+            script = (
+                "import json,sys; sys.stdin.reconfigure(encoding='utf-8'); "
+                "n=len(sys.stdin.read()); "
+                "print(json.dumps({'item':{'type':'agent_message','text':str(n)}}))"
+            )
+            return [sys.executable, "-c", script]
+
+    prompt = "é" * 100_000
+    result = StdinCodex("codex", sys.executable).run(
+        prompt, tmp_path, Intent.ANALYZE, timeout=10,
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == str(len(prompt))
+    assert prompt not in result.command
 
 
 def test_model_is_forwarded_to_each_cli():
