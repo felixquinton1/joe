@@ -34,6 +34,11 @@ def build_autonomous_skill(values: dict[str, Any]) -> str:
         "- Treat previous summaries as fallible; check the repository and structured results.\n"
         "- Distinguish verified facts, hypotheses, implemented changes and measured results.\n"
         "- Use the configured local runner for main experiments; detect completion or crash.\n"
+        "- Use progressive experimental scale: smoke test, intermediate validation, then full runs once stable.\n"
+        "- Scale run duration and model size to the verified hardware, active window and remaining budget.\n"
+        "- Long campaigns must perform substantive runs; do not remain indefinitely in toy-test mode.\n"
+        "- Revisit public literature whenever results plateau, contradict assumptions, reveal uncertainty or repeat failures.\n"
+        "- Research refreshes are event-driven as well as periodic; update the methodology from new evidence.\n"
         "- Preserve resumable checkpoints and the Git history after coherent changes.\n"
         "- Respect the data policy and all explicit prohibitions for every iteration.\n"
         "- Report meaningful transitions: step start, experiment start, result, analysis and next decision.\n"
@@ -95,7 +100,7 @@ class AutonomousStore:
             "metrics_path": str(values.get("metrics_path", "metrics.json")),
             "metric_name": str(values.get("metric_name", "score"))[:100],
             "metric_direction": "min" if values.get("metric_direction") == "min" else "max",
-            "timeout_seconds": max(5, min(10800, int(values.get("timeout_seconds", 600)))),
+            "timeout_seconds": max(5, min(86400, int(values.get("timeout_seconds", 600)))),
             "max_iterations": max(1, min(50, int(values.get("max_iterations", 3)))),
             "iteration_chunk": max(1, min(50, int(values.get("max_iterations", 3)))),
             "max_duration_seconds": max(

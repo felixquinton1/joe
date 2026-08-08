@@ -121,6 +121,8 @@ def test_autonomous_skill_keeps_objective_and_invariants_in_every_prompt():
 
     assert "Improve a synthetic baseline" in skill
     assert "Never replace, weaken" in skill
+    assert "substantive runs" in skill
+    assert "results plateau" in skill
     assert skill in research
     assert skill in iteration
 

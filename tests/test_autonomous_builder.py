@@ -32,3 +32,4 @@ def test_generic_payload_creates_cross_platform_runner_and_safe_charter():
     assert payload["resume_command"][-1] == "--resume"
     assert payload["max_duration_seconds"] == 1800
     assert "sans autorisation explicite" in payload["data_policy"]
+    assert "plateau" in payload["research_protocol"]

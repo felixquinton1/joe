@@ -50,7 +50,9 @@ def build_campaign_payload(
         "objective": parsed["objective"],
         "research_protocol": (
             "Commencer par les sources officielles publiques, identifier les règles, "
-            "les métriques et les approches comparables, puis justifier chaque choix."
+            "les métriques et les approches comparables, puis justifier chaque choix. "
+            "Revenir à la bibliographie après un plateau, un résultat surprenant, une "
+            "incertitude méthodologique ou des échecs répétés."
         ),
         "data_policy": (
             "Les données privées restent locales. Ne transmettre à une IA que du code, "
@@ -70,7 +72,7 @@ def build_campaign_payload(
         "metrics_path": "artifacts/metrics.json",
         "metric_name": "primary_metric",
         "metric_direction": "max",
-        "timeout_seconds": min(10800, max(300, int(parsed["max_duration_seconds"]))),
+        "timeout_seconds": min(86400, max(300, int(parsed["max_duration_seconds"]))),
         "max_iterations": int(parsed["max_iterations"]),
         "max_duration_seconds": int(parsed["max_duration_seconds"]),
         "restricted_data": bool(parsed.get("restricted_data")),
