@@ -110,7 +110,13 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         response = connection.getresponse()
         assert json.loads(response.read())["pinned"] is True
 
-        body = json.dumps({"name": "Phase D"})
+        body = json.dumps({
+            "name": "Phase D",
+            "workspace_root": str(tmp_path),
+            "auto_commit_push": True,
+            "quota_provider": "codex",
+            "ai_access": "auto",
+        })
         connection.request(
             "POST",
             "/api/projects",
@@ -120,6 +126,10 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         response = connection.getresponse()
         project = json.loads(response.read())
         assert response.status == 201
+        assert project["workspace_root"] == str(tmp_path)
+        assert project["auto_commit_push"] is True
+        assert project["quota_provider"] == "codex"
+        assert project["ai_access"] == "auto"
 
         body = json.dumps({"context": "Contexte commun"})
         connection.request(

@@ -11,7 +11,7 @@ import pytest
 from joe.autonomous import AutonomousStore, build_autonomous_skill
 from joe.autonomous_schedule import normalize_schedule, schedule_state
 from joe.experiment_runner import run_experiment, validate_experiment_command
-from joe.web_runs import RunManager
+from joe.web_runs import RunManager, _autonomous_metric_value
 
 
 def campaign_values():
@@ -91,6 +91,17 @@ def test_autonomous_store_persists_time_and_data_boundaries(tmp_path: Path):
     assert campaign["max_duration_seconds"] == 3600
     assert campaign["restricted_data"] is True
     assert campaign["deadline_at"] is None
+
+
+def test_autonomous_store_persists_deterministic_preflight(tmp_path: Path):
+    values = campaign_values() | {
+        "preflight": {"status": "completed", "metrics": {"cuda": True}}
+    }
+    store = AutonomousStore(tmp_path)
+    store.ensure()
+    campaign = store.create(**values)
+    assert campaign["preflight"]["status"] == "completed"
+    assert campaign["preflight"]["metrics"]["cuda"] is True
 
 
 def test_autonomous_store_persists_durable_context_and_research_cadence(tmp_path: Path):
@@ -212,6 +223,37 @@ def test_command_validation_accepts_existing_powershell_entrypoint(tmp_path: Pat
     assert validate_experiment_command(
         ["powershell", "-File", "autonomous_run.ps1"], tmp_path
     ) is None
+
+
+def test_metric_contract_reads_common_aggregate_envelopes():
+    assert _autonomous_metric_value(
+        {"summary": {"selected_log_loss": 0.42}}, "log_loss"
+    ) == 0.42
+    assert _autonomous_metric_value(
+        {"aggregate": {"score_mean": 0.7}}, "score"
+    ) == 0.7
+
+
+def test_timeout_terminates_experiment_children(tmp_path: Path):
+    marker = tmp_path / "orphan.txt"
+    child = tmp_path / "child.py"
+    child.write_text(
+        "import pathlib,time\ntime.sleep(2)\npathlib.Path('orphan.txt').write_text('bad')\n",
+        encoding="utf-8",
+    )
+    parent = tmp_path / "parent.py"
+    parent.write_text(
+        "import subprocess,sys,time\n"
+        "subprocess.Popen([sys.executable, 'child.py'])\n"
+        "time.sleep(10)\n",
+        encoding="utf-8",
+    )
+    result = run_experiment(
+        [sys.executable, "parent.py"], tmp_path, tmp_path / "out", timeout_seconds=1
+    )
+    time.sleep(1.5)
+    assert result["status"] == "timed_out"
+    assert not marker.exists()
 
 
 def test_runner_rejects_working_directory_escape(tmp_path: Path):

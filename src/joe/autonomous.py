@@ -114,6 +114,7 @@ class AutonomousStore:
                 60, min(604800, int(values.get("max_duration_seconds", 3600)))
             ),
             "restricted_data": bool(values.get("restricted_data", False)),
+            "preflight": dict(values.get("preflight") or {}),
             "schedule": schedule,
             "resume_command": resume_command[:32],
             "checkpoint_path": checkpoint_path,

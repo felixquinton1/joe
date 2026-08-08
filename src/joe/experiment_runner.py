@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import signal
 import subprocess
 import threading
 import time
@@ -82,6 +84,10 @@ def run_experiment(
         process = subprocess.Popen(
             command, cwd=cwd, stdout=stdout_file, stderr=stderr_file,
             text=True, shell=False,
+            creationflags=(
+                subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+            ),
+            start_new_session=os.name != "nt",
         )
         deadline = time.monotonic() + timeout_seconds
         while process.poll() is None:
@@ -102,11 +108,7 @@ def run_experiment(
                     while process.poll() is None and time.monotonic() < grace_deadline:
                         time.sleep(0.2)
                 if process.poll() is None:
-                    process.terminate()
-                    try:
-                        process.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
+                    _terminate_process_tree(process)
                 break
             time.sleep(0.2)
         exit_code = process.wait()
@@ -141,6 +143,26 @@ def run_experiment(
         result["failure_signature"] = _failure_signature(exit_code, stderr, error)
     (output / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     return result
+
+
+def _terminate_process_tree(process: subprocess.Popen[Any]) -> None:
+    """Terminate the experiment and every child it spawned."""
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            capture_output=True, text=True, check=False,
+        )
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
 
 
 def _failure_signature(exit_code: int | None, stderr: str, error: str | None) -> str:

@@ -17,7 +17,7 @@ from .automations import AutomationStore, START_MODES
 from .autonomous import AutonomousStore, TERMINAL_STATUSES, build_autonomous_skill
 from .autonomous_builder import build_campaign_payload
 from .autonomous_schedule import schedule_state
-from .experiment_runner import run_experiment
+from .experiment_runner import run_experiment, validate_experiment_command
 from .conversations import ConversationStore, FREE_PROJECT_ID, _ai_access
 from .documents import extract_document_text
 from .files import FileLibrary
@@ -40,6 +40,22 @@ from .usage import (
     usage_status,
 )
 from .worktrees import Worktree, WorktreeError, WorktreeManager
+
+
+def _autonomous_metric_value(metrics: dict[str, Any], name: str) -> float | None:
+    """Resolve common aggregate metric envelopes without project-specific code."""
+    aliases = (name, f"selected_{name}", f"{name}_mean", f"raw_{name}")
+    containers = [metrics]
+    for key in ("summary", "aggregate", "metrics"):
+        value = metrics.get(key)
+        if isinstance(value, dict):
+            containers.append(value)
+    for container in containers:
+        for alias in aliases:
+            value = container.get(alias)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return float(value)
+    return None
 
 
 @dataclass(frozen=True)
@@ -1189,7 +1205,20 @@ class RunManager:
         if execution_mode != "workspace-write":
             raise ValueError("Une campagne expérimentale nécessite l'écriture projet.")
         project_id = str(conversation.get("project_id", FREE_PROJECT_ID))
+        project = self.conversations.get_project(project_id) or {}
+        if not str(project.get("workspace_root", "")).strip():
+            raise ValueError(
+                "Autonomous exige une racine de projet explicitement configurée; "
+                "le dépôt interne de Joe ne peut jamais servir de repli."
+            )
         workspace, _, _, _ = self._project_scope(conversation_id)
+        working_directory = str(payload.get("working_directory", "."))
+        experiment_cwd = (workspace / working_directory).resolve()
+        command_error = validate_experiment_command(
+            list(payload.get("command") or []), experiment_cwd
+        )
+        if command_error:
+            raise ValueError(command_error)
         checks = (
             (["rev-parse", "--is-inside-work-tree"], "un dépôt Git initialisé"),
             (["remote", "get-url", "origin"], "un dépôt distant privé nommé origin"),
@@ -1209,6 +1238,37 @@ class RunManager:
             raise ValueError(
                 "Le dépôt doit être propre avant Autonomous afin d'attribuer chaque changement à la bonne itération."
             )
+        preflight: dict[str, Any] = {}
+        preflight_command = payload.get("preflight_command") or []
+        if preflight_command:
+            if not isinstance(preflight_command, list):
+                raise ValueError("La commande de préflight doit être une liste.")
+            preflight_error = validate_experiment_command(
+                list(preflight_command), experiment_cwd
+            )
+            if preflight_error:
+                raise ValueError(preflight_error)
+            preflight = run_experiment(
+                list(preflight_command), workspace,
+                self.orchestrator.memory.root / "autonomous-preflight",
+                working_directory=working_directory,
+                metrics_path=str(
+                    payload.get("preflight_metrics_path", "artifacts/preflight.json")
+                ),
+                timeout_seconds=max(
+                    5, min(1800, int(payload.get("preflight_timeout_seconds", 300)))
+                ),
+                stop_signal_path="", checkpoint_path="",
+            )
+            if preflight.get("status") != "completed":
+                raise ValueError(
+                    "Préflight Autonomous refusé : "
+                    + str(
+                        preflight.get("error")
+                        or preflight.get("stderr_tail")
+                        or "échec inconnu"
+                    )
+                )
         self.conversations.update_project(project_id, {"auto_commit_push": True})
         return self.autonomous.create(
             title=payload.get("title", ""),
@@ -1220,7 +1280,7 @@ class RunManager:
             campaign_context=payload.get("campaign_context", ""),
             research_refresh_interval=payload.get("research_refresh_interval", 0),
             command=payload.get("command"),
-            working_directory=payload.get("working_directory", "."),
+            working_directory=working_directory,
             metrics_path=payload.get("metrics_path", "metrics.json"),
             metric_name=payload.get("metric_name", "score"),
             metric_direction=payload.get("metric_direction", "max"),
@@ -1228,6 +1288,11 @@ class RunManager:
             max_iterations=payload.get("max_iterations", 3),
             max_duration_seconds=payload.get("max_duration_seconds", 3600),
             restricted_data=payload.get("restricted_data", False),
+            preflight={
+                "status": preflight.get("status"),
+                "duration_seconds": preflight.get("duration_seconds"),
+                "metrics": preflight.get("metrics") or {},
+            } if preflight else {},
             schedule=payload.get("schedule"),
             resume_command=payload.get("resume_command"),
             checkpoint_path=payload.get("checkpoint_path", ""),
@@ -1514,7 +1579,9 @@ class RunManager:
     def _finish_autonomous_iteration(self, campaign: dict[str, Any]) -> None:
         history = campaign.get("history") or []
         result = next((item for item in reversed(history) if item.get("kind") == "experiment"), {})
-        metric = (result.get("metrics") or {}).get(campaign.get("metric_name"))
+        metric = _autonomous_metric_value(
+            result.get("metrics") or {}, str(campaign.get("metric_name") or "score")
+        )
         best = campaign.get("best_metric")
         if isinstance(metric, (int, float)) and (
             best is None or (campaign.get("metric_direction") == "min" and metric < best)
@@ -1614,6 +1681,7 @@ class RunManager:
             }
         feedback = json.dumps(safe_last, ensure_ascii=False)[:10000]
         command_contract = json.dumps(campaign.get("command") or [], ensure_ascii=False)
+        preflight_contract = json.dumps(campaign.get("preflight") or {}, ensure_ascii=False)
         return (
             f"<autonomous_skill>\n{skill}\n</autonomous_skill>\n\n"
             f"<experiment_contract>Commande obligatoire : {command_contract}; "
@@ -1621,6 +1689,7 @@ class RunManager:
             "Crée exactement le point d'entrée référencé, vérifie son existence et sa liaison "
             "au code voulu avant de terminer ce tour. Un lanceur alternatif ne remplace pas ce contrat."
             "</experiment_contract>\n\n"
+            f"<deterministic_preflight>{preflight_contract}</deterministic_preflight>\n\n"
             "Instruction prioritaire : relis et applique intégralement le skill Autonomous ci-dessus.\n\n"
             f"Campagne Autonomous « {campaign['title']} » — itération {iteration}/{campaign['max_iterations']}.\n\n"
             f"Objectif : {campaign['objective']}\n"

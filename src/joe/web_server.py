@@ -363,12 +363,13 @@ class Handler(BaseHTTPRequestHandler):
         payload = self._read_payload(allow_empty=True)
         if payload is None:
             return
-        self._json(
-            self.server.manager.conversations.create_project(
-                str(payload.get("name", "Nouveau projet"))
-            ),
-            HTTPStatus.CREATED,
+        item = self.server.manager.conversations.create_project(
+            str(payload.get("name", "Nouveau projet"))
         )
+        changes = {key: value for key, value in payload.items() if key != "name"}
+        if changes:
+            item = self.server.manager.conversations.update_project(item["id"], changes) or item
+        self._json(item, HTTPStatus.CREATED)
 
     def _post_global_skill_create(self) -> None:
         payload = self._read_payload()
