@@ -14,8 +14,29 @@ from joe.providers import (
     _terminal_quota,
     _process_group_options,
     classify_error,
+    provider_runtime_issue,
     windows_aware_executable,
 )
+
+
+def test_managed_codex_requires_native_companions(tmp_path):
+    managed = tmp_path / "Programs" / "Joe" / "bin" / "codex.exe"
+    managed.parent.mkdir(parents=True)
+    managed.write_text("binary")
+
+    issue = provider_runtime_issue("codex", str(managed))
+
+    assert "codex-code-mode-host.exe" in issue
+    assert "codex-command-runner.exe" in issue
+    assert "codex-windows-sandbox-setup.exe" in issue
+    managed.with_name("codex-code-mode-host.exe").write_text("binary")
+    managed.with_name("codex-command-runner.exe").write_text("binary")
+    managed.with_name("codex-windows-sandbox-setup.exe").write_text("binary")
+    assert provider_runtime_issue("codex", str(managed)) is None
+
+
+def test_non_managed_codex_layout_is_left_to_the_cli():
+    assert provider_runtime_issue("codex", "/usr/bin/codex") is None
 
 
 def test_windows_resolver_prefers_npm_cmd_shim():

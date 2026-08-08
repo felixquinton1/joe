@@ -44,6 +44,41 @@ RESTRICTED_MODES = {"dontAsk"}
 NETWORK_CONTROLLED_PROVIDERS = ("codex",)
 
 
+def provider_runtime_issue(name: str, executable: str) -> str | None:
+    """Return an actionable error for an incomplete managed provider install.
+
+    Native Codex releases use sibling helper binaries for code-mode tools.  The
+    npm package supplies its own layout, so this check intentionally applies
+    only to Joe's managed native installation.
+    """
+    if name != "codex":
+        return None
+    path = Path(executable)
+    if path.name.lower() not in {"codex", "codex.exe"}:
+        return None
+    parts = tuple(part.lower() for part in path.parts)
+    if not ("programs" in parts and "joe" in parts and "bin" in parts):
+        return None
+    suffix = ".exe" if path.suffix.lower() == ".exe" else ""
+    required = (
+        path.with_name(f"codex-code-mode-host{suffix}"),
+        path.with_name(f"codex-command-runner{suffix}"),
+        *(
+            (path.with_name("codex-windows-sandbox-setup.exe"),)
+            if suffix == ".exe"
+            else ()
+        ),
+    )
+    missing = [item.name for item in required if not item.is_file()]
+    if not missing:
+        return None
+    return (
+        "installation Codex native incomplète : composant(s) manquant(s) "
+        + ", ".join(missing)
+        + ". Réinstalle le paquet Codex complet avant de lancer Autonomous."
+    )
+
+
 def windows_aware_executable(
     name: str, *, os_module=os, shutil_module=shutil
 ) -> str | None:
@@ -262,6 +297,12 @@ class Provider:
         if not executable:
             return ProviderResult(
                 self.name, [self.executable], "", "executable not found", 127, 0,
+                error_kind="unavailable",
+            )
+        runtime_issue = provider_runtime_issue(self.name, executable)
+        if runtime_issue:
+            return ProviderResult(
+                self.name, [executable], "", runtime_issue, 127, 0,
                 error_kind="unavailable",
             )
         command = self.command(

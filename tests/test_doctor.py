@@ -34,7 +34,7 @@ def test_doctor_reports_storage_and_live_provider_health(
         lambda: [{"provider": "codex", "current_version": "1.2.3"}],
     )
     monkeypatch.setattr(
-        "joe.doctor.shutil.which",
+        "joe.doctor.windows_aware_executable",
         lambda executable: f"/usr/bin/{executable}",
     )
 
@@ -60,7 +60,9 @@ def test_doctor_does_not_consume_quota_without_live(tmp_path, monkeypatch):
         "joe.doctor.provider_audit",
         lambda: [{"provider": "claude", "current_version": None}],
     )
-    monkeypatch.setattr("joe.doctor.shutil.which", lambda executable: None)
+    monkeypatch.setattr(
+        "joe.doctor.windows_aware_executable", lambda executable: None
+    )
 
     report = doctor_report(
         Path(tmp_path),

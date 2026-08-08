@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 from typing import Any
 
 from .maintenance import provider_audit
 from .models import Intent
-from .providers import Provider, default_providers
+from .providers import (
+    Provider,
+    default_providers,
+    provider_runtime_issue,
+    windows_aware_executable,
+)
 from .usage import usage_status
 
 
@@ -31,15 +35,19 @@ def doctor_report(
         for item in provider_audit()
     }
     for name, provider in provider_map.items():
-        executable = shutil.which(provider.executable)
+        executable = windows_aware_executable(provider.executable)
+        runtime_issue = (
+            provider_runtime_issue(name, executable) if executable else None
+        )
         item: dict[str, Any] = {
             "provider": name,
-            "installed": bool(executable),
+            "installed": bool(executable) and not runtime_issue,
             "executable": executable,
             "version": versions.get(name),
             "usage": usage.get(name),
+            "runtime_issue": runtime_issue,
         }
-        if live and executable:
+        if live and executable and not runtime_issue:
             result = provider.run(
                 "Réponds uniquement : OK",
                 root,
@@ -68,6 +76,8 @@ def format_doctor(report: dict[str, Any]) -> str:
     ]
     for item in report["providers"]:
         state = "installé" if item["installed"] else "absent"
+        if item.get("runtime_issue"):
+            state = f"incomplet · {item['runtime_issue']}"
         version = f" · {item['version']}" if item.get("version") else ""
         line = f"- {item['provider'].capitalize()} : {state}{version}"
         live = item.get("live")
