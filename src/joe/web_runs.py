@@ -15,6 +15,7 @@ from .capabilities import select_model, select_model_tier
 from .approvals import ApprovalStore
 from .automations import AutomationStore, START_MODES
 from .autonomous import AutonomousStore, TERMINAL_STATUSES, build_autonomous_skill
+from .autonomous_builder import build_campaign_payload
 from .autonomous_schedule import schedule_state
 from .experiment_runner import run_experiment
 from .conversations import ConversationStore, FREE_PROJECT_ID, _ai_access
@@ -389,6 +390,29 @@ class RunManager:
             decision=decision,
         )
 
+    def start_local_autonomous(
+        self,
+        request: str,
+        conversation_id: str,
+        parsed: dict[str, Any],
+    ) -> LiveRun:
+        decision = self.decide(
+            request,
+            conversation_id,
+            local_action="create_autonomous_campaign",
+            local_payload={"parsed": parsed},
+        )
+        return self.start(
+            request,
+            conversation_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            decision=decision,
+        )
+
     def _propose_plan(self, run: LiveRun, plan: str) -> None:
         """Turn a finished plan run into a decision the user can act on.
 
@@ -424,19 +448,33 @@ class RunManager:
         )
         failure = None
         try:
-            created = create_skill(
-                None if payload["global_scope"] else run.workspace,
-                str(payload["name"]),
-                str(payload["instructions"]),
-                global_scope=bool(payload["global_scope"]),
-            )
-            scope = "commun" if payload["global_scope"] else "du projet"
-            response = (
-                f"Skill **{created['name']}** créé comme skill {scope}.\n\n"
-                f"`{created['path']}`"
-            )
+            if decision.local_action == "create_autonomous_campaign":
+                campaign = self.create_autonomous(
+                    build_campaign_payload(
+                        run.request,
+                        run.conversation_id,
+                        dict(payload["parsed"]),
+                    )
+                )
+                response = (
+                    f"Campagne Autonomous **{campaign['title']}** créée et planifiée.\n\n"
+                    f"Durée maximale : {campaign['max_duration_seconds'] // 60} min · "
+                    f"{campaign['max_iterations']} itérations · charte dédiée créée."
+                )
+            else:
+                created = create_skill(
+                    None if payload["global_scope"] else run.workspace,
+                    str(payload["name"]),
+                    str(payload["instructions"]),
+                    global_scope=bool(payload["global_scope"]),
+                )
+                scope = "commun" if payload["global_scope"] else "du projet"
+                response = (
+                    f"Skill **{created['name']}** créé comme skill {scope}.\n\n"
+                    f"`{created['path']}`"
+                )
         except (OSError, ValueError) as error:
-            response = f"Le skill n’a pas été créé : {error}"
+            response = f"L’action locale n’a pas abouti : {error}"
             failure = str(error)
         self._emit_run_event(
             run,

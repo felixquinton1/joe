@@ -1003,6 +1003,7 @@ function primaryStageLabel(run, localAction) {
   // Un même libellé à l'ouverture et à la clôture de l'étape, sinon le
   // pipeline change de nom en cours de route.
   if ((localAction || run?.localAction) === "create_skill") return "Création du skill";
+  if ((localAction || run?.localAction) === "create_autonomous_campaign") return "Création d’Autonomous";
   if (run?.intent === "modify") return "Implémentation";
   if (run?.intent === "analyze") return "Analyse";
   return "Traitement";

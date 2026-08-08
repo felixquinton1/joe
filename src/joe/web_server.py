@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from . import __version__
 from .auth import LocalAuth, auth_token_path, rotate_token
+from .autonomous_builder import parse_autonomous_request
 from .conversations import FREE_PROJECT_ID
 from .doctor import doctor_report
 from .files import MAX_FILE_BYTES
@@ -561,6 +562,22 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
         # La détection lexicale tranche sans appeler de modèle ; sinon on prend
         # LA décision du run, qui porte aussi la classification du routeur.
+        autonomous_request = parse_autonomous_request(request)
+        if autonomous_request is not None:
+            if not self.server.auth.allows("maintainer"):
+                return self._json(
+                    {"error": "Le profil maintainer est requis pour créer Autonomous."},
+                    HTTPStatus.FORBIDDEN,
+                )
+            try:
+                run = self.server.manager.start_local_autonomous(
+                    request,
+                    conversation_id,
+                    autonomous_request,
+                )
+            except (ActiveConversationError, ValueError) as exc:
+                return self._json({"error": str(exc)}, HTTPStatus.CONFLICT)
+            return self._json({"run_id": run.run_id}, HTTPStatus.ACCEPTED)
         skill_request = parse_skill_request(request)
         decision = None
         classification = None
