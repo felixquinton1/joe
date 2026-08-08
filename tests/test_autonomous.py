@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from joe.autonomous import AutonomousStore
+from joe.autonomous import AutonomousStore, build_autonomous_skill
 from joe.autonomous_schedule import normalize_schedule, schedule_state
 from joe.experiment_runner import run_experiment
 from joe.web_runs import RunManager
@@ -91,6 +91,26 @@ def test_autonomous_store_persists_durable_context_and_research_cadence(tmp_path
     campaign = store.create(**values)
     assert campaign["campaign_context"].startswith("Official URLs")
     assert campaign["research_refresh_interval"] == 3
+    assert campaign["autonomous_skill"].startswith("# Skill — Autonomous")
+    assert (tmp_path / campaign["skill_path"]).is_file()
+
+
+def test_autonomous_skill_keeps_objective_and_invariants_in_every_prompt():
+    campaign = campaign_values() | {
+        "campaign_context": "Official rules remain binding",
+        "research_protocol": "Check public sources",
+        "data_policy": "Never expose local rows",
+    }
+    skill = build_autonomous_skill(campaign)
+    research = RunManager._autonomous_research_prompt(campaign)
+    iteration = RunManager._autonomous_iteration_prompt(
+        campaign | {"history": [], "max_iterations": 3}, 1
+    )
+
+    assert "Improve a synthetic baseline" in skill
+    assert "Never replace, weaken" in skill
+    assert skill in research
+    assert skill in iteration
 
 
 def test_scheduled_campaign_requires_checkpoint_contract(tmp_path: Path):

@@ -377,6 +377,13 @@ window.addEventListener("joe:open-task", async event => {
   if (refreshed) await showTaskDiff(refreshed);
 });
 
+window.addEventListener("joe:open-conversation", async event => {
+  const conversationId = event.detail?.conversationId;
+  if (!conversationId) return;
+  await loadConversations(false);
+  await selectConversation(conversationId);
+});
+
 async function showTaskDiff(task) {
   const response = await joeFetch(`/api/tasks/${encodeURIComponent(task.id)}/diff`);
   const report = await response.json();

@@ -18,10 +18,34 @@ STATUSES = TERMINAL_STATUSES | {
 }
 
 
+def build_autonomous_skill(values: dict[str, Any]) -> str:
+    """Build the immutable campaign charter injected into every autonomous turn."""
+    return (
+        "# Skill — Autonomous campaign charter\n\n"
+        "This charter is authoritative for the whole campaign. Re-read it before "
+        "every decision, tool call, implementation, experiment analysis and resume.\n\n"
+        f"## Primary objective\n{values.get('objective') or 'Not specified.'}\n\n"
+        f"## Durable context and constraints\n{values.get('campaign_context') or 'None.'}\n\n"
+        f"## Research protocol\n{values.get('research_protocol') or 'Use relevant public documentation.'}\n\n"
+        f"## Data policy\n{values.get('data_policy') or 'Do not disclose private data.'}\n\n"
+        "## Invariants\n"
+        "- Never replace, weaken or silently reinterpret the primary objective.\n"
+        "- Before acting, verify that the next step directly advances the objective.\n"
+        "- Treat previous summaries as fallible; check the repository and structured results.\n"
+        "- Distinguish verified facts, hypotheses, implemented changes and measured results.\n"
+        "- Use the configured local runner for main experiments; detect completion or crash.\n"
+        "- Preserve resumable checkpoints and the Git history after coherent changes.\n"
+        "- Respect the data policy and all explicit prohibitions for every iteration.\n"
+        "- Report meaningful transitions: step start, experiment start, result, analysis and next decision.\n"
+        "- If a proposed action conflicts with this charter, do not perform it; explain the conflict.\n"
+    )[:30000]
+
+
 class AutonomousStore:
     """Durable state for bounded research/experiment campaigns."""
 
     def __init__(self, root: Path):
+        self.root = root
         self.path = root / "autonomous.json"
         self.backup_path = root / "autonomous.json.bak"
         self.lock = threading.RLock()
@@ -109,10 +133,15 @@ class AutonomousStore:
             "created_at": now,
             "updated_at": now,
         }
+        campaign["autonomous_skill"] = build_autonomous_skill(campaign)
+        campaign["skill_path"] = f"autonomous/{campaign['id']}/SKILL.md"
         with self.lock:
             payload = self._read()
             payload["campaigns"].append(campaign)
             self._write(payload)
+        skill_path = self.root / str(campaign["skill_path"])
+        skill_path.parent.mkdir(parents=True, exist_ok=True)
+        skill_path.write_text(campaign["autonomous_skill"], encoding="utf-8")
         return dict(campaign)
 
     def list(self) -> list[dict[str, Any]]:

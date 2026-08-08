@@ -119,7 +119,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     for (const campaign of campaigns.slice(0, 8)) {
       const card = document.createElement("article");
       card.className = `automation-card ${campaign.status}`;
-      card.innerHTML = `<div><strong></strong><span></span></div><small></small><p class="autonomous-activity" role="status"><i></i><b></b></p><div class="autonomous-actions"><button type="button" data-action="cancel">Annuler</button><button type="button" data-action="resume">Reprendre</button></div>`;
+      card.innerHTML = `<div><strong></strong><span></span></div><small></small><p class="autonomous-activity" role="status"><i></i><b></b></p><div class="autonomous-actions"><button type="button" data-action="cancel">Annuler</button><button type="button" data-action="resume">Reprendre Autonomous</button><button type="button" data-action="chat">Continuer dans le chat</button></div>`;
       card.querySelector("strong").textContent = campaign.title;
       card.querySelector("span").textContent = campaign.status;
       card.querySelector("small").textContent = `itération ${campaign.iteration}/${campaign.max_iterations} · phase ${campaign.phase}`;
@@ -164,6 +164,14 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
         const payload = await response.json();
         if (!response.ok) return window.alert(payload.error || "Impossible de reprendre la campagne.");
         await load();
+      };
+      const chatButton = card.querySelector('[data-action="chat"]');
+      chatButton.hidden = !terminal;
+      chatButton.onclick = () => {
+        $("automation-dialog").close();
+        window.dispatchEvent(new CustomEvent("joe:open-conversation", {
+          detail: { conversationId: campaign.conversation_id }
+        }));
       };
       autonomousTarget.appendChild(card);
     }

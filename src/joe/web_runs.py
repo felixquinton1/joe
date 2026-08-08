@@ -14,7 +14,7 @@ from typing import Any
 from .capabilities import select_model, select_model_tier
 from .approvals import ApprovalStore
 from .automations import AutomationStore, START_MODES
-from .autonomous import AutonomousStore, TERMINAL_STATUSES
+from .autonomous import AutonomousStore, TERMINAL_STATUSES, build_autonomous_skill
 from .autonomous_schedule import schedule_state
 from .experiment_runner import run_experiment
 from .conversations import ConversationStore, FREE_PROJECT_ID, _ai_access
@@ -1507,7 +1507,10 @@ class RunManager:
     @staticmethod
     def _autonomous_research_prompt(campaign: dict[str, Any]) -> str:
         refresh = campaign.get("phase") == "research_refresh"
+        skill = campaign.get("autonomous_skill") or build_autonomous_skill(campaign)
         return (
+            f"<autonomous_skill>\n{skill}\n</autonomous_skill>\n\n"
+            "Instruction prioritaire : relis et applique intégralement le skill Autonomous ci-dessus.\n\n"
             f"Campagne Autonomous « {campaign['title']} » — "
             f"{'réévaluation bibliographique' if refresh else 'phase de recherche initiale'}.\n\n"
             f"Objectif : {campaign['objective']}\n\n"
@@ -1525,6 +1528,7 @@ class RunManager:
 
     @staticmethod
     def _autonomous_iteration_prompt(campaign: dict[str, Any], iteration: int) -> str:
+        skill = campaign.get("autonomous_skill") or build_autonomous_skill(campaign)
         last = next((item for item in reversed(campaign.get("history") or []) if item.get("kind") == "experiment"), None)
         safe_last = dict(last or {})
         if campaign.get("restricted_data"):
@@ -1535,6 +1539,8 @@ class RunManager:
             }
         feedback = json.dumps(safe_last, ensure_ascii=False)[:10000]
         return (
+            f"<autonomous_skill>\n{skill}\n</autonomous_skill>\n\n"
+            "Instruction prioritaire : relis et applique intégralement le skill Autonomous ci-dessus.\n\n"
             f"Campagne Autonomous « {campaign['title']} » — itération {iteration}/{campaign['max_iterations']}.\n\n"
             f"Objectif : {campaign['objective']}\n"
             f"Brief durable à relire intégralement avant toute décision :\n{campaign.get('campaign_context') or 'Aucun contexte supplémentaire.'}\n\n"
