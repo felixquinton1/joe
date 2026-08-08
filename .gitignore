@@ -6,6 +6,10 @@ __pycache__/
 *.egg-info/
 *.py[cod]
 .venv/
+.uv-cache/
+artifacts/
+checkpoints/
+private_state/
 dist/
 build/
 vscode-extension/node_modules/
