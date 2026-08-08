@@ -140,7 +140,7 @@ class ApprovalStore:
 
     def _read(self) -> list[dict[str, Any]]:
         try:
-            payload = json.loads(self.path.read_text())
+            payload = json.loads(self.path.read_text(encoding="utf-8"))
             return payload if isinstance(payload, list) else []
         except (OSError, json.JSONDecodeError):
             return []
@@ -148,5 +148,7 @@ class ApprovalStore:
     def _write(self, payload: list[dict[str, Any]]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(".tmp")
-        temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+        temporary.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         os.replace(temporary, self.path)

@@ -251,7 +251,7 @@ class ProjectMemory:
     @staticmethod
     def _atomic_write(path: Path, content: str) -> None:
         tmp = path.with_suffix(path.suffix + f".{uuid.uuid4().hex}.tmp")
-        tmp.write_text(content)
+        tmp.write_text(content, encoding="utf-8")
         tmp.chmod(0o600)
         os.replace(tmp, path)
 

@@ -107,7 +107,7 @@ def build_report(
     if rejectable:
         patch_path = project / ".agentflow" / "runs" / f"{review_id}.reject.patch"
         patch = _git(project, "diff", "--binary", base, "--").stdout
-        patch_path.write_text(patch)
+        patch_path.write_text(patch, encoding="utf-8")
         hashes = {
             path: _file_hash(project / path)
             for path in untracked
@@ -124,7 +124,9 @@ def build_report(
         review_path = (
             project / ".agentflow" / "runs" / f"{review_id}.reject.json"
         )
-        review_path.write_text(json.dumps(rejection, ensure_ascii=False, indent=2))
+        review_path.write_text(
+            json.dumps(rejection, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
     report = {
         "available": True,
@@ -283,6 +285,8 @@ def _git(project: Path, *args: str) -> subprocess.CompletedProcess[str]:
             capture_output=True,
             check=False,
             timeout=30,
+            encoding="utf-8",
+            errors="replace",
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return subprocess.CompletedProcess(

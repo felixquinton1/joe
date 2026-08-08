@@ -134,7 +134,7 @@ class FileLibrary:
 
     def _read(self) -> list[dict[str, Any]]:
         try:
-            payload = json.loads(self.index.read_text())
+            payload = json.loads(self.index.read_text(encoding="utf-8"))
             return payload if isinstance(payload, list) else []
         except (OSError, json.JSONDecodeError):
             return []
@@ -142,7 +142,9 @@ class FileLibrary:
     def _write(self, payload: list[dict[str, Any]]) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
         temporary = self.index.with_suffix(".tmp")
-        temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+        temporary.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         os.replace(temporary, self.index)
 
 

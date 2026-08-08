@@ -20,7 +20,7 @@ def auth_token_path() -> Path:
 def load_or_create_token(path: Path | None = None) -> str:
     target = path or auth_token_path()
     try:
-        token = target.read_text().strip()
+        token = target.read_text(encoding="utf-8").strip()
     except OSError:
         token = ""
     if token:
@@ -35,7 +35,7 @@ def rotate_token(path: Path | None = None) -> str:
     token = secrets.token_urlsafe(32)
     temporary = target.with_suffix(".tmp")
     descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(descriptor, "w") as stream:
+    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
         stream.write(token)
     os.replace(temporary, target)
     target.chmod(0o600)

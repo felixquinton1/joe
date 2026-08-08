@@ -57,6 +57,8 @@ def workspace_observation(project: Path) -> dict[str, object]:
                 ["git", "-C", str(project), *args],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=3,
                 check=False,
             )

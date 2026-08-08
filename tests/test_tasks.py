@@ -34,6 +34,24 @@ def test_task_store_persists_and_updates_runs(tmp_path):
     assert store.get("run1") is None
 
 
+def test_task_store_persists_unicode_independently_of_windows_codepage(tmp_path):
+    store = TaskStore(tmp_path)
+    store.ensure()
+    store.create(
+        "unicode-run",
+        "log loss ≈ 0,69 — expérience terminée",
+        "conversation1",
+        "project1",
+        workspace=tmp_path,
+        base_workspace=tmp_path,
+        isolated=False,
+    )
+
+    restored = TaskStore(tmp_path).get("unicode-run")
+
+    assert restored["request"] == "log loss ≈ 0,69 — expérience terminée"
+
+
 def test_quota_wait_is_persisted_and_resumes(tmp_path, monkeypatch):
     monkeypatch.setattr(RunManager, "_recover_pending", lambda self: None)
     refreshed = []

@@ -18,7 +18,11 @@ def record_usage(
     if not stats:
         return
     try:
-        payload = json.loads(target.read_text()) if target.exists() else {}
+        payload = (
+            json.loads(target.read_text(encoding="utf-8"))
+            if target.exists()
+            else {}
+        )
     except (OSError, json.JSONDecodeError):
         payload = {}
     day = datetime.fromtimestamp(now).date().isoformat()
@@ -40,7 +44,9 @@ def record_usage(
     payload["days"] = dict(sorted(days.items())[-30:])
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_suffix(f".{uuid.uuid4().hex}.tmp")
-    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     temporary.chmod(0o600)
     os.replace(temporary, target)
 
