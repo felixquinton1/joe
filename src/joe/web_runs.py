@@ -1423,7 +1423,9 @@ class RunManager:
             f"Politique de données impérative : {campaign.get('data_policy') or 'Ne transmets aucune donnée privée ou restreinte à un fournisseur IA.'}\n\n"
             "Recherche uniquement des sources publiques. Consigne une synthèse sourcée dans "
             "AUTONOMOUS_RESEARCH.md. N'inspecte, ne joins et ne recopie aucune donnée restreinte. "
-            "Ne lance pas encore l'expérience."
+            "Ne lance pas encore l'expérience. À partir des règles officielles, détermine toi-même "
+            "la stratégie expérimentale et la manière rigoureuse d'en rendre compte; aucune méthode, "
+            "métrique secondaire ou visualisation ne t'est imposée."
         )
 
     @staticmethod
@@ -1447,7 +1449,10 @@ class RunManager:
             "Lis AUTONOMOUS_RESEARCH.md et l'état actuel du projet. Fais une seule amélioration "
             "méthodologique ciblée ou corrige le crash observé. Tu peux modifier le code et lancer "
             "des tests courts, mais ne lance pas la commande d'expérience principale : Joe la lancera "
-            "et détectera seul succès, crash ou timeout. Termine par un résumé concis."
+            "et détectera seul succès, crash ou timeout. Choisis et justifie toi-même la validation, "
+            "les indicateurs, les comparaisons pertinentes avec le challenge et les visualisations "
+            "utiles. Produis un rendu compréhensible des performances, sans soumettre au challenge. "
+            "Termine par un résumé concis."
         )
 
     def _advance_automations(self, now: float | None = None) -> None:

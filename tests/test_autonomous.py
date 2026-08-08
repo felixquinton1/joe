@@ -11,6 +11,7 @@ import pytest
 from joe.autonomous import AutonomousStore
 from joe.autonomous_schedule import normalize_schedule, schedule_state
 from joe.experiment_runner import run_experiment
+from joe.web_runs import RunManager
 
 
 def campaign_values():
@@ -129,3 +130,15 @@ def test_runner_interrupts_after_checkpoint_signal(tmp_path: Path):
     )
     assert result["status"] == "interrupted"
     assert result["checkpoint_available"] is True
+
+
+def test_autonomous_prompt_leaves_method_and_reporting_choices_to_agent():
+    campaign = {
+        "title": "Challenge",
+        "objective": "Solve the public challenge",
+        "research_protocol": "Read the official rules",
+        "data_policy": "Local data only",
+    }
+    prompt = RunManager._autonomous_research_prompt(campaign)
+    assert "détermine toi-même" in prompt
+    assert "aucune méthode" in prompt
