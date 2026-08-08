@@ -160,7 +160,7 @@ window.createJoeConversations = function createJoeConversations({
           ? '<b class="conversation-status running">En cours</b>'
           : completed
           ? '<b class="conversation-status complete">Terminée</b>'
-          : `${conversation.messages.length} messages`;
+          : `${conversation.message_count ?? conversation.messages?.length ?? 0} messages`;
         button.innerHTML = `<strong>${escapeHtml(conversation.title)}</strong><span title="${escapeHtml(date.exact)}">${stateLabel} · ${escapeHtml(date.short)}</span>`;
         button.onclick = () => selectConversation(conversation.id);
         const pin = document.createElement("button");
