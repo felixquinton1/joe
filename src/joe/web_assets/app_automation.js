@@ -1,5 +1,6 @@
 window.createAutomationModule = ({ state, $, fetcher }) => {
   let plans = [];
+  let campaigns = [];
   // Rappel de celui qui a ouvert le formulaire : un plan confié au
   // planificateur ne doit plus rester affiché comme « à valider ».
   let onScheduled = null;
@@ -43,13 +44,60 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     if (!plans.length) {
       target.innerHTML = "<small>Aucun plan programmé.</small>";
     }
+    const autonomousTarget = $("autonomous-list");
+    autonomousTarget.replaceChildren();
+    for (const campaign of campaigns.slice(0, 8)) {
+      const card = document.createElement("article");
+      card.className = `automation-card ${campaign.status}`;
+      card.innerHTML = `<div><strong></strong><span></span></div><small></small><button type="button">Annuler</button>`;
+      card.querySelector("strong").textContent = campaign.title;
+      card.querySelector("span").textContent = campaign.status;
+      card.querySelector("small").textContent = `itération ${campaign.iteration}/${campaign.max_iterations} · phase ${campaign.phase}`;
+      const button = card.querySelector("button");
+      button.hidden = ["completed", "cancelled", "blocked"].includes(campaign.status);
+      button.onclick = async () => {
+        await fetcher(`/api/autonomous/${campaign.id}/cancel`, { method: "POST" });
+        await load();
+      };
+      autonomousTarget.appendChild(card);
+    }
+    if (!campaigns.length) autonomousTarget.innerHTML = "<small>Aucune campagne Autonomous.</small>";
   }
 
   async function load() {
     const response = await fetcher("/api/automations");
     if (!response.ok) return;
     plans = await response.json();
+    const autonomousResponse = await fetcher("/api/autonomous");
+    campaigns = autonomousResponse.ok ? await autonomousResponse.json() : [];
     render();
+  }
+
+  async function startParkinsons() {
+    if (!state.activeConversationId) return;
+    const response = await fetcher("/api/autonomous", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "DaT Parkinson — démo synthétique",
+        conversation_id: state.activeConversationId,
+        objective: "Améliorer une baseline reproductible de classification binaire synthétique inspirée d'images DaT en minimisant la log loss, sans données restreintes.",
+        research_protocol: "Consulter les pages publiques officielles du challenge, documenter métrique, format et contraintes, puis rechercher des méthodes publiques comparables avec leurs sources.",
+        data_policy: "Ne jamais ouvrir, joindre, recopier ou envoyer les scans et fichiers restreints de DrivenData à une IA. Seulement code, données synthétiques, métriques agrégées et logs nettoyés.",
+        command: ["python", "experiment.py"],
+        working_directory: "templates/autonomous/dat-parkinsons",
+        metrics_path: "metrics.json",
+        metric_name: "log_loss",
+        metric_direction: "min",
+        timeout_seconds: 120,
+        max_iterations: 3,
+        mode: "review",
+        execution_mode: "workspace-write"
+      })
+    });
+    const payload = await response.json();
+    if (!response.ok) return window.alert(payload.error || "Impossible de démarrer Autonomous.");
+    await load();
   }
 
   async function open(prefill = {}) {
@@ -129,5 +177,5 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     await load();
   }
 
-  return { load, open, save, syncStartFields };
+  return { load, open, save, syncStartFields, startParkinsons };
 };

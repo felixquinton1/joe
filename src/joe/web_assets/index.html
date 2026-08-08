@@ -254,6 +254,12 @@
       <label class="check-label"><input id="automation-integrate" type="checkbox" checked> Intégrer automatiquement chaque worktree validé</label>
       <small class="setting-help">Joe s’arrête sur conflit, permission manquante ou après le nombre maximal de corrections. Le push reste régi par le réglage du projet.</small>
       <section><div class="skill-manager-head"><span>Plans récents</span></div><div id="automation-list" class="automation-list"></div></section>
+      <section>
+        <div class="skill-manager-head"><span>Mode Autonomous (expérimental)</span></div>
+        <p class="dialog-intro">Boucle bornée recherche → code → expérience → analyse. Cette démo n'utilise que des données synthétiques.</p>
+        <button id="start-parkinsons-autonomous" type="button" class="subtle-action">Lancer la démo DaT Parkinson (3 itérations)</button>
+        <div id="autonomous-list" class="automation-list"></div>
+      </section>
       <div class="dialog-actions"><button value="cancel">Fermer</button><button id="save-automation" value="default">Programmer</button></div>
     </form>
   </dialog>

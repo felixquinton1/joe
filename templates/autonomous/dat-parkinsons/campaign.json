@@ -1,0 +1,15 @@
+{
+  "title": "DaT Parkinson — démo synthétique",
+  "objective": "Améliorer une baseline reproductible de classification binaire sur des caractéristiques synthétiques inspirées d'images DaT, en minimisant la log loss et sans utiliser ni exposer les données restreintes du challenge.",
+  "research_protocol": "Avant la première expérience, consulter les pages publiques officielles du challenge, documenter la métrique, le format de soumission et les contraintes d'exécution, puis rechercher des méthodes publiques comparables. Citer les sources et distinguer faits et hypothèses.",
+  "data_policy": "Interdiction absolue d'ouvrir, joindre, recopier ou envoyer les scans et fichiers restreints de DrivenData à une IA. Seuls le code, les données synthétiques, les métriques agrégées et des logs nettoyés peuvent entrer dans un prompt.",
+  "command": ["python", "experiment.py"],
+  "working_directory": "templates/autonomous/dat-parkinsons",
+  "metrics_path": "metrics.json",
+  "metric_name": "log_loss",
+  "metric_direction": "min",
+  "timeout_seconds": 120,
+  "max_iterations": 3,
+  "mode": "review",
+  "execution_mode": "workspace-write"
+}

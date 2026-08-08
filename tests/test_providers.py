@@ -14,7 +14,22 @@ from joe.providers import (
     _terminal_quota,
     _process_group_options,
     classify_error,
+    windows_aware_executable,
 )
+
+
+def test_windows_resolver_prefers_npm_cmd_shim():
+    class Windows:
+        name = "nt"
+
+    class Resolver:
+        @staticmethod
+        def which(name):
+            return f"C:/npm/{name}" if name in {"codex", "codex.cmd"} else None
+
+    assert windows_aware_executable(
+        "codex", os_module=Windows, shutil_module=Resolver
+    ) == "C:/npm/codex.cmd"
 
 
 class ScriptProvider(Provider):
@@ -275,7 +290,7 @@ def test_full_access_remains_scoped_to_declared_project_roots():
         (gemini, "--include-directories"),
         (copilot, "--add-dir"),
     ):
-        assert command[command.index(flag) + 1] == "/tmp/vision"
+        assert command[command.index(flag) + 1] == str(extra[0])
 
 
 def test_additional_project_roots_are_forwarded_to_each_cli():
@@ -285,14 +300,14 @@ def test_additional_project_roots_are_forwarded_to_each_cli():
     codex = Provider("codex", "codex", extra).command(
         "p", cwd, Intent.ANALYZE
     )
-    assert codex[codex.index("--add-dir") + 1] == "/tmp/vision"
+    assert codex[codex.index("--add-dir") + 1] == str(extra[0])
     for name, flag in (
         ("claude", "--add-dir"),
         ("gemini", "--include-directories"),
         ("copilot", "--add-dir"),
     ):
         command = Provider(name, name, extra).command("p", cwd, Intent.ANALYZE)
-        assert command[command.index(flag) + 1] == "/tmp/vision"
+        assert command[command.index(flag) + 1] == str(extra[0])
 
 
 def test_codex_remote_access_is_scoped_to_workspace_write():

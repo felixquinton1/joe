@@ -1,3 +1,4 @@
+import io
 import json
 import subprocess
 from datetime import datetime
@@ -12,6 +13,8 @@ from joe.usage import (
     normalize_codex_usage,
 )
 from joe.usage_claude import claude_account_plan
+from joe.usage_claude import refresh_claude_noninteractive
+from joe.usage_codex import codex_status, windows_aware_executable
 
 
 def test_normalize_codex_usage_windows():
@@ -37,6 +40,68 @@ def test_normalize_codex_usage_windows():
     assert status["plan"] == "plus"
     assert status["windows"][0]["remaining_percent"] == 74.5
     assert status["windows"][1]["remaining_percent"] == 20
+
+
+def test_codex_executable_uses_appdata_npm_shim(monkeypatch, tmp_path):
+    from joe import usage_codex
+
+    npm = tmp_path / "npm"
+    npm.mkdir()
+    shim = npm / "codex.cmd"
+    shim.write_text("@echo off", encoding="utf-8")
+    monkeypatch.setattr(usage_codex.os, "name", "nt")
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+
+    class Resolver:
+        @staticmethod
+        def which(_name):
+            return None
+
+    assert windows_aware_executable("codex", Resolver) == str(shim)
+
+
+def test_codex_status_reads_json_lines_without_selectors():
+    class Process:
+        def __init__(self):
+            self.stdin = io.BytesIO()
+            self.stdout = io.BytesIO(
+                b'{"id":1,"result":{}}\n'
+                b'{"id":2,"result":{"rateLimits":{"primary":'
+                b'{"usedPercent":12,"windowDurationMins":300}}}}\n'
+            )
+
+        def terminate(self):
+            return None
+
+        def wait(self, timeout=None):
+            return 0
+
+        def kill(self):
+            return None
+
+    class Runner:
+        PIPE = subprocess.PIPE
+        DEVNULL = subprocess.DEVNULL
+        TimeoutExpired = subprocess.TimeoutExpired
+
+        @staticmethod
+        def Popen(*args, **kwargs):
+            return Process()
+
+    class Resolver:
+        @staticmethod
+        def which(name):
+            return "codex.cmd"
+
+    status = codex_status(
+        "test",
+        lambda provider, message: {"provider": provider, "message": message},
+        subprocess_module=Runner,
+        shutil_module=Resolver,
+    )
+
+    assert status["available"] is True
+    assert status["windows"][0]["remaining_percent"] == 88
 
 
 def test_claude_account_plan_uses_authenticated_subscription():
@@ -289,6 +354,53 @@ def test_parse_current_claude_usage_format_with_duplicate_percentages():
     assert status["windows"][0]["remaining_percent"] == 34
     assert status["windows"][1]["remaining_percent"] == 79
     assert all(window["resets_at"] for window in status["windows"])
+
+
+def test_parse_windows_claude_usage_format_with_colons_and_lowercase_resets():
+    status = _parse_claude_usage_screen(
+        """
+        Current session: 1% used · resets Aug 8, 10:29pm (Europe/Paris)
+        Current week (all models): 94% used · resets Aug 11, 5:59am (Europe/Paris)
+        """,
+        now=datetime.fromisoformat("2026-08-08T15:00:00+02:00"),
+        plan="pro",
+    )
+
+    assert status is not None
+    assert status["stale"] is False
+    assert status["plan"] == "pro"
+    assert status["windows"][0]["remaining_percent"] == 99
+    assert status["windows"][1]["remaining_percent"] == 6
+
+
+def test_claude_noninteractive_refresh_parses_usage(monkeypatch):
+    class Runner:
+        TimeoutExpired = subprocess.TimeoutExpired
+
+        @staticmethod
+        def run(*args, **kwargs):
+            return subprocess.CompletedProcess(
+                args[0],
+                0,
+                stdout=(
+                    "Current session: 2% used · resets Aug 8, 10pm\n"
+                    "Current week (all models): 20% used · resets Aug 11, 6am\n"
+                ),
+                stderr="",
+            )
+
+    monkeypatch.setattr(
+        "joe.usage_claude.windows_aware_executable", lambda name: "claude.cmd"
+    )
+    status = refresh_claude_noninteractive(
+        10,
+        parse_screen=_parse_claude_usage_screen,
+        subprocess_module=Runner,
+    )
+
+    assert status is not None
+    assert status["stale"] is False
+    assert status["windows"][0]["remaining_percent"] == 98
 
 
 def test_gemini_status_explains_api_key_quota(tmp_path):

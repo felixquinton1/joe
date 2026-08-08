@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import selectors
 import shutil
 import subprocess
 import threading
@@ -589,8 +588,6 @@ def _codex_status() -> dict[str, Any]:
         __version__,
         _unavailable,
         subprocess_module=subprocess,
-        selectors_module=selectors,
-        os_module=os,
         time_module=time,
     )
 

@@ -83,6 +83,13 @@ def refresh_claude_status(
     os_module=os,
     time_module=time,
 ) -> dict[str, Any]:
+    direct = refresh_claude_noninteractive(
+        timeout,
+        parse_screen=parse_screen,
+        subprocess_module=subprocess_module,
+    )
+    if direct:
+        return direct
     tmux_status = refresh_via_tmux(timeout)
     if tmux_status:
         return tmux_status
@@ -143,6 +150,39 @@ def refresh_claude_status(
     )
     fallback["stale"] = True
     return fallback
+
+
+def refresh_claude_noninteractive(
+    timeout: int,
+    *,
+    parse_screen: Callable[[str], dict[str, Any] | None],
+    subprocess_module=subprocess,
+) -> dict[str, Any] | None:
+    """Read Claude subscription usage without requiring a terminal emulator."""
+    executable = windows_aware_executable("claude") or "claude"
+    try:
+        result = subprocess_module.run(
+            [executable, "-p", "/usage", "--permission-mode", "plan"],
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+            env={**os.environ, "DISABLE_AUTOUPDATER": "1"},
+        )
+    except (OSError, subprocess_module.TimeoutExpired):
+        return None
+    if result.returncode:
+        return None
+    return parse_screen(result.stdout)
+
+
+def windows_aware_executable(name: str, shutil_module=shutil) -> str | None:
+    """Prefer npm's executable batch shim on Windows when one exists."""
+    if os.name == "nt":
+        command = shutil_module.which(f"{name}.cmd")
+        if command:
+            return command
+    return shutil_module.which(name)
 
 
 def refresh_claude_via_tmux(
@@ -223,18 +263,18 @@ def parse_claude_usage_screen(
     patterns = (
         (
             "5 heures",
-            r"Current session\s+(\d+(?:\.\d+)?)%.*?used\s+Resets ([^\r\n]+)",
+            r"Current session:?\s+(\d+(?:\.\d+)?)%.*?used.*?resets\s+([^\r\n]+)",
             300,
         ),
         (
             "7 jours",
-            r"Current week \(all models\)\s+(\d+(?:\.\d+)?)%.*?used\s+Resets ([^\r\n]+)",
+            r"Current week \(all models\):?\s+(\d+(?:\.\d+)?)%.*?used.*?resets\s+([^\r\n]+)",
             10080,
         ),
     )
     windows = []
     for name, pattern, duration in patterns:
-        match = re.search(pattern, text, re.DOTALL)
+        match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
         if not match:
             continue
         used = max(0.0, min(100.0, float(match.group(1))))
@@ -281,9 +321,10 @@ def claude_account_plan(
     subprocess_module=subprocess,
     timeout: int = 3,
 ) -> str | None:
+    executable = windows_aware_executable("claude") or "claude"
     try:
         result = subprocess_module.run(
-            ["claude", "auth", "status"],
+            [executable, "auth", "status"],
             text=True,
             capture_output=True,
             timeout=timeout,

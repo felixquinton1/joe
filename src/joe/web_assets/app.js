@@ -1853,6 +1853,9 @@ $("open-automation").onclick = () => automation.open().catch(
 $("save-automation").onclick = event => automation.save(event).catch(
   error => window.alert(error.message)
 );
+$("start-parkinsons-autonomous").onclick = () => automation.startParkinsons().catch(
+  error => window.alert(error.message)
+);
 $("open-project-skills").onclick = () => {
   const conversation = state.conversations.find(
     item => item.id === state.activeConversationId

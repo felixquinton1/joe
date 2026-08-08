@@ -14,6 +14,8 @@ from typing import Any
 from .capabilities import select_model, select_model_tier
 from .approvals import ApprovalStore
 from .automations import AutomationStore, START_MODES
+from .autonomous import AutonomousStore, TERMINAL_STATUSES
+from .experiment_runner import run_experiment
 from .conversations import ConversationStore, FREE_PROJECT_ID, _ai_access
 from .documents import extract_document_text
 from .files import FileLibrary
@@ -155,6 +157,9 @@ class RunManager:
         self.approvals.ensure()
         self.automations = AutomationStore(self.orchestrator.memory.root)
         self.automations.ensure()
+        self.autonomous = AutonomousStore(self.orchestrator.memory.root)
+        self.autonomous.ensure()
+        self._autonomous_experiments: set[str] = set()
         for task in self.tasks.list():
             if task.get("status") in {"integrating", "resolving"}:
                 if (
@@ -911,11 +916,12 @@ class RunManager:
             }
             return
         workspace = run.workspace or self.project
-        delivery = _web_facade().deliver(
-            workspace,
-            report,
-            "chore: apply validated Joe changes",
-        )
+        commit_message = "chore: apply validated Joe changes"
+        if run.request.startswith("Campagne Autonomous"):
+            headline = run.request.splitlines()[0]
+            label = headline.replace("Campagne Autonomous", "").strip(" «»—-.")
+            commit_message = f"chore(autonomous): checkpoint {label}"[:120]
+        delivery = _web_facade().deliver(workspace, report, commit_message)
         report["delivery"] = delivery
         if delivery.get("status") not in {"pushed", "committed"}:
             return
@@ -1121,9 +1127,213 @@ class RunManager:
         while not self._automation_stop.wait(2):
             try:
                 self._advance_automations()
+                self._advance_autonomous()
             except Exception:
                 # One malformed plan must not stop the durable scheduler.
                 continue
+
+    def list_autonomous(self) -> list[dict[str, Any]]:
+        return self.autonomous.list()
+
+    def create_autonomous(self, payload: dict[str, Any]) -> dict[str, Any]:
+        conversation_id = str(payload.get("conversation_id", ""))
+        conversation = self.conversations.get(conversation_id)
+        if not conversation:
+            raise ValueError("Choisis une conversation valide.")
+        execution_mode = str(payload.get("execution_mode", "workspace-write"))
+        if execution_mode != "workspace-write":
+            raise ValueError("Une campagne expérimentale nécessite l'écriture projet.")
+        project_id = str(conversation.get("project_id", FREE_PROJECT_ID))
+        workspace, _, _, _ = self._project_scope(conversation_id)
+        checks = (
+            (["rev-parse", "--is-inside-work-tree"], "un dépôt Git initialisé"),
+            (["remote", "get-url", "origin"], "un dépôt distant privé nommé origin"),
+        )
+        for arguments, requirement in checks:
+            result = subprocess.run(
+                ["git", "-C", str(workspace), *arguments],
+                capture_output=True, text=True, check=False,
+            )
+            if result.returncode:
+                raise ValueError(f"Autonomous exige {requirement} avant de démarrer.")
+        dirty = subprocess.run(
+            ["git", "-C", str(workspace), "status", "--porcelain"],
+            capture_output=True, text=True, check=False,
+        )
+        if dirty.stdout.strip():
+            raise ValueError(
+                "Le dépôt doit être propre avant Autonomous afin d'attribuer chaque changement à la bonne itération."
+            )
+        self.conversations.update_project(project_id, {"auto_commit_push": True})
+        return self.autonomous.create(
+            title=payload.get("title", ""),
+            project_id=project_id,
+            conversation_id=conversation_id,
+            objective=payload.get("objective", ""),
+            research_protocol=payload.get("research_protocol", ""),
+            data_policy=payload.get("data_policy", ""),
+            command=payload.get("command"),
+            working_directory=payload.get("working_directory", "."),
+            metrics_path=payload.get("metrics_path", "metrics.json"),
+            metric_name=payload.get("metric_name", "score"),
+            metric_direction=payload.get("metric_direction", "max"),
+            timeout_seconds=payload.get("timeout_seconds", 600),
+            max_iterations=payload.get("max_iterations", 3),
+            mode=payload.get("mode", "review"),
+            execution_mode=execution_mode,
+        )
+
+    def cancel_autonomous(self, campaign_id: str) -> dict[str, Any] | None:
+        campaign = self.autonomous.get(campaign_id)
+        if not campaign:
+            return None
+        if campaign.get("current_run_id"):
+            self.cancel(str(campaign["current_run_id"]))
+        return self.autonomous.cancel(campaign_id)
+
+    def _advance_autonomous(self) -> None:
+        for campaign in self.autonomous.list():
+            if campaign.get("status") in TERMINAL_STATUSES:
+                continue
+            run_id = campaign.get("current_run_id")
+            if run_id:
+                task = self.tasks.get(str(run_id))
+                if not task or task.get("status") in {"failed", "cancelled", "conflict"}:
+                    self.autonomous.update(
+                        campaign["id"], status="blocked", current_run_id=None,
+                        error=(task or {}).get("error") or "Le run Joe a échoué.",
+                    )
+                    continue
+                if task.get("status") == "review":
+                    try:
+                        self.integrate_task(str(run_id))
+                    except WorktreeError as error:
+                        self.autonomous.update(
+                            campaign["id"], status="blocked", error=str(error),
+                        )
+                    continue
+                if task.get("status") in {"running", "waiting_quota", "integrating", "resolving"}:
+                    continue
+                if task.get("status") in {"completed", "integrated"}:
+                    next_phase = "planning" if campaign.get("phase") == "research" else "experiment"
+                    self.autonomous.update(
+                        campaign["id"], status="scheduled", phase=next_phase,
+                        current_run_id=None, error=None,
+                    )
+                    continue
+            phase = campaign.get("phase", "research")
+            if phase == "experiment":
+                if campaign["id"] not in self._autonomous_experiments:
+                    self._start_autonomous_experiment(campaign)
+                continue
+            if phase == "evaluation":
+                self._finish_autonomous_iteration(campaign)
+                continue
+            if self.has_active_conversation(str(campaign["conversation_id"])):
+                continue
+            iteration = int(campaign.get("iteration", 0)) + 1
+            if phase == "research":
+                prompt = self._autonomous_research_prompt(campaign)
+                status = "researching"
+            else:
+                prompt = self._autonomous_iteration_prompt(campaign, iteration)
+                status = "planning"
+            try:
+                run = self.start(
+                    prompt, str(campaign["conversation_id"]), None,
+                    str(campaign.get("mode") or "review"), None, None,
+                    str(campaign.get("execution_mode") or "workspace-write"),
+                )
+            except ActiveConversationError:
+                continue
+            self.autonomous.update(
+                campaign["id"], status=status, current_run_id=run.run_id,
+                iteration=(0 if phase == "research" else iteration), error=None,
+            )
+
+    def _start_autonomous_experiment(self, campaign: dict[str, Any]) -> None:
+        campaign_id = str(campaign["id"])
+        self._autonomous_experiments.add(campaign_id)
+        self.autonomous.update(campaign_id, status="experimenting")
+
+        def execute() -> None:
+            try:
+                workspace, _, _, _ = self._project_scope(str(campaign["conversation_id"]))
+                result = run_experiment(
+                    list(campaign["command"]), workspace,
+                    self.orchestrator.memory.root / "autonomous" / campaign_id / "experiments",
+                    working_directory=str(campaign.get("working_directory", ".")),
+                    metrics_path=str(campaign.get("metrics_path", "metrics.json")),
+                    timeout_seconds=int(campaign.get("timeout_seconds", 600)),
+                )
+                self.autonomous.add_event(campaign_id, "experiment", result)
+                self.autonomous.update(
+                    campaign_id, status="evaluating", phase="evaluation",
+                    current_experiment_id=result["id"], error=result.get("error"),
+                )
+            except Exception as error:
+                self.autonomous.update(
+                    campaign_id, status="blocked", error=str(error),
+                )
+            finally:
+                self._autonomous_experiments.discard(campaign_id)
+
+        threading.Thread(target=execute, daemon=True).start()
+
+    def _finish_autonomous_iteration(self, campaign: dict[str, Any]) -> None:
+        history = campaign.get("history") or []
+        result = next((item for item in reversed(history) if item.get("kind") == "experiment"), {})
+        metric = (result.get("metrics") or {}).get(campaign.get("metric_name"))
+        best = campaign.get("best_metric")
+        if isinstance(metric, (int, float)) and (
+            best is None or (campaign.get("metric_direction") == "min" and metric < best)
+            or (campaign.get("metric_direction") != "min" and metric > best)
+        ):
+            best = metric
+        message = (
+            f"### Autonomous — itération {campaign.get('iteration')}\n\n"
+            f"Expérience **{result.get('status', 'inconnue')}** en "
+            f"{result.get('duration_seconds', '?')} s. Métriques : "
+            f"`{json.dumps(result.get('metrics') or {}, ensure_ascii=False)}`."
+        )
+        self.conversations.append_message(str(campaign["conversation_id"]), "assistant", message)
+        if int(campaign.get("iteration", 0)) >= int(campaign.get("max_iterations", 1)):
+            self.autonomous.update(
+                campaign["id"], status="completed", phase="done", best_metric=best,
+                error=None,
+            )
+        else:
+            self.autonomous.update(
+                campaign["id"], status="scheduled", phase="planning",
+                best_metric=best, current_experiment_id=None, error=None,
+            )
+
+    @staticmethod
+    def _autonomous_research_prompt(campaign: dict[str, Any]) -> str:
+        return (
+            f"Campagne Autonomous « {campaign['title']} » — phase de recherche.\n\n"
+            f"Objectif : {campaign['objective']}\n\n"
+            f"Protocole : {campaign.get('research_protocol') or 'Consulte la documentation publique et les approches comparables.'}\n\n"
+            f"Politique de données impérative : {campaign.get('data_policy') or 'Ne transmets aucune donnée privée ou restreinte à un fournisseur IA.'}\n\n"
+            "Recherche uniquement des sources publiques. Consigne une synthèse sourcée dans "
+            "AUTONOMOUS_RESEARCH.md. N'inspecte, ne joins et ne recopie aucune donnée restreinte. "
+            "Ne lance pas encore l'expérience."
+        )
+
+    @staticmethod
+    def _autonomous_iteration_prompt(campaign: dict[str, Any], iteration: int) -> str:
+        last = next((item for item in reversed(campaign.get("history") or []) if item.get("kind") == "experiment"), None)
+        feedback = json.dumps(last or {}, ensure_ascii=False)[:10000]
+        return (
+            f"Campagne Autonomous « {campaign['title']} » — itération {iteration}/{campaign['max_iterations']}.\n\n"
+            f"Objectif : {campaign['objective']}\n"
+            f"Politique de données : {campaign.get('data_policy')}\n\n"
+            f"Dernier résultat structuré : {feedback}\n\n"
+            "Lis AUTONOMOUS_RESEARCH.md et l'état actuel du projet. Fais une seule amélioration "
+            "méthodologique ciblée ou corrige le crash observé. Tu peux modifier le code et lancer "
+            "des tests courts, mais ne lance pas la commande d'expérience principale : Joe la lancera "
+            "et détectera seul succès, crash ou timeout. Termine par un résumé concis."
+        )
 
     def _advance_automations(self, now: float | None = None) -> None:
         timestamp = time.time() if now is None else now

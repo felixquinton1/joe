@@ -140,7 +140,7 @@ class AutomationStore:
     def _read(self) -> dict[str, Any]:
         for path in (self.path, self.backup_path):
             try:
-                payload = json.loads(path.read_text())
+                payload = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 continue
             if isinstance(payload, dict) and isinstance(payload.get("plans"), list):
@@ -150,10 +150,12 @@ class AutomationStore:
     def _write(self, payload: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(".tmp")
-        temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+        temporary.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         if self.path.exists():
             try:
-                current = json.loads(self.path.read_text())
+                current = json.loads(self.path.read_text(encoding="utf-8"))
                 if isinstance(current, dict) and isinstance(current.get("plans"), list):
                     shutil.copy2(self.path, self.backup_path)
             except (OSError, json.JSONDecodeError):

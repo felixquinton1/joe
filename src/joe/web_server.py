@@ -197,6 +197,9 @@ class Handler(BaseHTTPRequestHandler):
     def _get_automations(self) -> None:
         self._json(self.server.manager.list_automations())
 
+    def _get_autonomous(self) -> None:
+        self._json(self.server.manager.list_autonomous())
+
     def _get_approvals(self) -> None:
         self._json(self.server.manager.approvals.list(status="pending"))
 
@@ -289,6 +292,22 @@ class Handler(BaseHTTPRequestHandler):
         except (TypeError, ValueError) as error:
             return self._json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
         self._json(plan, HTTPStatus.CREATED)
+
+    def _post_autonomous(self) -> None:
+        payload = self._read_payload()
+        if payload is None:
+            return
+        try:
+            campaign = self.server.manager.create_autonomous(payload)
+        except (TypeError, ValueError) as error:
+            return self._json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+        self._json(campaign, HTTPStatus.CREATED)
+
+    def _post_autonomous_cancel(self, campaign_id: str) -> None:
+        campaign = self.server.manager.cancel_autonomous(campaign_id)
+        self._json(
+            campaign or {}, HTTPStatus.ACCEPTED if campaign else HTTPStatus.NOT_FOUND,
+        )
 
     def _post_automation_cancel(self, plan_id: str) -> None:
         plan = self.server.manager.cancel_automation(plan_id)

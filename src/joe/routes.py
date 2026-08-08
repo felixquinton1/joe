@@ -83,6 +83,7 @@ ROUTES: tuple[Route, ...] = (
     _route("GET", "/api/tasks", "_get_tasks", "viewer"),
     _route("GET", "/api/tasks/{task_id}/diff", "_get_task_diff", "viewer"),
     _route("GET", "/api/automations", "_get_automations", "viewer"),
+    _route("GET", "/api/autonomous", "_get_autonomous", "viewer"),
     _route("GET", "/api/approvals", "_get_approvals", "viewer"),
     # Lire les projets reste accessible : Joe Web en a besoin pour se rendre.
     _route("GET", "/api/projects", "_get_projects", "viewer"),
@@ -100,6 +101,11 @@ ROUTES: tuple[Route, ...] = (
     _route("POST", "/api/runs/{run_id}/reject", "_post_run_reject", "maintainer"),
     _route("POST", "/api/tasks/{task_id}/integrate", "_post_task_integrate", "maintainer"),
     _route("POST", "/api/automations", "_post_automations", "maintainer"),
+    _route("POST", "/api/autonomous", "_post_autonomous", "maintainer"),
+    _route(
+        "POST", "/api/autonomous/{campaign_id}/cancel",
+        "_post_autonomous_cancel", "maintainer",
+    ),
     _route(
         "POST",
         "/api/automations/{plan_id}/cancel",

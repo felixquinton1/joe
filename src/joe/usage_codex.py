@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 import os
-import selectors
+import queue
+import shutil
 import subprocess
+import threading
 import time
+from pathlib import Path
 from typing import Any, Callable
 
 
@@ -13,9 +16,10 @@ def codex_status(
     unavailable: Callable[[str, str], dict[str, Any]],
     *,
     subprocess_module=subprocess,
-    selectors_module=selectors,
-    os_module=os,
     time_module=time,
+    queue_module=queue,
+    threading_module=threading,
+    shutil_module=shutil,
 ) -> dict[str, Any]:
     initialize = {
         "id": 1,
@@ -26,44 +30,56 @@ def codex_status(
         },
     }
     try:
+        executable = windows_aware_executable("codex", shutil_module)
+        if not executable:
+            raise OSError("Codex executable unavailable")
         process = subprocess_module.Popen(
-            ["codex", "app-server", "--stdio"],
+            [executable, "app-server", "--stdio"],
             stdin=subprocess_module.PIPE,
             stdout=subprocess_module.PIPE,
             stderr=subprocess_module.DEVNULL,
+            env=codex_environment(),
         )
         if process.stdin is None or process.stdout is None:
             raise OSError("Codex stdio unavailable")
         send(process, initialize)
-        selector = selectors_module.DefaultSelector()
-        selector.register(process.stdout, selectors_module.EVENT_READ)
-        buffer = b""
+        messages: queue.Queue[bytes | None] = queue_module.Queue()
+
+        def read_stdout() -> None:
+            assert process.stdout is not None
+            try:
+                for raw in iter(process.stdout.readline, b""):
+                    messages.put(raw)
+            finally:
+                messages.put(None)
+
+        threading_module.Thread(target=read_stdout, daemon=True).start()
         deadline = time_module.monotonic() + 8
         while time_module.monotonic() < deadline:
-            if not selector.select(timeout=0.25):
+            try:
+                raw = messages.get(
+                    timeout=min(0.25, max(0.0, deadline - time_module.monotonic()))
+                )
+            except queue_module.Empty:
                 continue
-            chunk = os_module.read(process.stdout.fileno(), 65536)
-            if not chunk:
+            if raw is None:
                 break
-            buffer += chunk
-            while b"\n" in buffer:
-                raw, buffer = buffer.split(b"\n", 1)
-                try:
-                    message = json.loads(raw)
-                except json.JSONDecodeError:
-                    continue
-                if message.get("id") == 1:
-                    send(process, {"method": "initialized", "params": {}})
-                    send(
-                        process,
-                        {
-                            "id": 2,
-                            "method": "account/rateLimits/read",
-                            "params": None,
-                        },
-                    )
-                if message.get("id") == 2 and isinstance(message.get("result"), dict):
-                    return normalize_codex_usage(message["result"])
+            try:
+                message = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if message.get("id") == 1:
+                send(process, {"method": "initialized", "params": {}})
+                send(
+                    process,
+                    {
+                        "id": 2,
+                        "method": "account/rateLimits/read",
+                        "params": None,
+                    },
+                )
+            if message.get("id") == 2 and isinstance(message.get("result"), dict):
+                return normalize_codex_usage(message["result"])
     except OSError:
         return unavailable("codex", "Quota Codex temporairement indisponible")
     finally:
@@ -74,6 +90,33 @@ def codex_status(
             except subprocess_module.TimeoutExpired:
                 process.kill()
     return unavailable("codex", "Quota Codex temporairement indisponible")
+
+
+def windows_aware_executable(name: str, shutil_module=shutil) -> str | None:
+    """Prefer npm's executable batch shim on Windows when one exists."""
+    if os.name == "nt":
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            npm_shim = Path(appdata) / "npm" / f"{name}.cmd"
+            if npm_shim.is_file():
+                return str(npm_shim)
+        command = shutil_module.which(f"{name}.cmd")
+        if command:
+            return command
+    return shutil_module.which(name)
+
+
+def codex_environment() -> dict[str, str]:
+    """Give npm shims access to Node even when Joe starts before PATH refresh."""
+    environment = dict(os.environ)
+    candidates = [
+        Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "nodejs",
+        Path(os.environ.get("APPDATA", "")) / "npm",
+    ]
+    additions = [str(path) for path in candidates if path.is_dir()]
+    current = environment.get("PATH", "")
+    environment["PATH"] = os.pathsep.join(additions + ([current] if current else []))
+    return environment
 
 
 def send(process: subprocess.Popen[bytes], message: dict[str, Any]) -> None:

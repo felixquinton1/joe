@@ -44,6 +44,17 @@ RESTRICTED_MODES = {"dontAsk"}
 NETWORK_CONTROLLED_PROVIDERS = ("codex",)
 
 
+def windows_aware_executable(
+    name: str, *, os_module=os, shutil_module=shutil
+) -> str | None:
+    """Resolve npm CLI shims to their executable Windows batch wrapper."""
+    if os_module.name == "nt":
+        command = shutil_module.which(f"{name}.cmd")
+        if command:
+            return command
+    return shutil_module.which(name)
+
+
 def _access_level(execution_mode: str | None, modifying: bool) -> str:
     if execution_mode in READ_ONLY_MODES:
         return "read"
@@ -233,7 +244,8 @@ class Provider:
         cancel_event: threading.Event | None = None,
         on_stream: StreamCallback | None = None,
     ) -> ProviderResult:
-        if not shutil.which(self.executable):
+        executable = windows_aware_executable(self.executable)
+        if not executable:
             return ProviderResult(
                 self.name, [self.executable], "", "executable not found", 127, 0,
                 error_kind="unavailable",
@@ -241,6 +253,7 @@ class Provider:
         command = self.command(
             prompt, cwd, intent, model, effort, execution_mode
         )
+        command[0] = executable
         env = os.environ.copy()
         secret_values = _secret_values(env)
         start = time.monotonic()

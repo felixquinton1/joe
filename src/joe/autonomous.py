@@ -1,0 +1,143 @@
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import threading
+import time
+import uuid
+from pathlib import Path
+from typing import Any
+
+
+TERMINAL_STATUSES = {"completed", "cancelled", "blocked"}
+STATUSES = TERMINAL_STATUSES | {
+    "scheduled", "researching", "planning", "experimenting", "evaluating"
+}
+
+
+class AutonomousStore:
+    """Durable state for bounded research/experiment campaigns."""
+
+    def __init__(self, root: Path):
+        self.path = root / "autonomous.json"
+        self.backup_path = root / "autonomous.json.bak"
+        self.lock = threading.RLock()
+
+    def ensure(self) -> None:
+        with self.lock:
+            if not self.path.exists():
+                self._write({"version": 1, "campaigns": []})
+            else:
+                self._read()
+
+    def create(self, **values: Any) -> dict[str, Any]:
+        objective = " ".join(str(values.get("objective", "")).split()).strip()
+        command = values.get("command")
+        if not objective:
+            raise ValueError("Décris l'objectif de la campagne.")
+        if not isinstance(command, list) or not command or not all(
+            isinstance(part, str) and part for part in command
+        ):
+            raise ValueError("La commande d'expérience doit être une liste non vide.")
+        now = time.time()
+        campaign = {
+            "id": uuid.uuid4().hex,
+            "title": str(values.get("title", "")).strip()[:100] or objective[:100],
+            "project_id": str(values["project_id"]),
+            "conversation_id": str(values["conversation_id"]),
+            "objective": objective[:8000],
+            "research_protocol": str(values.get("research_protocol", ""))[:8000],
+            "data_policy": str(values.get("data_policy", ""))[:4000],
+            "command": command[:32],
+            "working_directory": str(values.get("working_directory", ".")),
+            "metrics_path": str(values.get("metrics_path", "metrics.json")),
+            "metric_name": str(values.get("metric_name", "score"))[:100],
+            "metric_direction": "min" if values.get("metric_direction") == "min" else "max",
+            "timeout_seconds": max(5, min(10800, int(values.get("timeout_seconds", 600)))),
+            "max_iterations": max(1, min(50, int(values.get("max_iterations", 3)))),
+            "mode": str(values.get("mode", "review")),
+            "execution_mode": str(values.get("execution_mode", "workspace-write")),
+            "status": "scheduled",
+            "phase": "research",
+            "iteration": 0,
+            "current_run_id": None,
+            "current_experiment_id": None,
+            "best_metric": None,
+            "history": [],
+            "error": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+        with self.lock:
+            payload = self._read()
+            payload["campaigns"].append(campaign)
+            self._write(payload)
+        return dict(campaign)
+
+    def list(self) -> list[dict[str, Any]]:
+        with self.lock:
+            return sorted(
+                (dict(item) for item in self._read()["campaigns"]),
+                key=lambda item: float(item.get("updated_at", 0)), reverse=True,
+            )
+
+    def get(self, campaign_id: str) -> dict[str, Any] | None:
+        with self.lock:
+            item = self._find(self._read(), campaign_id)
+            return dict(item) if item else None
+
+    def update(self, campaign_id: str, **changes: Any) -> dict[str, Any] | None:
+        allowed = {
+            "status", "phase", "iteration", "current_run_id",
+            "current_experiment_id", "best_metric", "history", "error",
+        }
+        with self.lock:
+            payload = self._read()
+            item = self._find(payload, campaign_id)
+            if not item:
+                return None
+            item.update({key: value for key, value in changes.items() if key in allowed})
+            if item.get("status") not in STATUSES:
+                item["status"] = "blocked"
+            item["updated_at"] = time.time()
+            self._write(payload)
+            return dict(item)
+
+    def add_event(self, campaign_id: str, kind: str, details: dict[str, Any]) -> None:
+        item = self.get(campaign_id)
+        if not item:
+            return
+        history = list(item.get("history") or [])
+        history.append({"at": time.time(), "kind": kind, **details})
+        self.update(campaign_id, history=history[-100:])
+
+    def cancel(self, campaign_id: str) -> dict[str, Any] | None:
+        return self.update(campaign_id, status="cancelled", error=None)
+
+    def _read(self) -> dict[str, Any]:
+        for path in (self.path, self.backup_path):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if isinstance(payload, dict) and isinstance(payload.get("campaigns"), list):
+                return payload
+        return {"version": 1, "campaigns": []}
+
+    def _write(self, payload: dict[str, Any]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        if self.path.exists():
+            try:
+                current = json.loads(self.path.read_text(encoding="utf-8"))
+                if isinstance(current, dict) and isinstance(current.get("campaigns"), list):
+                    shutil.copy2(self.path, self.backup_path)
+            except (OSError, json.JSONDecodeError):
+                pass
+        os.replace(temporary, self.path)
+
+    @staticmethod
+    def _find(payload: dict[str, Any], campaign_id: str) -> dict[str, Any] | None:
+        return next((item for item in payload["campaigns"] if item.get("id") == campaign_id), None)

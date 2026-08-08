@@ -76,7 +76,7 @@ class ConversationStore:
         for backup in self._backup_candidates():
             if backup.exists():
                 try:
-                    self._write(json.loads(backup.read_text()))
+                    self._write(json.loads(backup.read_text(encoding="utf-8")))
                     return
                 except (OSError, json.JSONDecodeError):
                     continue
@@ -584,7 +584,7 @@ class ConversationStore:
             self.ensure()
         for path in (self.path, *self._backup_candidates()):
             try:
-                payload = json.loads(path.read_text())
+                payload = json.loads(path.read_text(encoding="utf-8"))
                 return self._normalize(payload)
             except (OSError, json.JSONDecodeError):
                 continue
@@ -596,7 +596,7 @@ class ConversationStore:
         messages = []
         for path in sorted(self.runs.glob("*.json")):
             try:
-                run = json.loads(path.read_text())
+                run = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 continue
             if run.get("request"):
@@ -729,7 +729,8 @@ class ConversationStore:
         if target.exists():
             return
         target.write_text(
-            json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+            json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
         )
         target.chmod(0o600)
 
@@ -741,7 +742,7 @@ class ConversationStore:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.parent.chmod(0o700)
             tmp = path.with_suffix(path.suffix + ".tmp")
-            tmp.write_text(content)
+            tmp.write_text(content, encoding="utf-8")
             tmp.chmod(0o600)
             os.replace(tmp, path)
 
@@ -766,7 +767,7 @@ class ConversationStore:
             return
         daily.mkdir(parents=True, exist_ok=True)
         daily.chmod(0o700)
-        target.write_text(content)
+        target.write_text(content, encoding="utf-8")
         target.chmod(0o600)
 
     def _backup_candidates(self) -> tuple[Path, ...]:
