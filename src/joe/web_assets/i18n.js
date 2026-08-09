@@ -103,6 +103,7 @@
       ,scheduled: "Planifiée", blocked: "Bloquée", paused: "En pause", planning: "Planification", research: "Recherche",
       experimenting: "Expérimentation", evaluating: "Évaluation", crashed: "Crash", timed_out: "Délai dépassé",
       unverified: "non vérifié", comparable_status: "comparable"
+      ,compute: "calcul", longest_run: "run le plus long", substantive_runs: "runs substantiels", gpu_measured: "GPU mesuré"
     },
     en: {
       language: "Language",
@@ -203,6 +204,7 @@
       ,scheduled: "Scheduled", blocked: "Blocked", paused: "Paused", planning: "Planning", research: "Research",
       experimenting: "Experimenting", evaluating: "Evaluating", crashed: "Crashed", timed_out: "Timed out",
       unverified: "unverified", comparable_status: "comparable"
+      ,compute: "compute", longest_run: "longest run", substantive_runs: "substantive runs", gpu_measured: "measured GPU"
     }
   };
 

@@ -190,6 +190,10 @@ def test_autonomous_skill_keeps_objective_and_invariants_in_every_prompt():
     assert "Minimize model calls" in skill
     assert "accelerated approach" in skill
     assert "substantive runs" in skill
+    assert "undertrained configuration" in skill
+    assert "hours of local computation" in skill
+    assert "compute_scale_audit" in iteration
+    assert "dette de run substantiel" in iteration
     assert "results plateau" in skill
     assert skill in research
     assert skill in iteration

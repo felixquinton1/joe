@@ -9,6 +9,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from .autonomous_resources import normalize_resource_policy
+from .autonomous_scale import MAX_CAMPAIGN_SECONDS
 
 
 def parse_autonomous_request(request: str) -> dict[str, Any] | None:
@@ -134,13 +135,14 @@ def _resource_policy_from_request(text: str) -> dict[str, Any]:
 
 def _duration_seconds(text: str) -> int:
     explicit = re.search(
-        r"pendant\s+(\d+(?:[.,]\d+)?)\s*(heures?|hours?|hrs?|h|min(?:utes?)?)\b",
+        r"pendant\s+(\d+(?:[.,]\d+)?)\s*(semaines?|weeks?|jours?|days?|heures?|hours?|hrs?|h|min(?:utes?)?)\b",
         text,
     )
     if explicit:
         value = float(explicit.group(1).replace(",", "."))
-        multiplier = 60 if explicit.group(2).startswith("min") else 3600
-        return max(60, min(604800, round(value * multiplier)))
+        unit = explicit.group(2)
+        multiplier = 60 if unit.startswith("min") else 86400 if unit.startswith(("jour", "day")) else 604800 if unit.startswith(("semaine", "week")) else 3600
+        return max(60, min(MAX_CAMPAIGN_SECONDS, round(value * multiplier)))
     window = re.search(
         r"(?:de|entre)\s*(\d{1,2})(?:\s*h(?:\s*(\d{1,2}))?)?\s*(?:a|et)\s*"
         r"(\d{1,2})(?:\s*h(?:\s*(\d{1,2}))?)?",
@@ -151,12 +153,13 @@ def _duration_seconds(text: str) -> int:
         end = int(window.group(3)) * 60 + int(window.group(4) or 0)
         minutes = (end - start) % (24 * 60)
         return max(60, minutes * 60)
-    match = re.search(r"(\d+(?:[.,]\d+)?)\s*(heures?|hours?|hrs?|h|min(?:utes?)?)\b", text)
+    match = re.search(r"(\d+(?:[.,]\d+)?)\s*(semaines?|weeks?|jours?|days?|heures?|hours?|hrs?|h|min(?:utes?)?)\b", text)
     if not match:
         return 3600
     value = float(match.group(1).replace(",", "."))
-    multiplier = 60 if match.group(2).startswith("min") else 3600
-    return max(60, min(604800, round(value * multiplier)))
+    unit = match.group(2)
+    multiplier = 60 if unit.startswith("min") else 86400 if unit.startswith(("jour", "day")) else 604800 if unit.startswith(("semaine", "week")) else 3600
+    return max(60, min(MAX_CAMPAIGN_SECONDS, round(value * multiplier)))
 
 
 def _integer_after(text: str, pattern: str, default: int, minimum: int, maximum: int) -> int:

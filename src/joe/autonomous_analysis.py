@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .autonomous_scale import scale_audit
+
 
 TOKEN_FIELDS = (
     "input_tokens", "output_tokens", "cache_read_tokens",
@@ -130,6 +132,8 @@ def analyze_campaign(campaign: dict[str, Any]) -> dict[str, Any]:
             "non_improving_streak": non_improving_streak,
         },
         "usage": usage,
+        "compute": scale_audit(campaign),
+        "compute_scale_policy": dict(campaign.get("compute_scale_policy") or {}),
         "checkpoints": [
             {"experiment_id": node["id"], **node["checkpoint"]}
             for node in nodes if node["checkpoint"].get("available")

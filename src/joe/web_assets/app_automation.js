@@ -39,12 +39,17 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     const summary = analysis.summary || {};
     const usage = analysis.usage || {};
     const budget = analysis.token_budget || {};
+    const compute = analysis.compute || {};
     const panel = document.createElement("details");
     panel.className = "autonomous-analysis";
     const heading = document.createElement("summary");
     heading.textContent = `${tr("experiment_tree")} · ${summary.comparable || 0}/${summary.final || 0} ${tr("comparable")}, ${summary.partial || 0} ${tr("partial")} · ${tr("best")} ${formatMetric(summary.best_metric)}`;
     const meta = document.createElement("p");
     meta.textContent = `${analysis.metric_name || tr("metric")} (${analysis.metric_direction || "max"}) · ${(analysis.checkpoints || []).filter(item => item.resume_ready).length} checkpoint(s) · ${usage.prompts || 0} prompt(s) · ${usage.model_calls || 0}/${budget.max_model_calls ?? "∞"} call(s) · ${usage.known_tokens || 0}/${budget.max_tokens ?? tr("unbounded")} ${tr("known_tokens")}`;
+    const computeMeta = document.createElement("p");
+    computeMeta.className = "autonomous-compute-summary";
+    const gpu = compute.measured_gpu_utilization_pct;
+    computeMeta.textContent = `${tr("compute")} · ${tr("longest_run")} ${formatElapsed(Date.now() / 1000 - Number(compute.longest_run_seconds || 0))} · ${tr("substantive_runs")} ${compute.substantive_runs || 0}/${compute.minimum_substantive_runs || 0}${gpu === null || gpu === undefined ? "" : ` · ${tr("gpu_measured")} ${gpu}%`}`;
     const tree = document.createElement("ol");
     tree.className = "experiment-tree";
     for (const node of analysis.experiments || []) {
@@ -63,7 +68,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
       empty.textContent = tr("no_experiment");
       tree.appendChild(empty);
     }
-    panel.append(heading, meta, tree);
+    panel.append(heading, meta, computeMeta, tree);
     return panel;
   }
 

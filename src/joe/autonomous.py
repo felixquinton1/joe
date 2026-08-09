@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .autonomous_schedule import normalize_schedule
+from .autonomous_scale import MAX_CAMPAIGN_SECONDS, compute_scale_policy
 from .autonomous_state import (
     AutonomousState,
     infer_state,
@@ -35,6 +36,7 @@ def build_autonomous_skill(values: dict[str, Any]) -> str:
         f"## Research protocol\n{values.get('research_protocol') or 'Use relevant public documentation.'}\n\n"
         f"## Data policy\n{values.get('data_policy') or 'Do not disclose private data.'}\n\n"
         f"## Resource policy\n{json.dumps(values.get('resource_policy') or {'mode': 'auto'}, ensure_ascii=False)}\n\n"
+        f"## Compute scale policy\n{json.dumps(values.get('compute_scale_policy') or compute_scale_policy(int(values.get('max_duration_seconds', 3600)), values.get('resource_policy')), ensure_ascii=False)}\n\n"
         f"## Model-call and token budget\n{json.dumps(values.get('token_budget') or {}, ensure_ascii=False)}\n\n"
         "## Invariants\n"
         "- Never replace, weaken or silently reinterpret the primary objective.\n"
@@ -52,6 +54,10 @@ def build_autonomous_skill(values: dict[str, Any]) -> str:
         "- Parallelize independent preparation or experiments only when resources, data isolation and metric validity remain controlled; avoid GPU oversubscription.\n"
         "- Prefer fewer high-information experiments over many tiny prompts or low-impact tweaks. Timebox plumbing and repeated failures, then change strategy.\n"
         "- Long campaigns must perform substantive runs; do not remain indefinitely in toy-test mode.\n"
+        "- Treat smoke tests as plumbing checks, not candidate results. Once the pipeline is reliable, allocate the compute-scale policy's required budget to a small number of ambitious, checkpointed runs.\n"
+        "- A declared accelerated experiment is not substantive when measured accelerator use is negligible, unless a measured bottleneck or a scientifically superior non-accelerated branch is documented.\n"
+        "- Do not infer that an entire model family is weak from one undertrained configuration. Separate implementation failure, insufficient scale and genuine family-level evidence.\n"
+        "- For multi-day campaigns, prefer hours of local computation between model calls. Wake the model only for a result, crash, checkpoint decision, plateau, or changed evidence.\n"
         "- Revisit public literature whenever results plateau, contradict assumptions, reveal uncertainty or repeat failures.\n"
         "- Research refreshes are event-driven by new evidence; do not spend a model call on a periodic refresh without a decision it can change.\n"
         "- Preserve resumable checkpoints and the Git history after coherent changes.\n"
@@ -122,7 +128,7 @@ class AutonomousStore:
             "max_iterations": max(1, min(50, int(values.get("max_iterations", 3)))),
             "iteration_chunk": max(1, min(50, int(values.get("max_iterations", 3)))),
             "max_duration_seconds": max(
-                60, min(604800, int(values.get("max_duration_seconds", 3600)))
+                60, min(MAX_CAMPAIGN_SECONDS, int(values.get("max_duration_seconds", 3600)))
             ),
             "restricted_data": bool(values.get("restricted_data", False)),
             "preflight": dict(values.get("preflight") or {}),
@@ -134,6 +140,7 @@ class AutonomousStore:
                 5, min(1800, int(values.get("preflight_timeout_seconds", 300)))
             ),
             "resource_policy": dict(values.get("resource_policy") or {"mode": "auto"}),
+            "compute_scale_policy": {},
             "token_budget": dict(values.get("token_budget") or {}),
             "schedule": schedule,
             "resume_command": resume_command[:32],
@@ -169,6 +176,9 @@ class AutonomousStore:
             "created_at": now,
             "updated_at": now,
         }
+        campaign["compute_scale_policy"] = compute_scale_policy(
+            int(campaign["max_duration_seconds"]), campaign["resource_policy"]
+        )
         campaign["autonomous_skill"] = build_autonomous_skill(campaign)
         campaign["skill_path"] = f"autonomous/{campaign['id']}/SKILL.md"
         with self.lock:

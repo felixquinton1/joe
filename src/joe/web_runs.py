@@ -20,6 +20,7 @@ from .autonomous_analysis import analyze_campaign, iteration_report, metric_valu
 from .autonomous_state import AutonomousState, infer_state
 from .autonomous_builder import build_campaign_payload
 from .autonomous_schedule import schedule_state
+from .autonomous_scale import default_model_calls, scale_audit
 from .autonomous_resources import normalize_resource_policy
 from .experiment_runner import run_experiment, validate_experiment_command
 from .conversations import ConversationStore, FREE_PROJECT_ID, _ai_access
@@ -112,10 +113,12 @@ def _conversation_backup_path(project: Path) -> Path:
     return data_home / "joe" / "backups" / key / "conversations.json"
 
 
-def _normalize_token_budget(value: Any, iterations: int, mode: str) -> dict[str, int | None]:
+def _normalize_token_budget(
+    value: Any, iterations: int, mode: str, duration_seconds: int = 3600
+) -> dict[str, int | None]:
     raw = value if isinstance(value, dict) else {}
     multiplier = {"fast": 1, "review": 2, "consensus": 3}.get(mode, 2)
-    default_calls = max(1, (max(1, iterations) + 1) * multiplier)
+    default_calls = default_model_calls(iterations, mode, duration_seconds)
 
     def optional_positive(item: Any) -> int | None:
         try:
@@ -1301,6 +1304,7 @@ class RunManager:
             payload.get("token_budget"),
             int(payload.get("max_iterations", 3)),
             str(payload.get("mode", "review")),
+            int(payload.get("max_duration_seconds", 3600)),
         )
         preflight_metrics_path = str(
             payload.get("preflight_metrics_path", "artifacts/preflight.json")
@@ -1895,7 +1899,24 @@ class RunManager:
                 and int(refresh_iteration) >= streak_start
                 and iteration - int(refresh_iteration) >= patience
             )
+            scale = scale_audit(campaign)
+            ambition_outstanding = scale["substantive_run_debt"] > 0
             if plateau_exhausted:
+                if ambition_outstanding:
+                    self.autonomous.transition(
+                        campaign["id"], AutonomousState.READY,
+                        "scientific_plateau_requires_substantive_run", phase="planning",
+                        best_metric=best, current_experiment_id=None, error=None,
+                        plateau_refresh_iteration=iteration,
+                    )
+                    self.conversations.append_message(
+                        str(campaign["conversation_id"]), "assistant",
+                        "### Autonomous — montée en échelle requise\n\n"
+                        "Les petites expériences plafonnent, mais le budget de campagne prévoit encore "
+                        f"{scale['substantive_run_debt']} run(s) substantiel(s). Joe poursuit avec une "
+                        "expérience ambitieuse checkpointée au lieu d'arrêter sur ce plateau local.",
+                    )
+                    return
                 self.autonomous.transition(
                     campaign["id"], AutonomousState.COMPLETED,
                     "scientific_plateau_after_method_refresh", phase="done",
@@ -1963,6 +1984,8 @@ class RunManager:
         feedback = json.dumps(safe_last, ensure_ascii=False)[:10000]
         command_contract = json.dumps(campaign.get("command") or [], ensure_ascii=False)
         preflight_contract = json.dumps(campaign.get("preflight") or {}, ensure_ascii=False)
+        scale_policy = json.dumps(campaign.get("compute_scale_policy") or {}, ensure_ascii=False)
+        scale_status = json.dumps(scale_audit(campaign), ensure_ascii=False)
         return (
             f"<autonomous_skill>\n{skill}\n</autonomous_skill>\n\n"
             f"<experiment_contract>Commande obligatoire : {command_contract}; "
@@ -1979,6 +2002,8 @@ class RunManager:
             f"avec la métrique primaire {campaign.get('metric_name') or 'score'} afin que Joe suive le meilleur résultat."
             "</experiment_contract>\n\n"
             f"<deterministic_preflight>{preflight_contract}</deterministic_preflight>\n\n"
+            f"<compute_scale_policy>{scale_policy}</compute_scale_policy>\n"
+            f"<compute_scale_audit>{scale_status}</compute_scale_audit>\n\n"
             "Instruction prioritaire : relis et applique intégralement le skill Autonomous ci-dessus.\n\n"
             f"Campagne Autonomous « {campaign['title']} » — itération {iteration}/{campaign['max_iterations']}.\n\n"
             f"Objectif : {campaign['objective']}\n"
@@ -1999,6 +2024,8 @@ class RunManager:
             "et détectera seul succès, crash ou timeout. Choisis et justifie toi-même la validation, "
             "la montée en échelle des smoke tests vers des runs complets selon le matériel vérifié, "
             "la fenêtre active et le budget restant, "
+            "et traite toute dette de run substantiel signalée par l'audit comme une priorité : après stabilisation, prépare une vraie expérience ambitieuse de la durée cible plutôt qu'une nouvelle micro-variante. "
+            "Si tu renonces à cette montée en échelle, documente des preuves mesurées montrant pourquoi une autre famille utilise mieux le budget. "
             "l'utilisation effective des accélérateurs pertinents, l'économie de prompts et le meilleur "
             "compromis entre nombre de variantes et information gagnée, "
             "les indicateurs, les comparaisons pertinentes avec le challenge et les visualisations "

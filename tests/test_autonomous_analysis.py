@@ -92,6 +92,7 @@ def test_incompatible_split_is_visible_but_excluded_from_comparison() -> None:
     assert analysis["summary"]["best_metric"] == .5
     assert analysis["summary"]["comparable"] == 1
     assert analysis["experiments"][1]["validation_status"] == "incompatible"
+    assert analysis["compute"]["experiments"] == 2
 
 
 def test_iteration_report_is_concise_and_hides_raw_telemetry() -> None:
