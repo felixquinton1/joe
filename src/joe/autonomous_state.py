@@ -26,7 +26,8 @@ TERMINAL_STATES = {
 
 ALLOWED_TRANSITIONS: dict[AutonomousState, set[AutonomousState]] = {
     AutonomousState.PREPARING: {
-        AutonomousState.READY, AutonomousState.BLOCKED, AutonomousState.CANCELLED,
+        AutonomousState.READY, AutonomousState.COMPLETED,
+        AutonomousState.BLOCKED, AutonomousState.CANCELLED,
     },
     AutonomousState.READY: {
         AutonomousState.RESEARCHING, AutonomousState.IMPLEMENTING,

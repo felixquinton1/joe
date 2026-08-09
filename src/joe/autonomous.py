@@ -34,6 +34,7 @@ def build_autonomous_skill(values: dict[str, Any]) -> str:
         f"## Durable context and constraints\n{values.get('campaign_context') or 'None.'}\n\n"
         f"## Research protocol\n{values.get('research_protocol') or 'Use relevant public documentation.'}\n\n"
         f"## Data policy\n{values.get('data_policy') or 'Do not disclose private data.'}\n\n"
+        f"## Resource policy\n{json.dumps(values.get('resource_policy') or {'mode': 'auto'}, ensure_ascii=False)}\n\n"
         "## Invariants\n"
         "- Never replace, weaken or silently reinterpret the primary objective.\n"
         "- Optimize for the best rigorously validated primary metric achievable within the remaining wall-clock, compute and model-token budgets; activity alone is not progress.\n"
@@ -43,7 +44,7 @@ def build_autonomous_skill(values: dict[str, Any]) -> str:
         "- Use the configured local runner for main experiments; detect completion or crash.\n"
         "- Use progressive experimental scale: smoke test, intermediate validation, then full runs once stable.\n"
         "- Scale run duration and model size to the verified hardware, active window and remaining budget.\n"
-        "- Inspect available CPU, RAM and accelerators at startup. When an accelerator is relevant, benchmark at least one suitable accelerated approach instead of leaving it idle without a measured reason.\n"
+        "- Inspect available CPU, RAM and accelerators at startup, then obey the resource policy exactly. When automatic selection is allowed and an accelerator is relevant, benchmark at least one suitable accelerated approach instead of leaving it idle without a measured reason.\n"
         "- Keep simple baselines short: use them to validate data, splits and metrics, then move promptly to the model families most likely to win. Do not exhaustively tune a clearly capacity-limited baseline.\n"
         "- Distinguish reuse of a public architecture from reuse of pretrained weights: an architecture can be implemented and trained locally while weight provenance and licensing are audited separately.\n"
         "- Minimize model calls. Batch related diagnosis, implementation and short tests into one coherent turn, and make the local runner evaluate a checkpointed batch of informative variants when safe.\n"
@@ -121,6 +122,14 @@ class AutonomousStore:
             ),
             "restricted_data": bool(values.get("restricted_data", False)),
             "preflight": dict(values.get("preflight") or {}),
+            "preflight_command": list(values.get("preflight_command") or [])[:32],
+            "preflight_metrics_path": str(
+                values.get("preflight_metrics_path", "artifacts/preflight.json")
+            ),
+            "preflight_timeout_seconds": max(
+                5, min(1800, int(values.get("preflight_timeout_seconds", 300)))
+            ),
+            "resource_policy": dict(values.get("resource_policy") or {"mode": "auto"}),
             "schedule": schedule,
             "resume_command": resume_command[:32],
             "checkpoint_path": checkpoint_path,
@@ -137,15 +146,9 @@ class AutonomousStore:
             ),
             "execution_mode": str(values.get("execution_mode", "workspace-write")),
             "status": "scheduled",
-            "phase": "research",
-            "state": AutonomousState.READY.value,
-            "state_history": [{
-                "at": now,
-                "from": AutonomousState.PREPARING.value,
-                "to": AutonomousState.READY.value,
-                "reason": "campaign_created_and_preflight_accepted",
-                "metadata": {},
-            }],
+            "phase": "preparing",
+            "state": AutonomousState.PREPARING.value,
+            "state_history": [],
             "iteration": 0,
             "current_run_id": None,
             "current_experiment_id": None,
@@ -240,6 +243,7 @@ class AutonomousStore:
                 "best_metric", "error", "started_at", "deadline_at",
                 "active_elapsed_seconds", "active_window_started_at", "next_start_at",
                 "max_iterations", "resume_count", "resumed_at",
+                "preflight", "resource_policy",
             }
             item.update({key: value for key, value in changes.items() if key in allowed})
             item["updated_at"] = time.time()

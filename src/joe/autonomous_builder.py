@@ -3,9 +3,12 @@ from __future__ import annotations
 import re
 import sys
 import unicodedata
+import json
 from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
+
+from .autonomous_resources import normalize_resource_policy
 
 
 def parse_autonomous_request(request: str) -> dict[str, Any] | None:
@@ -27,6 +30,7 @@ def parse_autonomous_request(request: str) -> dict[str, Any] | None:
         request,
     )
     title = (title_match.group(1).strip(" «»\"'") if title_match else "Nouvelle campagne")
+    resource_policy = _resource_policy_from_request(folded)
     return {
         "title": title[:80],
         "objective": request.strip(),
@@ -39,6 +43,7 @@ def parse_autonomous_request(request: str) -> dict[str, Any] | None:
         "schedule": _schedule_from_request(folded, duration),
         "metric_name": "log_loss" if "log loss" in folded else "primary_metric",
         "metric_direction": "min" if "log loss" in folded else "max",
+        "resource_policy": resource_policy,
     }
 
 
@@ -49,6 +54,8 @@ def build_campaign_payload(
 ) -> dict[str, Any]:
     urls = parsed.get("urls") or []
     sources = "\n".join(f"- {url}" for url in urls) or "- À découvrir depuis le brief."
+    resource_policy = normalize_resource_policy(parsed.get("resource_policy"))
+    preflight_metrics_path = "artifacts/preflight.json"
     return {
         "title": f"{parsed['title']} — Autonomous",
         "conversation_id": conversation_id,
@@ -85,6 +92,14 @@ def build_campaign_payload(
         "max_iterations": int(parsed["max_iterations"]),
         "max_duration_seconds": int(parsed["max_duration_seconds"]),
         "restricted_data": bool(parsed.get("restricted_data")),
+        "resource_policy": resource_policy,
+        "preflight_command": [
+            sys.executable, "-m", "joe.autonomous_preflight",
+            "--output", preflight_metrics_path,
+            "--policy-json", json.dumps(resource_policy, ensure_ascii=False),
+        ],
+        "preflight_metrics_path": preflight_metrics_path,
+        "preflight_timeout_seconds": 120,
         "schedule": parsed.get("schedule") or {"timezone": "Europe/Paris", "windows": []},
         "checkpoint_path": "checkpoints/latest",
         "stop_signal_path": "artifacts/STOP_REQUESTED",
@@ -92,6 +107,19 @@ def build_campaign_payload(
         "mode": "fast",
         "execution_mode": "workspace-write",
     }
+
+
+def _resource_policy_from_request(text: str) -> dict[str, Any]:
+    mode = "auto"
+    if re.search(r"\b(?:gpu uniquement|uniquement (?:sur )?(?:le )?gpu|gpu only)\b", text):
+        mode = "gpu_only"
+    elif re.search(r"\b(?:cpu uniquement|uniquement (?:sur )?(?:le )?cpu|cpu only)\b", text):
+        mode = "cpu_only"
+    index_match = re.search(r"\bgpu\s*(?:numero|n[°o]?|index)?\s*[:#]?\s*(\d+)\b", text)
+    return normalize_resource_policy({
+        "mode": mode,
+        "gpu_index": int(index_match.group(1)) if index_match else None,
+    })
 
 
 def _duration_seconds(text: str) -> int:

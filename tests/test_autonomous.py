@@ -104,6 +104,60 @@ def test_autonomous_store_persists_deterministic_preflight(tmp_path: Path):
     assert campaign["preflight"]["metrics"]["cuda"] is True
 
 
+def test_new_campaign_waits_in_preparing_state_for_start_time_preflight(tmp_path: Path):
+    store = AutonomousStore(tmp_path)
+    store.ensure()
+    campaign = store.create(**(
+        campaign_values()
+        | {
+            "preflight": {"status": "pending", "metrics": {}},
+            "preflight_command": [sys.executable, "-m", "joe.autonomous_preflight"],
+            "resource_policy": {"mode": "gpu_only", "gpu_index": 0},
+        }
+    ))
+
+    assert campaign["state"] == "preparing"
+    assert campaign["phase"] == "preparing"
+    assert campaign["started_at"] is None
+    assert campaign["preflight"]["status"] == "pending"
+    assert campaign["resource_policy"]["mode"] == "gpu_only"
+
+
+def test_scheduler_does_not_start_preflight_before_window(tmp_path: Path, monkeypatch):
+    manager = RunManager(tmp_path)
+    campaign = manager.autonomous.create(**campaign_values())
+    started = []
+    monkeypatch.setattr("joe.web_runs.schedule_state", lambda *_: {
+        "active": False, "next_start": 12345.0, "window_end": None,
+    })
+    monkeypatch.setattr(manager, "_start_autonomous_preflight", started.append)
+
+    manager._advance_autonomous()
+
+    persisted = manager.autonomous.get(campaign["id"])
+    assert started == []
+    assert persisted["state"] == "preparing"
+    assert persisted["started_at"] is None
+    assert persisted["next_start_at"] == 12345.0
+
+
+def test_scheduler_starts_budget_and_preflight_when_window_opens(tmp_path: Path, monkeypatch):
+    manager = RunManager(tmp_path)
+    campaign = manager.autonomous.create(**campaign_values())
+    started = []
+    monkeypatch.setattr("joe.web_runs.schedule_state", lambda *_: {
+        "active": True, "next_start": None, "window_end": None,
+    })
+    monkeypatch.setattr(manager, "_start_autonomous_preflight", started.append)
+
+    manager._advance_autonomous()
+
+    persisted = manager.autonomous.get(campaign["id"])
+    assert [item["id"] for item in started] == [campaign["id"]]
+    assert persisted["started_at"] is not None
+    assert persisted["active_window_started_at"] is not None
+
+
 def test_autonomous_store_persists_durable_context_and_research_cadence(tmp_path: Path):
     values = campaign_values() | {
         "campaign_context": "Official URLs and local environment contract",

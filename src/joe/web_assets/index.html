@@ -284,6 +284,15 @@
           </div>
           <small>Les runs sont interrompus proprement, sauvegardés puis repris au prochain créneau.</small>
         </fieldset>
+        <fieldset class="dialog-section autonomous-resource-card">
+          <legend>Ressources (facultatif)</legend>
+          <div class="automation-options autonomous-window-grid">
+            <label>Politique<select id="autonomous-resource-mode"><option value="auto">Choix automatique</option><option value="gpu_only">GPU uniquement</option><option value="cpu_only">CPU uniquement</option></select></label>
+            <label>Indice GPU<input id="autonomous-gpu-index" type="number" min="0" placeholder="Ex. 0"></label>
+            <label>Précisions<input id="autonomous-resource-notes" maxlength="1000" placeholder="Ex. préserver 4 Go de VRAM"></label>
+          </div>
+          <small>Tu peux répondre à ces informations ou les laisser vides. Joe vérifiera les ressources au début du premier créneau, pas lors de la création.</small>
+        </fieldset>
         <div class="autonomous-note"><b>Traçabilité complète</b><p>Les recherches, modèles appelés, choix, commits, expériences et métriques apparaissent dans le journal.</p></div>
         <div class="risk-note autonomous-risk" role="alert"><strong>Fonctionnalité expérimentale</strong><p>Autonomous peut enchaîner sans intervention des recherches, appels de modèles, commandes et expériences. Les limites réduisent le risque mais ne garantissent ni le coût, ni le résultat, ni l’absence d’erreur. Vérifie le budget et les permissions avant de lancer.</p></div>
         <label class="check-label autonomous-consent"><input id="autonomous-risk-ack" type="checkbox"> J’ai compris que la campagne continue sans moi et peut consommer mes crédits IA.</label>

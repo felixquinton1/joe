@@ -30,6 +30,15 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     if (campaign.status === "experimenting") {
       return { active: true, text: "Expérience locale en cours · commandes, sortie et métriques surveillées par Joe" };
     }
+    if (campaign.state === "preparing") {
+      const running = campaign.preflight?.status === "running";
+      return {
+        active: running,
+        text: running
+          ? "Préflight en cours · environnement et ressources vérifiés par Joe"
+          : `Préflight en attente du démarrage${campaign.next_start_at ? ` · ${formatDate(campaign.next_start_at)}` : ""}`
+      };
+    }
     if (campaign.status === "scheduled" && campaign.phase === "experiment") {
       return { active: true, text: "Prochaine commande locale en préparation · lancement automatique imminent" };
     }
@@ -230,6 +239,13 @@ Crée et maintiens toi-même le code Python, le lanceur autonomous_run.ps1, les 
         max_iterations: 20,
         max_duration_seconds: Number($("autonomous-budget-minutes").value) * 60,
         restricted_data: true,
+        resource_policy: {
+          mode: $("autonomous-resource-mode").value,
+          gpu_index: $("autonomous-gpu-index").value === ""
+            ? null
+            : Number($("autonomous-gpu-index").value),
+          notes: $("autonomous-resource-notes").value.trim()
+        },
         schedule: {
           timezone: "Europe/Paris",
           windows: scheduled ? [{
@@ -264,6 +280,9 @@ Crée et maintiens toi-même le code Python, le lanceur autonomous_run.ps1, les 
     $("automation-when").value = "";
     $("automation-start").value = "now";
     $("autonomous-risk-ack").checked = false;
+    $("autonomous-resource-mode").value = "auto";
+    $("autonomous-gpu-index").value = "";
+    $("autonomous-resource-notes").value = "";
     onScheduled = prefill.onScheduled || null;
     setView(prefill.view === "autonomous" ? "autonomous" : "plan");
     syncStartFields();

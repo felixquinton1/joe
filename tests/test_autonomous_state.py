@@ -30,6 +30,7 @@ def test_store_transitions_are_atomic_journaled_and_legacy_compatible(tmp_path: 
     store = AutonomousStore(tmp_path)
     store.ensure()
     campaign = store.create(**_campaign())
+    store.transition(campaign["id"], AutonomousState.READY, "preflight_accepted")
 
     researching = store.transition(
         campaign["id"], AutonomousState.RESEARCHING, "research_started",

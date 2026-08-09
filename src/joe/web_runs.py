@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -18,6 +19,7 @@ from .autonomous import AutonomousStore, TERMINAL_STATUSES, build_autonomous_ski
 from .autonomous_state import AutonomousState, infer_state
 from .autonomous_builder import build_campaign_payload
 from .autonomous_schedule import schedule_state
+from .autonomous_resources import normalize_resource_policy
 from .experiment_runner import run_experiment, validate_experiment_command
 from .conversations import ConversationStore, FREE_PROJECT_ID, _ai_access
 from .documents import extract_document_text
@@ -185,6 +187,8 @@ class RunManager:
         self.autonomous.ensure()
         self._autonomous_experiments: set[str] = set()
         self._autonomous_experiment_cancels: dict[str, threading.Event] = {}
+        self._autonomous_preflights: set[str] = set()
+        self._autonomous_preflight_cancels: dict[str, threading.Event] = {}
         for task in self.tasks.list():
             if task.get("status") in {"integrating", "resolving"}:
                 if (
@@ -482,6 +486,9 @@ class RunManager:
                     f"Campagne Autonomous **{campaign['title']}** créée et planifiée.\n\n"
                     f"Durée maximale : {campaign['max_duration_seconds'] // 60} min · "
                     f"{campaign['max_iterations']} itérations · charte dédiée créée.\n\n"
+                    f"Ressources : `{json.dumps(campaign.get('resource_policy') or {'mode': 'auto'}, ensure_ascii=False)}`. "
+                    "Les contraintes non précisées restent automatiques. Le préflight matériel "
+                    "attendra le véritable début du premier créneau et fera partie du budget.\n\n"
                     "⚠️ **Fonctionnalité expérimentale** — cette campagne peut appeler "
                     "des services IA et exécuter des commandes sans nouvelle intervention. "
                     "Elle continue si le navigateur est fermé. Surveille tes crédits et "
@@ -1244,37 +1251,20 @@ class RunManager:
             raise ValueError(
                 "Le dépôt doit être propre avant Autonomous afin d'attribuer chaque changement à la bonne itération."
             )
-        preflight: dict[str, Any] = {}
-        preflight_command = payload.get("preflight_command") or []
-        if preflight_command:
-            if not isinstance(preflight_command, list):
-                raise ValueError("La commande de préflight doit être une liste.")
-            preflight_error = validate_experiment_command(
-                list(preflight_command), experiment_cwd
-            )
-            if preflight_error:
-                raise ValueError(preflight_error)
-            preflight = run_experiment(
-                list(preflight_command), workspace,
-                self.orchestrator.memory.root / "autonomous-preflight",
-                working_directory=working_directory,
-                metrics_path=str(
-                    payload.get("preflight_metrics_path", "artifacts/preflight.json")
-                ),
-                timeout_seconds=max(
-                    5, min(1800, int(payload.get("preflight_timeout_seconds", 300)))
-                ),
-                stop_signal_path="", checkpoint_path="",
-            )
-            if preflight.get("status") != "completed":
-                raise ValueError(
-                    "Préflight Autonomous refusé : "
-                    + str(
-                        preflight.get("error")
-                        or preflight.get("stderr_tail")
-                        or "échec inconnu"
-                    )
-                )
+        resource_policy = normalize_resource_policy(payload.get("resource_policy"))
+        preflight_metrics_path = str(
+            payload.get("preflight_metrics_path", "artifacts/preflight.json")
+        )
+        preflight_command = payload.get("preflight_command") or [
+            sys.executable, "-m", "joe.autonomous_preflight",
+            "--output", preflight_metrics_path,
+            "--policy-json", json.dumps(resource_policy, ensure_ascii=False),
+        ]
+        if not isinstance(preflight_command, list):
+            raise ValueError("La commande de préflight doit être une liste.")
+        preflight_error = validate_experiment_command(list(preflight_command), experiment_cwd)
+        if preflight_error:
+            raise ValueError(preflight_error)
         self.conversations.update_project(project_id, {"auto_commit_push": True})
         return self.autonomous.create(
             title=payload.get("title", ""),
@@ -1294,11 +1284,11 @@ class RunManager:
             max_iterations=payload.get("max_iterations", 3),
             max_duration_seconds=payload.get("max_duration_seconds", 3600),
             restricted_data=payload.get("restricted_data", False),
-            preflight={
-                "status": preflight.get("status"),
-                "duration_seconds": preflight.get("duration_seconds"),
-                "metrics": preflight.get("metrics") or {},
-            } if preflight else {},
+            preflight={"status": "pending", "metrics": {}},
+            preflight_command=preflight_command,
+            preflight_metrics_path=preflight_metrics_path,
+            preflight_timeout_seconds=payload.get("preflight_timeout_seconds", 300),
+            resource_policy=resource_policy,
             schedule=payload.get("schedule"),
             resume_command=payload.get("resume_command"),
             checkpoint_path=payload.get("checkpoint_path", ""),
@@ -1317,6 +1307,9 @@ class RunManager:
         event = self._autonomous_experiment_cancels.get(campaign_id)
         if event:
             event.set()
+        preflight_event = self._autonomous_preflight_cancels.get(campaign_id)
+        if preflight_event:
+            preflight_event.set()
         return self.autonomous.cancel(campaign_id)
 
     def resume_autonomous(self, campaign_id: str) -> dict[str, Any] | None:
@@ -1357,6 +1350,11 @@ class RunManager:
             now = time.time()
             window = schedule_state(campaign.get("schedule") or {}, now)
             if not window["active"]:
+                if infer_state(campaign) == AutonomousState.PREPARING:
+                    self.autonomous.update(
+                        campaign["id"], next_start_at=window.get("next_start")
+                    )
+                    continue
                 self._pause_autonomous(campaign, now, window.get("next_start"))
                 continue
             if campaign.get("active_window_started_at") is None:
@@ -1382,6 +1380,9 @@ class RunManager:
                 event = self._autonomous_experiment_cancels.get(str(campaign["id"]))
                 if event:
                     event.set()
+                preflight_event = self._autonomous_preflight_cancels.get(str(campaign["id"]))
+                if preflight_event:
+                    preflight_event.set()
                 self.autonomous.transition(
                     campaign["id"], AutonomousState.COMPLETED, "time_budget_reached",
                     phase="time_budget_reached",
@@ -1392,6 +1393,10 @@ class RunManager:
                     str(campaign["conversation_id"]), "assistant",
                     f"### Autonomous terminé — budget de {int(campaign.get('max_duration_seconds', 3600)) // 60} minutes atteint.",
                 )
+                continue
+            if infer_state(campaign) == AutonomousState.PREPARING:
+                if campaign["id"] not in self._autonomous_preflights:
+                    self._start_autonomous_preflight(campaign)
                 continue
             run_id = campaign.get("current_run_id")
             if run_id:
@@ -1503,6 +1508,84 @@ class RunManager:
                 f"{iteration if phase == 'planning' else campaign.get('iteration', 0)}. "
                 "La prochaine mise à jour sera publiée à la fin de cette étape.",
             )
+
+    def _start_autonomous_preflight(self, campaign: dict[str, Any]) -> None:
+        campaign_id = str(campaign["id"])
+        self._autonomous_preflights.add(campaign_id)
+        cancel_event = threading.Event()
+        self._autonomous_preflight_cancels[campaign_id] = cancel_event
+        self.autonomous.transition(
+            campaign_id, AutonomousState.PREPARING, "preflight_started",
+            preflight={"status": "running", "metrics": {}},
+        )
+        self.conversations.append_message(
+            str(campaign["conversation_id"]), "assistant",
+            "### Autonomous — préflight lancé\n\n"
+            "Le créneau vient de s’ouvrir. Joe vérifie maintenant l’environnement et les "
+            "ressources demandées ; ce temps fait partie du budget global de la campagne.",
+        )
+
+        def execute() -> None:
+            try:
+                workspace, _, _, _ = self._project_scope(str(campaign["conversation_id"]))
+                result = run_experiment(
+                    list(campaign.get("preflight_command") or []), workspace,
+                    self.orchestrator.memory.root / "autonomous" / campaign_id / "preflight",
+                    working_directory=str(campaign.get("working_directory", ".")),
+                    metrics_path=str(
+                        campaign.get("preflight_metrics_path", "artifacts/preflight.json")
+                    ),
+                    timeout_seconds=int(campaign.get("preflight_timeout_seconds", 300)),
+                    cancel_event=cancel_event, stop_signal_path="", checkpoint_path="",
+                )
+                preflight = {
+                    "status": result.get("status"),
+                    "duration_seconds": result.get("duration_seconds"),
+                    "metrics": result.get("metrics") or {},
+                    "error": result.get("error"),
+                }
+                self.autonomous.add_event(campaign_id, "preflight", preflight)
+                current = self.autonomous.get(campaign_id) or {}
+                if infer_state(current) != AutonomousState.PREPARING:
+                    return
+                metrics = preflight["metrics"]
+                accepted = result.get("status") == "completed" and metrics.get("ok", True)
+                if accepted:
+                    self.autonomous.transition(
+                        campaign_id, AutonomousState.READY, "preflight_accepted",
+                        phase="research", preflight=preflight, error=None,
+                    )
+                    self.conversations.append_message(
+                        str(campaign["conversation_id"]), "assistant",
+                        "### Autonomous — préflight validé\n\n"
+                        "Les ressources sont conformes aux préférences. La recherche démarre maintenant.",
+                    )
+                else:
+                    error = str(
+                        "; ".join(metrics.get("errors") or [])
+                        or preflight.get("error")
+                        or "Le préflight n’a pas satisfait les contraintes de ressources."
+                    )
+                    self.autonomous.transition(
+                        campaign_id, AutonomousState.BLOCKED, "preflight_rejected",
+                        phase="preparing", preflight=preflight, error=error,
+                    )
+                    self.conversations.append_message(
+                        str(campaign["conversation_id"]), "assistant",
+                        "### Autonomous — préflight bloqué\n\n" + error,
+                    )
+            except Exception as error:
+                current = self.autonomous.get(campaign_id) or {}
+                if infer_state(current) == AutonomousState.PREPARING:
+                    self.autonomous.transition(
+                        campaign_id, AutonomousState.BLOCKED, "preflight_failed",
+                        phase="preparing", error=str(error),
+                    )
+            finally:
+                self._autonomous_preflights.discard(campaign_id)
+                self._autonomous_preflight_cancels.pop(campaign_id, None)
+
+        threading.Thread(target=execute, daemon=True).start()
 
     def _pause_autonomous(
         self, campaign: dict[str, Any], now: float, next_start: float | None
