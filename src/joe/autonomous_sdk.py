@@ -37,6 +37,8 @@ class ExperimentSpec:
     validation: ValidationSpec
     resources: ResourceRequest = field(default_factory=ResourceRequest)
     experiment_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    parent_experiment_id: str | None = None
+    variant: str | None = None
     tags: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -120,6 +122,8 @@ def build_result(
         "status": status,
         "experiment": {
             "id": spec.experiment_id,
+            "parent_experiment_id": spec.parent_experiment_id,
+            "variant": spec.variant,
             "hypothesis": spec.hypothesis,
             "budget_seconds": spec.budget_seconds,
             "tags": list(spec.tags),

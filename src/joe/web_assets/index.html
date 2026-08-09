@@ -273,6 +273,8 @@
         <div class="automation-options autonomous-main-grid">
           <label>Raisonnement<select id="autonomous-mode"><option value="fast">Une IA</option><option value="review">Une IA + relecture</option><option value="consensus">Consensus multi-IA</option></select></label>
           <label>Budget actif (minutes)<input id="autonomous-budget-minutes" type="number" min="1" max="10080" value="60"></label>
+          <label>Budget tokens connu<input id="autonomous-token-budget" type="number" min="1" placeholder="Facultatif"></label>
+          <label>Appels modèle max<input id="autonomous-call-budget" type="number" min="1" placeholder="Calcul automatique"></label>
         </div>
         <fieldset class="dialog-section autonomous-schedule-card">
           <legend>Fenêtre d’exécution</legend>

@@ -31,6 +31,11 @@ def parse_autonomous_request(request: str) -> dict[str, Any] | None:
     )
     title = (title_match.group(1).strip(" «»\"'") if title_match else "Nouvelle campagne")
     resource_policy = _resource_policy_from_request(folded)
+    token_match = re.search(r"(?:budget|maximum|max)\s+(?:de\s+)?([\d\s.,]+)\s*tokens?\b", folded)
+    max_tokens = None
+    if token_match:
+        digits = re.sub(r"\D", "", token_match.group(1))
+        max_tokens = int(digits) if digits else None
     return {
         "title": title[:80],
         "objective": request.strip(),
@@ -44,6 +49,7 @@ def parse_autonomous_request(request: str) -> dict[str, Any] | None:
         "metric_name": "log_loss" if "log loss" in folded else "primary_metric",
         "metric_direction": "min" if "log loss" in folded else "max",
         "resource_policy": resource_policy,
+        "max_tokens": max_tokens,
     }
 
 
@@ -93,6 +99,10 @@ def build_campaign_payload(
         "max_duration_seconds": int(parsed["max_duration_seconds"]),
         "restricted_data": bool(parsed.get("restricted_data")),
         "resource_policy": resource_policy,
+        "token_budget": {
+            "max_tokens": parsed.get("max_tokens"),
+            "max_model_calls": None,
+        },
         "preflight_command": [
             sys.executable, "-m", "joe.autonomous_preflight",
             "--output", preflight_metrics_path,

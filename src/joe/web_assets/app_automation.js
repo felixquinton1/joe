@@ -16,7 +16,76 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     return minutes < 60 ? `${minutes} min ${seconds % 60} s` : `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
   };
 
+  const formatMetric = value => value !== null && value !== undefined && Number.isFinite(Number(value))
+    ? Number(value).toLocaleString(undefined, { maximumSignificantDigits: 6 })
+    : "—";
+
+  function analysisPanel(campaign) {
+    const analysis = campaign.analysis || {};
+    const summary = analysis.summary || {};
+    const usage = analysis.usage || {};
+    const budget = analysis.token_budget || {};
+    const panel = document.createElement("details");
+    panel.className = "autonomous-analysis";
+    const heading = document.createElement("summary");
+    heading.textContent = `Arbre d’expériences · ${summary.final || 0} final(aux), ${summary.partial || 0} partiel(s) · meilleur ${formatMetric(summary.best_metric)}`;
+    const meta = document.createElement("p");
+    meta.textContent = `${analysis.metric_name || "métrique"} (${analysis.metric_direction || "max"}) · ${usage.prompts || 0} prompt(s) · ${usage.model_calls || 0}/${budget.max_model_calls ?? "∞"} appel(s) · ${usage.known_tokens || 0}/${budget.max_tokens ?? "non borné"} tokens connus${usage.unknown_usage_calls ? ` · ${usage.unknown_usage_calls} appel(s) sans télémétrie` : ""}`;
+    const tree = document.createElement("ol");
+    tree.className = "experiment-tree";
+    for (const node of analysis.experiments || []) {
+      const item = document.createElement("li");
+      item.className = `metric-${node.quality || "missing"}`;
+      const label = document.createElement("b");
+      label.textContent = `#${node.iteration} · ${formatMetric(node.metric)} · ${node.status}`;
+      const detail = document.createElement("small");
+      detail.textContent = [node.variant, node.hypothesis || node.reason || "Expérience sans hypothèse structurée"].filter(Boolean).join(" · ");
+      if (node.reason && node.hypothesis) detail.title = node.reason;
+      item.append(label, detail);
+      tree.appendChild(item);
+    }
+    if (!tree.childNodes.length) {
+      const empty = document.createElement("li");
+      empty.textContent = "Aucune expérience locale enregistrée.";
+      tree.appendChild(empty);
+    }
+    panel.append(heading, meta, tree);
+    return panel;
+  }
+
+  function comparisonPanel(items) {
+    const comparable = items.filter(item => item.analysis?.summary).sort((left, right) => {
+      const a = left.analysis;
+      const b = right.analysis;
+      const group = `${a.metric_name}:${a.metric_direction}`.localeCompare(`${b.metric_name}:${b.metric_direction}`);
+      if (group) return group;
+      const av = a.summary.best_metric;
+      const bv = b.summary.best_metric;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      return a.metric_direction === "min" ? av - bv : bv - av;
+    });
+    if (comparable.length < 2) return null;
+    const panel = document.createElement("section");
+    panel.className = "campaign-comparison";
+    const title = document.createElement("b");
+    title.textContent = "Comparaison des campagnes";
+    const table = document.createElement("div");
+    for (const campaign of comparable) {
+      const analysis = campaign.analysis;
+      const row = document.createElement("p");
+      const direction = analysis.metric_direction === "min" ? "↓" : "↑";
+      row.textContent = `${campaign.title} · ${analysis.metric_name} ${direction} · meilleur ${formatMetric(analysis.summary.best_metric)} · gain ${formatMetric(analysis.summary.improvement)} · ${analysis.summary.final}/${analysis.summary.total} résultats finaux · ${analysis.usage.known_tokens} tokens connus`;
+      table.appendChild(row);
+    }
+    panel.append(title, table);
+    return panel;
+  }
+
   function campaignActivity(campaign) {
+    if (["completed", "cancelled", "blocked"].includes(campaign.status)) {
+      return { active: false, text: campaign.error ? `Arrêté · ${campaign.error}` : "Aucune commande en cours" };
+    }
     const activeStep = [...(campaign.history || [])].reverse().find(
       event => event.kind === "agent_step" && event.status === "running"
     );
@@ -125,6 +194,8 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     }
     const autonomousTarget = $("autonomous-list");
     autonomousTarget.replaceChildren();
+    const comparison = comparisonPanel(campaigns);
+    if (comparison) autonomousTarget.appendChild(comparison);
     for (const campaign of campaigns.slice(0, 8)) {
       const card = document.createElement("article");
       card.className = `automation-card ${campaign.status}`;
@@ -157,7 +228,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
         list.appendChild(item);
       }
       journal.append(summary, list);
-      card.appendChild(journal);
+      card.append(analysisPanel(campaign), journal);
       const terminal = ["completed", "cancelled", "blocked"].includes(campaign.status);
       const cancelButton = card.querySelector('[data-action="cancel"]');
       cancelButton.hidden = terminal;
@@ -239,6 +310,12 @@ Crée et maintiens toi-même le code Python, le lanceur autonomous_run.ps1, les 
         max_iterations: 20,
         max_duration_seconds: Number($("autonomous-budget-minutes").value) * 60,
         restricted_data: true,
+        token_budget: {
+          max_tokens: $("autonomous-token-budget").value === ""
+            ? null : Number($("autonomous-token-budget").value),
+          max_model_calls: $("autonomous-call-budget").value === ""
+            ? null : Number($("autonomous-call-budget").value)
+        },
         resource_policy: {
           mode: $("autonomous-resource-mode").value,
           gpu_index: $("autonomous-gpu-index").value === ""
@@ -283,6 +360,8 @@ Crée et maintiens toi-même le code Python, le lanceur autonomous_run.ps1, les 
     $("autonomous-resource-mode").value = "auto";
     $("autonomous-gpu-index").value = "";
     $("autonomous-resource-notes").value = "";
+    $("autonomous-token-budget").value = "";
+    $("autonomous-call-budget").value = "";
     onScheduled = prefill.onScheduled || null;
     setView(prefill.view === "autonomous" ? "autonomous" : "plan");
     syncStartFields();

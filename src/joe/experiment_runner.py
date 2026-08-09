@@ -59,6 +59,11 @@ def run_experiment(
         checkpoint = (cwd / checkpoint_path).resolve()
         if cwd not in (checkpoint, *checkpoint.parents):
             raise ValueError("Le checkpoint doit rester dans le projet.")
+    candidate = (cwd / metrics_path).resolve()
+    if cwd not in (candidate, *candidate.parents):
+        raise ValueError("Le fichier de métriques doit rester dans le dossier d'expérience.")
+    # A run must never inherit a score published by an earlier experiment.
+    candidate.unlink(missing_ok=True)
     started = time.time()
     status = "completed"
     exit_code: int | None = None
@@ -118,11 +123,7 @@ def run_experiment(
     stdout = stdout_path.read_text(encoding="utf-8", errors="replace")
     stderr = stderr_path.read_text(encoding="utf-8", errors="replace")
     metrics: dict[str, Any] = {}
-    candidate = (cwd / metrics_path).resolve()
-    if cwd not in (candidate, *candidate.parents):
-        error = "Le fichier de métriques doit rester dans le dossier d'expérience."
-        status = "crashed"
-    elif candidate.exists():
+    if candidate.exists():
         try:
             value = json.loads(candidate.read_text(encoding="utf-8"))
             if isinstance(value, dict):

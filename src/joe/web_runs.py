@@ -16,6 +16,7 @@ from .capabilities import select_model, select_model_tier
 from .approvals import ApprovalStore
 from .automations import AutomationStore, START_MODES
 from .autonomous import AutonomousStore, TERMINAL_STATUSES, build_autonomous_skill
+from .autonomous_analysis import analyze_campaign, metric_value
 from .autonomous_state import AutonomousState, infer_state
 from .autonomous_builder import build_campaign_payload
 from .autonomous_schedule import schedule_state
@@ -47,23 +48,7 @@ from .worktrees import Worktree, WorktreeError, WorktreeManager
 
 def _autonomous_metric_value(metrics: dict[str, Any], name: str) -> float | None:
     """Resolve common aggregate metric envelopes without project-specific code."""
-    primary = metrics.get("primary_metric")
-    if isinstance(primary, dict) and primary.get("name") == name:
-        value = primary.get("value")
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            return float(value)
-    aliases = (name, f"selected_{name}", f"{name}_mean", f"raw_{name}")
-    containers = [metrics]
-    for key in ("summary", "aggregate", "metrics"):
-        value = metrics.get(key)
-        if isinstance(value, dict):
-            containers.append(value)
-    for container in containers:
-        for alias in aliases:
-            value = container.get(alias)
-            if isinstance(value, (int, float)) and not isinstance(value, bool):
-                return float(value)
-    return None
+    return metric_value(metrics, name)
 
 
 @dataclass(frozen=True)
@@ -125,6 +110,23 @@ def _conversation_backup_path(project: Path) -> Path:
     )
     key = hashlib.sha256(str(project.resolve()).encode()).hexdigest()[:16]
     return data_home / "joe" / "backups" / key / "conversations.json"
+
+
+def _normalize_token_budget(value: Any, iterations: int, mode: str) -> dict[str, int | None]:
+    raw = value if isinstance(value, dict) else {}
+    multiplier = {"fast": 1, "review": 2, "consensus": 3}.get(mode, 2)
+    default_calls = max(1, (max(1, iterations) + 1) * multiplier)
+
+    def optional_positive(item: Any) -> int | None:
+        try:
+            return max(1, int(item)) if item not in {None, ""} else None
+        except (TypeError, ValueError):
+            return None
+
+    return {
+        "max_tokens": optional_positive(raw.get("max_tokens")),
+        "max_model_calls": optional_positive(raw.get("max_model_calls")) or default_calls,
+    }
 
 
 @dataclass
@@ -1207,7 +1209,8 @@ class RunManager:
                 continue
 
     def list_autonomous(self) -> list[dict[str, Any]]:
-        return self.autonomous.list()
+        campaigns = self.autonomous.list()
+        return [{**campaign, "analysis": analyze_campaign(campaign)} for campaign in campaigns]
 
     def create_autonomous(self, payload: dict[str, Any]) -> dict[str, Any]:
         conversation_id = str(payload.get("conversation_id", ""))
@@ -1252,6 +1255,11 @@ class RunManager:
                 "Le dépôt doit être propre avant Autonomous afin d'attribuer chaque changement à la bonne itération."
             )
         resource_policy = normalize_resource_policy(payload.get("resource_policy"))
+        token_budget = _normalize_token_budget(
+            payload.get("token_budget"),
+            int(payload.get("max_iterations", 3)),
+            str(payload.get("mode", "review")),
+        )
         preflight_metrics_path = str(
             payload.get("preflight_metrics_path", "artifacts/preflight.json")
         )
@@ -1289,6 +1297,7 @@ class RunManager:
             preflight_metrics_path=preflight_metrics_path,
             preflight_timeout_seconds=payload.get("preflight_timeout_seconds", 300),
             resource_policy=resource_policy,
+            token_budget=token_budget,
             schedule=payload.get("schedule"),
             resume_command=payload.get("resume_command"),
             checkpoint_path=payload.get("checkpoint_path", ""),
@@ -1458,6 +1467,30 @@ class RunManager:
                 continue
             if phase == "evaluation":
                 self._finish_autonomous_iteration(campaign)
+                continue
+            analysis = analyze_campaign(campaign)
+            usage = analysis["usage"]
+            token_budget = analysis["token_budget"]
+            calls_exhausted = (
+                token_budget["max_model_calls"] is not None
+                and usage["model_calls"] >= token_budget["max_model_calls"]
+            )
+            tokens_exhausted = (
+                token_budget["max_tokens"] is not None
+                and usage["known_tokens"] >= token_budget["max_tokens"]
+            )
+            if calls_exhausted or tokens_exhausted:
+                reason = "model_call_budget_reached" if calls_exhausted else "token_budget_reached"
+                self.autonomous.transition(
+                    campaign["id"], AutonomousState.COMPLETED, reason,
+                    phase="budget_reached", error=None,
+                )
+                self.conversations.append_message(
+                    str(campaign["conversation_id"]), "assistant",
+                    "### Autonomous — budget IA atteint\n\n"
+                    f"{usage['model_calls']} appel(s) modèle et {usage['known_tokens']} token(s) "
+                    "mesurés. Joe n’envoie pas de nouveau prompt pour cette campagne.",
+                )
                 continue
             if self.has_active_conversation(str(campaign["conversation_id"])):
                 continue
@@ -1666,6 +1699,20 @@ class RunManager:
                 )
                 result["command"] = command
                 result["working_directory"] = str(campaign.get("working_directory", "."))
+                result["iteration"] = int(campaign.get("iteration", 0))
+                structured_experiment = (
+                    result.get("metrics", {}).get("experiment", {})
+                    if isinstance(result.get("metrics"), dict) else {}
+                )
+                previous_structured = (
+                    previous.get("metrics", {}).get("experiment", {})
+                    if isinstance(previous.get("metrics"), dict) else {}
+                )
+                result["parent_experiment_id"] = (
+                    structured_experiment.get("parent_experiment_id")
+                    or previous_structured.get("id")
+                    or previous.get("id")
+                )
                 self.autonomous.add_event(campaign_id, "experiment", result)
                 self.autonomous.transition(
                     campaign_id, AutonomousState.EVALUATING, "experiment_finished",
@@ -1690,7 +1737,7 @@ class RunManager:
             result.get("metrics") or {}, str(campaign.get("metric_name") or "score")
         )
         best = campaign.get("best_metric")
-        if isinstance(metric, (int, float)) and (
+        if result.get("status") == "completed" and isinstance(metric, (int, float)) and (
             best is None or (campaign.get("metric_direction") == "min" and metric < best)
             or (campaign.get("metric_direction") != "min" and metric > best)
         ):

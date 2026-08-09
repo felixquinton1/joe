@@ -288,7 +288,61 @@ def test_metric_contract_reads_common_aggregate_envelopes():
     ) == 0.7
 
 
+def test_interrupted_metric_never_becomes_campaign_best(tmp_path: Path):
+    manager = RunManager(tmp_path)
+    conversation = manager.conversations.create()
+    campaign = manager.autonomous.create(**(
+        campaign_values()
+        | {"conversation_id": conversation["id"], "metric_name": "score"}
+    ))
+    manager.autonomous.transition(campaign["id"], "ready", "preflight_accepted")
+    manager.autonomous.transition(campaign["id"], "experimenting", "experiment_started")
+    manager.autonomous.add_event(campaign["id"], "experiment", {
+        "id": "partial", "status": "interrupted", "metrics": {"score": 0.99},
+        "duration_seconds": 10, "checkpoint_available": False,
+    })
+    manager.autonomous.transition(
+        campaign["id"], "evaluating", "experiment_finished",
+        phase="evaluation", current_experiment_id="partial",
+    )
+
+    manager._finish_autonomous_iteration(manager.autonomous.get(campaign["id"]))
+
+    assert manager.autonomous.get(campaign["id"])["best_metric"] is None
+
+
+def test_scheduler_stops_before_new_prompt_when_model_call_budget_is_spent(
+    tmp_path: Path, monkeypatch,
+):
+    manager = RunManager(tmp_path)
+    conversation = manager.conversations.create()
+    campaign = manager.autonomous.create(**(
+        campaign_values()
+        | {
+            "conversation_id": conversation["id"],
+            "token_budget": {"max_model_calls": 1, "max_tokens": None},
+        }
+    ))
+    manager.autonomous.transition(
+        campaign["id"], "ready", "preflight_accepted", phase="planning"
+    )
+    manager.autonomous.add_event(campaign["id"], "agent_step", {
+        "status": "completed", "provider": "codex",
+        "attempts": [{"provider": "codex", "usage": {"input_tokens": 10}}],
+    })
+    monkeypatch.setattr("joe.web_runs.schedule_state", lambda *_: {
+        "active": True, "next_start": None, "window_end": None,
+    })
+
+    manager._advance_autonomous()
+
+    persisted = manager.autonomous.get(campaign["id"])
+    assert persisted["status"] == "completed"
+    assert persisted["state_history"][-1]["reason"] == "model_call_budget_reached"
+
+
 def test_timeout_terminates_experiment_children(tmp_path: Path):
+    (tmp_path / "metrics.json").write_text('{"score": 999}', encoding="utf-8")
     marker = tmp_path / "orphan.txt"
     child = tmp_path / "child.py"
     child.write_text(
@@ -307,6 +361,7 @@ def test_timeout_terminates_experiment_children(tmp_path: Path):
     )
     time.sleep(1.5)
     assert result["status"] == "timed_out"
+    assert result["metrics"] == {}
     assert not marker.exists()
 
 

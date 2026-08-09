@@ -35,6 +35,7 @@ def build_autonomous_skill(values: dict[str, Any]) -> str:
         f"## Research protocol\n{values.get('research_protocol') or 'Use relevant public documentation.'}\n\n"
         f"## Data policy\n{values.get('data_policy') or 'Do not disclose private data.'}\n\n"
         f"## Resource policy\n{json.dumps(values.get('resource_policy') or {'mode': 'auto'}, ensure_ascii=False)}\n\n"
+        f"## Model-call and token budget\n{json.dumps(values.get('token_budget') or {}, ensure_ascii=False)}\n\n"
         "## Invariants\n"
         "- Never replace, weaken or silently reinterpret the primary objective.\n"
         "- Optimize for the best rigorously validated primary metric achievable within the remaining wall-clock, compute and model-token budgets; activity alone is not progress.\n"
@@ -130,6 +131,7 @@ class AutonomousStore:
                 5, min(1800, int(values.get("preflight_timeout_seconds", 300)))
             ),
             "resource_policy": dict(values.get("resource_policy") or {"mode": "auto"}),
+            "token_budget": dict(values.get("token_budget") or {}),
             "schedule": schedule,
             "resume_command": resume_command[:32],
             "checkpoint_path": checkpoint_path,
@@ -244,6 +246,7 @@ class AutonomousStore:
                 "active_elapsed_seconds", "active_window_started_at", "next_start_at",
                 "max_iterations", "resume_count", "resumed_at",
                 "preflight", "resource_policy",
+                "token_budget",
             }
             item.update({key: value for key, value in changes.items() if key in allowed})
             item["updated_at"] = time.time()
@@ -256,7 +259,7 @@ class AutonomousStore:
             return
         history = list(item.get("history") or [])
         history.append({"at": time.time(), "kind": kind, **details})
-        self.update(campaign_id, history=history[-100:])
+        self.update(campaign_id, history=history[-1000:])
 
     def cancel(self, campaign_id: str) -> dict[str, Any] | None:
         item = self.get(campaign_id)

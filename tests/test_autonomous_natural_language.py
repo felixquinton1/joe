@@ -33,3 +33,11 @@ def test_natural_language_captures_optional_gpu_constraint():
     assert parsed["resource_policy"] == {
         "mode": "gpu_only", "gpu_index": 1, "notes": "",
     }
+
+
+def test_natural_language_captures_optional_token_budget():
+    parsed = parse_autonomous_request(
+        "Lance une campagne Autonomous avec un budget de 100 000 tokens"
+    )
+
+    assert parsed["max_tokens"] == 100000
