@@ -47,6 +47,13 @@ function applyLanguage(value) {
     refreshSelectMenu(select);
   }
   if (knownTasks.length) renderTasks();
+  automation.render?.();
+  if (typeof renderConversations === "function" && state.projects.length) {
+    renderConversations();
+  }
+  window.dispatchEvent(new CustomEvent("joe:language-changed", {
+    detail: { language }
+  }));
 }
 
 async function loadStatus() {
@@ -151,7 +158,7 @@ function renderTasks() {
   }
   const statusLabels = {
     running: t("running"),
-    waiting_quota: "En attente du quota",
+    waiting_quota: t("waiting_quota"),
     review: t("review_task"),
     completed: t("done"),
     integrated: t("integrated"),
@@ -166,7 +173,7 @@ function renderTasks() {
     card.className = `task-card ${task.status}`;
     card.tabIndex = 0;
     card.setAttribute("role", "button");
-    card.title = "Ouvrir le prompt de cette tâche";
+    card.title = t("open_task");
     const openConversation = () => selectConversation(task.conversation_id, task.id);
     card.onclick = event => {
       if (!event.target.closest("button")) openConversation();
@@ -184,15 +191,15 @@ function renderTasks() {
         <strong title="${escapeHtml(task.request)}">${escapeHtml(task.title)}</strong>
         <b>${escapeHtml(statusLabels[task.status] || task.status)}</b>
       </div>
-      <div class="task-meta">${branch}<span>${Number(task.files || 0)} fichier${Number(task.files || 0) === 1 ? "" : "s"} · +${Number(task.insertions || 0)} −${Number(task.deletions || 0)}</span></div>
-      ${task.status === "waiting_quota" && task.scheduled_for ? `<div class="task-wait">Reprise ${escapeHtml(new Date(task.scheduled_for * 1000).toLocaleString())}</div>` : ""}
+      <div class="task-meta">${branch}<span>${Number(task.files || 0)} ${escapeHtml(t("files"))} · +${Number(task.insertions || 0)} −${Number(task.deletions || 0)}</span></div>
+      ${task.status === "waiting_quota" && task.scheduled_for ? `<div class="task-wait">${escapeHtml(t("resume_capitalized"))} ${escapeHtml(new Date(task.scheduled_for * 1000).toLocaleString(language))}</div>` : ""}
       <div class="task-pipeline">${(task.pipeline || []).map(stage => (
-        `<span class="${escapeHtml(stage.status)}"><i></i>${escapeHtml(stage.label)}</span>`
+        `<span class="${escapeHtml(stage.status)}"><i></i>${escapeHtml(({ Demande: t("request_stage"), Réalisation: t("implementation_stage"), Validation: t("validation_stage"), Diff: t("diff_stage"), Livraison: t("delivery_stage") })[stage.label] || stage.label)}</span>`
       )).join("")}</div>
       ${task.error ? `<p class="task-error">${escapeHtml(task.error)}</p>` : ""}
       <div class="task-actions"></div>`;
     const actions = card.querySelector(".task-actions");
-    actions.appendChild(taskAction("Conversation", openConversation));
+    actions.appendChild(taskAction(t("conversation"), openConversation));
     if (task.isolated && task.status !== "integrated") {
       actions.appendChild(taskAction(t("view_diff"), () => showTaskDiff(task)));
       if (["review", "conflict"].includes(task.status)) {
@@ -896,6 +903,7 @@ let refreshActiveConversation;
 let moveConversation;
 let openProject;
 let renameConversation;
+let renderConversations;
 let saveProject;
 let selectConversation;
 let togglePin;
@@ -1199,6 +1207,7 @@ function updateWorkflowFallback(provider, fallback) {
   moveConversation,
   openProject,
   renameConversation,
+  renderConversations,
   saveProject,
   selectConversation,
   togglePin,
@@ -1214,6 +1223,7 @@ function updateWorkflowFallback(provider, fallback) {
   renderGitReport,
   renderHistoricalRunSummary,
   attachPlanControls,
+  translate: t,
   applySettings,
   refreshSelectMenu,
   renderWorkflowUpdate,

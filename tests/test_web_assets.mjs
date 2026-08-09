@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
 const { authenticatedFetch, pairBrowser } = require(
   "../src/joe/web_assets/app_auth.js"
 );
-const { initialLanguage, translate } = require(
+const { apply, initialLanguage, translate, translations } = require(
   "../src/joe/web_assets/i18n.js"
 );
 // markdown.js s'installe sur `window` : on lui en fournit un.
@@ -72,6 +73,46 @@ test("selects a supported interface language and falls back to French", () => {
   assert.equal(initialLanguage({ getItem: () => null }, "de-DE"), "fr");
   assert.equal(translate("en", "send"), "Send");
   assert.equal(translate("fr", "send"), "Envoyer");
+});
+
+test("keeps French and English catalogs in lockstep", () => {
+  assert.deepEqual(
+    Object.keys(translations.en).sort(),
+    Object.keys(translations.fr).sort()
+  );
+  for (const [language, catalog] of Object.entries(translations)) {
+    for (const [key, value] of Object.entries(catalog)) {
+      assert.ok(value.trim(), `${language}.${key} must not be empty`);
+    }
+  }
+});
+
+test("all translation markers in the page exist in both catalogs", () => {
+  const html = readFileSync(new URL("../src/joe/web_assets/index.html", import.meta.url), "utf8");
+  const keys = [...html.matchAll(/data-i18n(?:-placeholder|-title|-aria-label)?="([^"]+)"/g)]
+    .map(match => match[1]);
+  for (const key of keys) {
+    assert.ok(translations.fr[key], `missing French translation: ${key}`);
+    assert.ok(translations.en[key], `missing English translation: ${key}`);
+  }
+});
+
+test("applies translated text, placeholders, titles, and aria labels", () => {
+  const nodes = {
+    "[data-i18n]": [{ dataset: { i18n: "send" }, textContent: "" }],
+    "[data-i18n-placeholder]": [{ dataset: { i18nPlaceholder: "optional" }, placeholder: "" }],
+    "[data-i18n-title]": [{ dataset: { i18nTitle: "new_project" }, title: "" }],
+    "[data-i18n-aria-label]": [{ dataset: { i18nAriaLabel: "automation_type" }, setAttribute(name, value) { this[name] = value; } }]
+  };
+  const fakeDocument = {
+    documentElement: { lang: "fr" },
+    querySelectorAll: selector => nodes[selector] || []
+  };
+  apply(fakeDocument, "en");
+  assert.equal(nodes["[data-i18n]"][0].textContent, "Send");
+  assert.equal(nodes["[data-i18n-placeholder]"][0].placeholder, "Optional");
+  assert.equal(nodes["[data-i18n-title]"][0].title, "New project");
+  assert.equal(nodes["[data-i18n-aria-label]"][0]["aria-label"], "Automation type");
 });
 
 test("turns an API 403 into an actionable profile message", async () => {

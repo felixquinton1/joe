@@ -4,10 +4,24 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
   // Rappel de celui qui a ouvert le formulaire : un plan confié au
   // planificateur ne doit plus rester affiché comme « à valider ».
   let onScheduled = null;
+  const tr = key => window.JoeI18n.translate(document.documentElement.lang, key);
+  const statusLabel = value => ({
+    scheduled: "scheduled", completed: "done", cancelled: "cancelled", blocked: "blocked",
+    paused: "paused", planning: "planning", research: "research", researching: "research",
+    experimenting: "experimenting", evaluating: "evaluating", running: "running",
+    failed: "failed", crashed: "crashed", timed_out: "timed_out", unverified: "unverified",
+    comparable: "comparable_status"
+  }[value] ? tr({
+    scheduled: "scheduled", completed: "done", cancelled: "cancelled", blocked: "blocked",
+    paused: "paused", planning: "planning", research: "research", researching: "research",
+    experimenting: "experimenting", evaluating: "evaluating", running: "running",
+    failed: "failed", crashed: "crashed", timed_out: "timed_out", unverified: "unverified",
+    comparable: "comparable_status"
+  }[value]) : value);
 
   const formatDate = value => value
-    ? new Date(Number(value) * 1000).toLocaleString()
-    : "Maintenant";
+    ? new Date(Number(value) * 1000).toLocaleString(document.documentElement.lang)
+    : tr("now");
 
   const formatElapsed = value => {
     const seconds = Math.max(0, Math.floor(Date.now() / 1000 - Number(value || 0)));
@@ -28,16 +42,16 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     const panel = document.createElement("details");
     panel.className = "autonomous-analysis";
     const heading = document.createElement("summary");
-    heading.textContent = `Arbre d’expériences · ${summary.comparable || 0}/${summary.final || 0} comparable(s), ${summary.partial || 0} partiel(s) · meilleur ${formatMetric(summary.best_metric)}`;
+    heading.textContent = `${tr("experiment_tree")} · ${summary.comparable || 0}/${summary.final || 0} ${tr("comparable")}, ${summary.partial || 0} ${tr("partial")} · ${tr("best")} ${formatMetric(summary.best_metric)}`;
     const meta = document.createElement("p");
-    meta.textContent = `${analysis.metric_name || "métrique"} (${analysis.metric_direction || "max"}) · ${(analysis.checkpoints || []).filter(item => item.resume_ready).length} checkpoint(s) prêt(s) · ${usage.prompts || 0} prompt(s) · ${usage.model_calls || 0}/${budget.max_model_calls ?? "∞"} appel(s) · ${usage.known_tokens || 0}/${budget.max_tokens ?? "non borné"} tokens connus${usage.unknown_usage_calls ? ` · ${usage.unknown_usage_calls} appel(s) sans télémétrie` : ""}`;
+    meta.textContent = `${analysis.metric_name || tr("metric")} (${analysis.metric_direction || "max"}) · ${(analysis.checkpoints || []).filter(item => item.resume_ready).length} checkpoint(s) · ${usage.prompts || 0} prompt(s) · ${usage.model_calls || 0}/${budget.max_model_calls ?? "∞"} call(s) · ${usage.known_tokens || 0}/${budget.max_tokens ?? tr("unbounded")} ${tr("known_tokens")}`;
     const tree = document.createElement("ol");
     tree.className = "experiment-tree";
     for (const node of analysis.experiments || []) {
       const item = document.createElement("li");
       item.className = `metric-${node.quality || "missing"}`;
       const label = document.createElement("b");
-      label.textContent = `#${node.iteration} · ${formatMetric(node.metric)} · ${node.status} · ${node.validation_status}`;
+      label.textContent = `#${node.iteration} · ${formatMetric(node.metric)} · ${statusLabel(node.status)} · ${statusLabel(node.validation_status)}`;
       const detail = document.createElement("small");
       detail.textContent = [node.variant, node.hypothesis || node.reason || "Expérience sans hypothèse structurée"].filter(Boolean).join(" · ");
       if (node.reason && node.hypothesis) detail.title = node.reason;
@@ -46,7 +60,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     }
     if (!tree.childNodes.length) {
       const empty = document.createElement("li");
-      empty.textContent = "Aucune expérience locale enregistrée.";
+      empty.textContent = tr("no_experiment");
       tree.appendChild(empty);
     }
     panel.append(heading, meta, tree);
@@ -69,13 +83,13 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     const panel = document.createElement("section");
     panel.className = "campaign-comparison";
     const title = document.createElement("b");
-    title.textContent = "Comparaison des campagnes";
+    title.textContent = tr("campaign_comparison");
     const table = document.createElement("div");
     for (const campaign of comparable) {
       const analysis = campaign.analysis;
       const row = document.createElement("p");
       const direction = analysis.metric_direction === "min" ? "↓" : "↑";
-      row.textContent = `${campaign.title} · ${analysis.metric_name} ${direction} · meilleur ${formatMetric(analysis.summary.best_metric)} · gain ${formatMetric(analysis.summary.improvement)} · ${analysis.summary.final}/${analysis.summary.total} résultats finaux · ${analysis.usage.known_tokens} tokens connus`;
+      row.textContent = `${campaign.title} · ${analysis.metric_name} ${direction} · ${tr("best")} ${formatMetric(analysis.summary.best_metric)} · ${tr("gain")} ${formatMetric(analysis.summary.improvement)} · ${analysis.summary.final}/${analysis.summary.total} ${tr("final_results")} · ${analysis.usage.known_tokens} ${tr("known_tokens")}`;
       table.appendChild(row);
     }
     panel.append(title, table);
@@ -84,10 +98,10 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
 
   function campaignActivity(campaign) {
     if (["completed", "cancelled", "blocked"].includes(campaign.status)) {
-      return { active: false, text: campaign.error ? `Arrêté · ${campaign.error}` : "Aucune commande en cours" };
+      return { active: false, text: campaign.error ? `${tr("stop")} · ${campaign.error}` : tr("no_command") };
     }
     if (campaign.manual_hold) {
-      return { active: false, text: "Pause manuelle · le projet peut être modifié dans le chat puis repris en Autonomous" };
+      return { active: false, text: tr("manual_pause_activity") };
     }
     const activeStep = [...(campaign.history || [])].reverse().find(
       event => event.kind === "agent_step" && event.status === "running"
@@ -96,31 +110,31 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
       const actor = activeStep?.provider ? activeStep.provider.toUpperCase() : "L’IA";
       return {
         active: true,
-        text: `${actor} travaille · ${campaign.phase} · en cours depuis ${formatElapsed(activeStep?.at || campaign.updated_at)}`
+        text: `${actor === "L’IA" ? tr("ai_working") : `${actor} · ${tr("ai_working")}`} · ${campaign.phase} · ${tr("running_since")} ${formatElapsed(activeStep?.at || campaign.updated_at)}`
       };
     }
     if (campaign.status === "experimenting") {
-      return { active: true, text: "Expérience locale en cours · commandes, sortie et métriques surveillées par Joe" };
+      return { active: true, text: tr("experiment_running") };
     }
     if (campaign.state === "preparing") {
       const running = campaign.preflight?.status === "running";
       return {
         active: running,
         text: running
-          ? "Préflight en cours · environnement et ressources vérifiés par Joe"
-          : `Préflight en attente du démarrage${campaign.next_start_at ? ` · ${formatDate(campaign.next_start_at)}` : ""}`
+          ? tr("preflight_running")
+          : `${tr("preflight_waiting")}${campaign.next_start_at ? ` · ${formatDate(campaign.next_start_at)}` : ""}`
       };
     }
     if (campaign.status === "scheduled" && campaign.phase === "experiment") {
-      return { active: true, text: "Prochaine commande locale en préparation · lancement automatique imminent" };
+      return { active: true, text: tr("command_preparing") };
     }
     if (campaign.status === "evaluating") {
-      return { active: true, text: "Résultats récupérés · prochaine analyse en préparation" };
+      return { active: true, text: tr("results_preparing") };
     }
     if (campaign.status === "paused") {
-      return { active: false, text: `En pause planifiée${campaign.next_start_at ? ` · reprise ${formatDate(campaign.next_start_at)}` : ""}` };
+      return { active: false, text: `${tr("scheduled_pause")}${campaign.next_start_at ? ` · ${tr("resume")} ${formatDate(campaign.next_start_at)}` : ""}` };
     }
-    return { active: false, text: campaign.error ? `Arrêté · ${campaign.error}` : "Aucune commande en cours" };
+    return { active: false, text: campaign.error ? `${tr("stop")} · ${campaign.error}` : tr("no_command") };
   }
 
   function activeProject() {
@@ -132,20 +146,20 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
 
   function journalLabel(event) {
     if (event.kind === "agent_step") {
-      const actor = [event.provider, event.model].filter(Boolean).join(" / ") || "routage en cours";
+      const actor = [event.provider, event.model].filter(Boolean).join(" / ") || tr("routing");
       const mode = event.mode === "consensus" ? "consensus multi-IA" : event.mode || "une IA";
-      const changes = event.files ? ` · ${event.files} fichier(s), +${event.insertions || 0}/-${event.deletions || 0}` : "";
+      const changes = event.files ? ` · ${event.files} ${tr(event.files === 1 ? "file_singular" : "file_plural")}, +${event.insertions || 0}/-${event.deletions || 0}` : "";
       const attempts = (event.attempts || []).map(item => [item.provider, item.model].filter(Boolean).join("/")).filter(Boolean);
-      const participants = attempts.length ? ` · appels ${attempts.join(", ")}` : "";
-      return `${event.phase || "étape IA"} · ${actor} · ${mode} · ${event.status}${participants}${changes}`;
+      const participants = attempts.length ? ` · ${tr("calls")} ${attempts.join(", ")}` : "";
+      return `${statusLabel(event.phase) || tr("ai_step")} · ${actor} · ${mode} · ${statusLabel(event.status)}${participants}${changes}`;
     }
     if (event.kind === "experiment") {
-      const command = Array.isArray(event.command) ? event.command.join(" ") : "commande locale";
+      const command = Array.isArray(event.command) ? event.command.join(" ") : tr("local_command");
       const metrics = Object.entries(event.metrics || {}).map(([key, value]) => `${key}=${value}`).join(", ");
-      return `expérience · ${command} · ${event.status} · ${event.duration_seconds || "?"} s${metrics ? ` · ${metrics}` : ""}`;
+      return `${tr("experiment")} · ${command} · ${statusLabel(event.status)} · ${event.duration_seconds || "?"} s${metrics ? ` · ${metrics}` : ""}`;
     }
-    if (event.kind === "paused") return `pause planifiée · reprise ${formatDate(event.next_start_at)}`;
-    return `${event.kind || "événement"} · ${event.status || "enregistré"}`;
+    if (event.kind === "paused") return `${tr("planned_pause")} · ${tr("resume")} ${formatDate(event.next_start_at)}`;
+    return `${statusLabel(event.kind) || tr("event")} · ${statusLabel(event.status) || tr("recorded")}`;
   }
 
   function setView(view) {
@@ -179,12 +193,13 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
       card.innerHTML = `
         <div><strong></strong><span></span></div>
         <small></small>
-        <button type="button">Annuler</button>`;
+        <button type="button"></button>`;
       card.querySelector("strong").textContent = plan.title;
-      card.querySelector("span").textContent = plan.status;
+      card.querySelector("span").textContent = statusLabel(plan.status);
       card.querySelector("small").textContent =
-        `${completed}/${plan.steps.length} étapes · ${formatDate(plan.scheduled_for)}`;
+        `${completed}/${plan.steps.length} ${tr("steps_count")} · ${formatDate(plan.scheduled_for)}`;
       const button = card.querySelector("button");
+      button.textContent = tr("cancel");
       button.hidden = ["completed", "cancelled", "blocked"].includes(plan.status);
       button.onclick = async () => {
         await fetcher(`/api/automations/${plan.id}/cancel`, { method: "POST" });
@@ -193,7 +208,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
       target.appendChild(card);
     }
     if (!plans.length) {
-      target.innerHTML = "<small>Aucun plan programmé.</small>";
+      target.innerHTML = `<small>${tr("no_scheduled_plan")}</small>`;
     }
     const autonomousTarget = $("autonomous-list");
     autonomousTarget.replaceChildren();
@@ -202,12 +217,12 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     for (const campaign of campaigns.slice(0, 8)) {
       const card = document.createElement("article");
       card.className = `automation-card ${campaign.status}`;
-      card.innerHTML = `<div><strong></strong><span></span></div><small></small><p class="autonomous-activity" role="status"><i></i><b></b></p><div class="autonomous-actions"><button type="button" data-action="cancel">Annuler</button><button type="button" data-action="handoff">Passer en manuel</button><button type="button" data-action="resume">Reprendre Autonomous</button><button type="button" data-action="chat">Continuer dans le chat</button></div>`;
+      card.innerHTML = `<div><strong></strong><span></span></div><small></small><p class="autonomous-activity" role="status"><i></i><b></b></p><div class="autonomous-actions"><button type="button" data-action="cancel">${tr("cancel")}</button><button type="button" data-action="handoff">${tr("manual_handoff")}</button><button type="button" data-action="resume">${tr("resume_autonomous")}</button><button type="button" data-action="chat">${tr("continue_chat")}</button></div>`;
       card.querySelector("strong").textContent = campaign.title;
-      card.querySelector("span").textContent = campaign.status;
-      card.querySelector("small").textContent = `itération ${campaign.iteration}/${campaign.max_iterations} · phase ${campaign.phase}`;
+      card.querySelector("span").textContent = statusLabel(campaign.status);
+      card.querySelector("small").textContent = `${tr("iteration")} ${campaign.iteration}/${campaign.max_iterations} · ${tr("phase")} ${statusLabel(campaign.phase)}`;
       if (campaign.status === "paused" && campaign.next_start_at) {
-        card.querySelector("small").textContent += ` · reprise ${formatDate(campaign.next_start_at)}`;
+        card.querySelector("small").textContent += ` · ${tr("resume")} ${formatDate(campaign.next_start_at)}`;
       }
       const activity = campaignActivity(campaign);
       const activityNode = card.querySelector(".autonomous-activity");
@@ -216,7 +231,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
       const journal = document.createElement("details");
       journal.className = "autonomous-journal";
       const summary = document.createElement("summary");
-      summary.textContent = `Journal détaillé · ${(campaign.history || []).length} événement(s)`;
+      summary.textContent = `${tr("detailed_log")} · ${(campaign.history || []).length}`;
       const list = document.createElement("ol");
       for (const event of (campaign.history || []).slice().reverse()) {
         const item = document.createElement("li");
@@ -227,7 +242,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
       }
       if (!list.childNodes.length) {
         const item = document.createElement("li");
-        item.textContent = "La campagne n'a pas encore démarré.";
+        item.textContent = tr("campaign_not_started");
         list.appendChild(item);
       }
       journal.append(summary, list);
@@ -236,17 +251,17 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
       const cancelButton = card.querySelector('[data-action="cancel"]');
       cancelButton.hidden = terminal;
       cancelButton.onclick = async () => {
-        if (!window.confirm("Interrompre cette campagne Autonomous ?")) return;
+        if (!window.confirm(tr("cancel_campaign_confirm"))) return;
         await fetcher(`/api/autonomous/${campaign.id}/cancel`, { method: "POST" });
         await load();
       };
       const handoffButton = card.querySelector('[data-action="handoff"]');
       handoffButton.hidden = terminal || campaign.manual_hold;
       handoffButton.onclick = async () => {
-        if (!window.confirm("Mettre Autonomous en pause et reprendre le projet manuellement ?")) return;
+        if (!window.confirm(tr("handoff_confirm"))) return;
         const response = await fetcher(`/api/autonomous/${campaign.id}/handoff`, { method: "POST" });
         const payload = await response.json();
-        if (!response.ok) return window.alert(payload.error || "Impossible de passer en manuel.");
+        if (!response.ok) return window.alert(payload.error || tr("handoff_failed"));
         $("automation-dialog").close();
         window.dispatchEvent(new CustomEvent("joe:open-conversation", {
           detail: { conversationId: campaign.conversation_id }
@@ -257,7 +272,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
       resumeButton.onclick = async () => {
         const response = await fetcher(`/api/autonomous/${campaign.id}/resume`, { method: "POST" });
         const payload = await response.json();
-        if (!response.ok) return window.alert(payload.error || "Impossible de reprendre la campagne.");
+        if (!response.ok) return window.alert(payload.error || tr("resume_failed"));
         await load();
       };
       const chatButton = card.querySelector('[data-action="chat"]');
@@ -270,7 +285,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
       };
       autonomousTarget.appendChild(card);
     }
-    if (!campaigns.length) autonomousTarget.innerHTML = "<small>Aucune campagne Autonomous.</small>";
+    if (!campaigns.length) autonomousTarget.innerHTML = `<small>${tr("no_autonomous_campaign")}</small>`;
   }
 
   async function load() {
@@ -285,7 +300,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
   async function startParkinsons() {
     if (!state.activeConversationId) return;
     if (!$("autonomous-risk-ack").checked) {
-      window.alert("Confirme d’abord que tu as compris le fonctionnement expérimental et le risque de consommation de crédits.");
+      window.alert(tr("risk_confirmation"));
       $("autonomous-risk-ack").focus();
       return;
     }
@@ -355,14 +370,14 @@ Crée et maintiens toi-même le code Python, le lanceur autonomous_run.ps1, les 
       })
     });
     const payload = await response.json();
-    if (!response.ok) return window.alert(payload.error || "Impossible de démarrer Autonomous.");
+    if (!response.ok) return window.alert(payload.error || tr("start_autonomous_failed"));
     await load();
   }
 
   async function open(prefill = {}) {
     const project = activeProject();
     if (!project || !state.activeConversationId) {
-      window.alert("Choisis d’abord une conversation.");
+      window.alert(tr("choose_conversation"));
       return;
     }
     $("automation-project").textContent = project.name;
@@ -402,7 +417,7 @@ Crée et maintiens toi-même le code Python, le lanceur autonomous_run.ps1, les 
       body: JSON.stringify({ quota_provider: provider, quota_automation: true })
     });
     if (!preference.ok) {
-      window.alert("Impossible d’enregistrer la stratégie de quotas.");
+      window.alert(tr("save_quota_failed"));
       return;
     }
     project.quota_provider = provider;
@@ -431,7 +446,7 @@ Crée et maintiens toi-même le code Python, le lanceur autonomous_run.ps1, les 
     });
     const payload = await response.json();
     if (!response.ok) {
-      window.alert(payload.error || "Impossible de programmer ce plan.");
+      window.alert(payload.error || tr("schedule_failed"));
       return;
     }
     $("automation-title").value = "";
@@ -444,5 +459,5 @@ Crée et maintiens toi-même le code Python, le lanceur autonomous_run.ps1, les 
     await load();
   }
 
-  return { load, open, save, setView, syncAutonomousSchedule, syncStartFields, startParkinsons };
+  return { load, open, render, save, setView, syncAutonomousSchedule, syncStartFields, startParkinsons };
 };

@@ -9,12 +9,14 @@ window.createJoeConversations = function createJoeConversations({
   renderGitReport,
   renderHistoricalRunSummary,
   attachPlanControls,
+  translate,
   applySettings,
   refreshSelectMenu,
   renderWorkflowUpdate,
   renderPromptQueue,
   fetcher
 }) {
+  const tr = key => translate ? translate(key) : key;
   let draggedItem = null;
   let historyFilter = "";
   let searchTimer = null;
@@ -95,7 +97,7 @@ window.createJoeConversations = function createJoeConversations({
       group.dataset.projectId = project.id;
       const header = document.createElement("div");
       header.className = "project-group-head";
-      const projectDrag = smallButton("⋮⋮", "Déplacer le projet", () => {});
+      const projectDrag = smallButton("⋮⋮", tr("move_project"), () => {});
       projectDrag.classList.add("drag-handle");
       projectDrag.draggable = true;
       projectDrag.ondragstart = event => beginDrag(event, "project", project.id);
@@ -106,11 +108,11 @@ window.createJoeConversations = function createJoeConversations({
       const projectActions = document.createElement("div");
       const collapse = smallButton(
         project.collapsed ? "▸" : "▾",
-        project.collapsed ? "Déplier les conversations" : "Replier les conversations",
+        tr(project.collapsed ? "expand_conversations" : "collapse_conversations"),
         () => toggleProjectCollapsed(project, group, collapse)
       );
       const editProject = smallButton("⚙", "Modifier le contexte du projet", () => openProject(project));
-      const addConversation = smallButton("＋", "Nouvelle conversation dans ce projet", () => createConversation(true, project.id));
+      const addConversation = smallButton("＋", tr("add_conversation"), () => createConversation(true, project.id));
       projectActions.append(collapse, editProject, addConversation);
       header.appendChild(projectActions);
       header.ondragover = allowDrop;
@@ -149,7 +151,7 @@ window.createJoeConversations = function createJoeConversations({
         row.ondrop = event => dropOnConversation(event, conversation);
         const drag = document.createElement("button");
         drag.className = "pin-button drag-handle";
-        drag.title = "Déplacer la conversation";
+        drag.title = tr("move_conversation");
         drag.textContent = "⋮";
         drag.draggable = true;
         drag.ondragstart = event => beginDrag(event, "conversation", conversation.id);
@@ -157,15 +159,15 @@ window.createJoeConversations = function createJoeConversations({
         button.className = "history-item";
         const date = formatLastCall(conversation.last_call_at);
         const stateLabel = running
-          ? '<b class="conversation-status running">En cours</b>'
+          ? `<b class="conversation-status running">${tr("conversation_running")}</b>`
           : completed
-          ? '<b class="conversation-status complete">Terminée</b>'
+          ? `<b class="conversation-status complete">${tr("conversation_complete")}</b>`
           : `${conversation.message_count ?? conversation.messages?.length ?? 0} messages`;
         button.innerHTML = `<strong>${escapeHtml(conversation.title)}</strong><span title="${escapeHtml(date.exact)}">${stateLabel} · ${escapeHtml(date.short)}</span>`;
         button.onclick = () => selectConversation(conversation.id);
         const pin = document.createElement("button");
         pin.className = `pin-button ${conversation.pinned ? "pinned" : ""}`;
-        pin.title = conversation.pinned ? "Désépingler" : "Épingler";
+        pin.title = tr(conversation.pinned ? "unpin" : "pin");
         pin.textContent = conversation.pinned ? "★" : "☆";
         pin.onclick = () => togglePin(conversation);
         const rename = document.createElement("button");
@@ -187,12 +189,12 @@ window.createJoeConversations = function createJoeConversations({
     }
     const status = $("history-filter-status");
     status.textContent = historyFilter
-      ? `${visibleCount} résultat${visibleCount === 1 ? "" : "s"}`
+      ? `${visibleCount} ${tr("messages")}`
       : "";
     if (historyFilter && visibleCount === 0) {
       const empty = document.createElement("div");
       empty.className = "history-empty";
-      empty.innerHTML = "<strong>Aucune conversation</strong><span>Essaie un autre mot-clé.</span>";
+      empty.innerHTML = `<strong>${tr("no_conversation")}</strong><span>${tr("try_another_keyword")}</span>`;
       target.appendChild(empty);
     }
   }
@@ -278,9 +280,7 @@ window.createJoeConversations = function createJoeConversations({
     project.collapsed = !project.collapsed;
     group.classList.toggle("collapsed", project.collapsed);
     button.textContent = project.collapsed ? "▸" : "▾";
-    button.title = project.collapsed
-      ? "Déplier les conversations"
-      : "Replier les conversations";
+    button.title = tr(project.collapsed ? "expand_conversations" : "collapse_conversations");
     await patchProject(project.id, { collapsed: project.collapsed });
   }
 
@@ -295,16 +295,16 @@ window.createJoeConversations = function createJoeConversations({
   function formatLastCall(timestamp) {
     const date = new Date(Number(timestamp || 0) * 1000);
     if (!Number.isFinite(date.getTime()) || date.getTime() === 0) {
-      return { short: "jamais", exact: "Aucun appel" };
+      return { short: tr("never"), exact: tr("no_call") };
     }
     return {
-      short: new Intl.DateTimeFormat("fr-FR", {
+      short: new Intl.DateTimeFormat(document.documentElement.lang, {
         day: "numeric",
         month: "short",
         hour: "2-digit",
         minute: "2-digit"
       }).format(date),
-      exact: new Intl.DateTimeFormat("fr-FR", {
+      exact: new Intl.DateTimeFormat(document.documentElement.lang, {
         dateStyle: "full",
         timeStyle: "short"
       }).format(date)
@@ -379,7 +379,7 @@ window.createJoeConversations = function createJoeConversations({
     // principale même après un rechargement, pas seulement dans le panneau Tâches.
     attachPlanControls(conversationId, lastAssistantBubble);
     if (!conversation.messages.length) {
-      $("messages").innerHTML = '<div class="empty-state"><span class="empty-mark">J</span><h3>Nouvelle conversation</h3><p>Les réglages et l’historique de cette conversation resteront indépendants.</p></div>';
+      $("messages").innerHTML = `<div class="empty-state"><span class="empty-mark">J</span><h3>${tr("new_conversation")}</h3></div>`;
     }
     const conversationViewport = document.querySelector(".conversation");
     if (requestedMessage) {

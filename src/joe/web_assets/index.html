@@ -18,24 +18,24 @@
       <div class="sidebar-brand">
         <div class="brand"><span class="brand-mark">J</span><div><strong>Joe</strong><small>AI control room · <span id="version">…</span></small></div></div>
       </div>
-      <div class="panel-title"><h2 data-i18n="conversations">Conversations</h2><button id="new-project" class="icon-button" type="button" title="Nouveau projet" aria-label="Nouveau projet">＋</button></div>
+      <div class="panel-title"><h2 data-i18n="conversations">Conversations</h2><button id="new-project" class="icon-button" type="button" title="Nouveau projet" aria-label="Nouveau projet" data-i18n-title="new_project" data-i18n-aria-label="new_project">＋</button></div>
       <div class="history-search-wrap">
         <span aria-hidden="true">⌕</span>
-        <input id="history-search" class="history-search" type="search" placeholder="Rechercher…" aria-label="Rechercher dans l’historique">
+        <input id="history-search" class="history-search" type="search" placeholder="Rechercher…" aria-label="Rechercher dans l’historique" data-i18n-placeholder="search_history" data-i18n-aria-label="search_history">
       </div>
       <div id="history-filter-status" class="history-filter-status" aria-live="polite"></div>
       <div id="global-search-results" class="global-search-results hidden"></div>
       <div id="conversations" class="history-list"></div>
     </aside>
-    <div class="panel-resizer resize-left" data-resizer="left" title="Redimensionner les conversations"></div>
+    <div class="panel-resizer resize-left" data-resizer="left" title="Redimensionner les conversations" data-i18n-title="resize_conversations"></div>
     <section class="workspace">
       <div class="controls">
         <div class="control-group routing-controls">
           <label><span data-i18n="agent">Agent</span><select id="agent"><option value="">Automatique</option></select></label>
-          <label><span data-i18n="workflow">Workflow</span><select id="mode"><option value="">Automatique</option><option value="fast">FAST</option><option value="review">REVIEW</option><option value="consensus">CONSENSUS</option></select></label>
+          <label><span data-i18n="workflow">Workflow</span><select id="mode"><option value="" data-i18n="automatic">Automatique</option><option value="fast">FAST</option><option value="review">REVIEW</option><option value="consensus">CONSENSUS</option></select></label>
         </div>
         <details class="advanced-config">
-          <summary><span data-i18n="configuration">Options</span><small>modèle · effort · permissions</small></summary>
+          <summary><span data-i18n="configuration">Options</span><small data-i18n="advanced_options">modèle · effort · permissions</small></summary>
           <div class="control-group provider-controls">
             <label><span data-i18n="model">Modèle</span><select id="model"><option value="">Défaut du fournisseur</option></select></label>
             <label><span data-i18n="effort">Effort</span><select id="effort"><option value="">Défaut du modèle</option></select></label>
@@ -55,9 +55,9 @@
         <input id="file-input" type="file" multiple hidden>
         <div class="composer-foot">
           <div class="composer-tools">
-            <button id="attach-files" class="tool-button" type="button" title="Joindre des fichiers" aria-label="Joindre des fichiers">＋</button>
+            <button id="attach-files" class="tool-button" type="button" title="Joindre des fichiers" aria-label="Joindre des fichiers" data-i18n-title="attach_files" data-i18n-aria-label="attach_files">＋</button>
             <details class="tool-popover">
-              <summary>Outils</summary>
+              <summary data-i18n="tools">Outils</summary>
               <div class="tool-panel">
                 <label class="check-label"><input id="tool-plan-first" type="checkbox"> Proposer un plan d'abord</label>
                 <small>L'IA rédige un plan sans rien exécuter. Tu le valides, l'ajustes ou le refuses ; l'exécution est ensuite confiée à l'agent le mieux placé.</small>
@@ -73,17 +73,17 @@
         </div>
       </form>
     </section>
-    <div class="panel-resizer resize-right" data-resizer="right" title="Redimensionner le suivi"></div>
+    <div class="panel-resizer resize-right" data-resizer="right" title="Redimensionner le suivi" data-i18n-title="resize_activity"></div>
     <aside class="activity-panel">
       <div class="activity-tools">
-        <button id="open-automation" class="icon-button" type="button" title="Plans autonomes" aria-label="Plans autonomes">◷</button>
-        <button id="open-preferences" class="icon-button" type="button" title="Préférences" aria-label="Préférences">⚙</button>
+        <button id="open-automation" class="icon-button" type="button" title="Plans autonomes" aria-label="Plans autonomes" data-i18n-title="autonomous_plans" data-i18n-aria-label="autonomous_plans">◷</button>
+        <button id="open-preferences" class="icon-button" type="button" title="Préférences" aria-label="Préférences" data-i18n-title="preferences" data-i18n-aria-label="preferences">⚙</button>
         <div id="language" class="language-picker" role="group" aria-label="Langue / Language">
           <button id="language-en" type="button" data-language="en" aria-pressed="false">EN</button>
           <button id="language-fr" type="button" data-language="fr" aria-pressed="false">FR</button>
         </div>
         <details class="usage-popover">
-          <summary title="Consommation personnelle"><span class="quota-dot"></span><span data-i18n="quotas">Quotas</span></summary>
+          <summary title="Consommation personnelle" data-i18n-title="personal_usage"><span class="quota-dot"></span><span data-i18n="quotas">Quotas</span></summary>
           <div class="usage-panel">
             <div class="usage-heading">
               <div><span class="eyebrow">Consommation personnelle</span><strong>Quotas IA</strong></div>
@@ -97,14 +97,14 @@
       <section class="tasks-panel">
         <div class="tasks-head">
           <div><strong data-i18n="tasks">Tâches</strong><span id="task-count">0</span></div>
-          <select id="task-filter" aria-label="Filtrer les tâches"><option value="active">Actives</option><option value="attention">À valider</option><option value="all">Toutes</option></select>
+          <select id="task-filter" aria-label="Filtrer les tâches" data-i18n-aria-label="filter_tasks"><option value="active" data-i18n="active_plural">Actives</option><option value="attention" data-i18n="review_plural">À valider</option><option value="all" data-i18n="all">Toutes</option></select>
         </div>
         <div id="tasks" class="task-list"><span class="task-empty" data-i18n="no_tasks">Aucune tâche récente</span></div>
       </section>
       <div id="agents" class="agent-stack"></div>
       <aside class="orchestrator-disclaimer" role="note">
-        <strong>Joe est un orchestrateur</strong>
-        <p>Les modèles et API restent des services tiers. Surveille tes quotas, crédits et runs actifs : fermer cette page n’arrête pas le travail en cours.</p>
+        <strong data-i18n="orchestrator_warning">Joe est un orchestrateur</strong>
+        <p data-i18n="orchestrator_warning_text">Les modèles et API restent des services tiers. Surveille tes quotas, crédits et runs actifs : fermer cette page n’arrête pas le travail en cours.</p>
       </aside>
       <div class="diagnostic-store hidden" aria-hidden="true">
         <div id="evidence-log" class="evidence-log"></div>
@@ -238,69 +238,69 @@
   <dialog id="automation-dialog" class="project-dialog automation-dialog">
     <form method="dialog">
       <header class="automation-dialog-head">
-        <span class="eyebrow">Automatisation</span>
-        <h2>Planifier un travail autonome</h2>
-        <p class="dialog-intro">Projet : <strong id="automation-project"></strong>. Choisis le type d’automatisation à configurer.</p>
-        <div class="risk-note compact"><strong>Une automatisation continue côté serveur</strong><p>Elle peut appeler des services IA payants même si l’onglet ou VS Code est fermé. Fixe des limites, surveille tes quotas et utilise « Annuler » pour l’interrompre.</p></div>
+        <span class="eyebrow" data-i18n="automation">Automatisation</span>
+        <h2 data-i18n="plan_autonomous_work">Planifier un travail autonome</h2>
+        <p class="dialog-intro"><span data-i18n="project">Projet</span> : <strong id="automation-project"></strong>. <span data-i18n="automation_intro">Choisis le type d’automatisation à configurer.</span></p>
+        <div class="risk-note compact"><strong data-i18n="server_automation">Une automatisation continue côté serveur</strong><p data-i18n="server_automation_warning">Elle peut appeler des services IA payants même si l’onglet ou VS Code est fermé. Fixe des limites, surveille tes quotas et utilise « Annuler » pour l’interrompre.</p></div>
       </header>
-      <nav class="automation-tabs" aria-label="Type d’automatisation">
-        <button id="automation-tab-plan" type="button" class="active" aria-selected="true"><b>Plan par étapes</b><small>Une liste d’actions déterministes</small></button>
-        <button id="automation-tab-autonomous" type="button" aria-selected="false"><b>Campagne Autonomous</b><small>Recherche et expérimentation en boucle</small></button>
+      <nav class="automation-tabs" aria-label="Type d’automatisation" data-i18n-aria-label="automation_type">
+        <button id="automation-tab-plan" type="button" class="active" aria-selected="true"><b data-i18n="step_plan">Plan par étapes</b><small data-i18n="step_plan_help">Une liste d’actions déterministes</small></button>
+        <button id="automation-tab-autonomous" type="button" aria-selected="false"><b data-i18n="autonomous_campaign">Campagne Autonomous</b><small data-i18n="autonomous_campaign_help">Recherche et expérimentation en boucle</small></button>
       </nav>
       <section id="automation-pane-plan" class="automation-pane active">
-        <div class="automation-section-head"><h3>Configuration du plan</h3><p>Chaque étape démarre après validation de la précédente.</p></div>
+        <div class="automation-section-head"><h3 data-i18n="plan_configuration">Configuration du plan</h3><p data-i18n="plan_configuration_help">Chaque étape démarre après validation de la précédente.</p></div>
         <fieldset class="dialog-section automation-policy">
-          <legend>Stratégie de quotas</legend>
-          <label>IA réservée<select id="automation-provider"><option value="">Équilibrage automatique</option><option value="claude">Claude</option><option value="codex">Codex</option><option value="gemini">Gemini</option><option value="copilot">Copilot</option></select></label>
-          <small>Joe peut attendre la prochaine fenêtre de quota. Une relecture ou un consensus peut appeler une autre IA.</small>
+          <legend data-i18n="quota_strategy">Stratégie de quotas</legend>
+          <label><span data-i18n="reserved_ai">IA réservée</span><select id="automation-provider"><option value="" data-i18n="automatic_balancing">Équilibrage automatique</option><option value="claude">Claude</option><option value="codex">Codex</option><option value="gemini">Gemini</option><option value="copilot">Copilot</option></select></label>
+          <small data-i18n="quota_help">Joe peut attendre la prochaine fenêtre de quota. Une relecture ou un consensus peut appeler une autre IA.</small>
         </fieldset>
-        <label>Titre<input id="automation-title" maxlength="80" placeholder="Ex. Campagne de tests nocturne"></label>
+        <label><span data-i18n="title">Titre</span><input id="automation-title" maxlength="80" placeholder="Ex. Campagne de tests nocturne"></label>
         <div class="automation-options plan-schedule-grid">
-          <label>Démarrage<select id="automation-start"><option value="now">Dès maintenant</option><option value="at">À une date précise</option><option value="quota_reset">Au rechargement des quotas (+1 min)</option></select></label>
-          <label id="automation-when-label">Date<input id="automation-when" type="datetime-local"></label>
+          <label><span data-i18n="start">Démarrage</span><select id="automation-start"><option value="now" data-i18n="start_now">Dès maintenant</option><option value="at" data-i18n="start_at">À une date précise</option><option value="quota_reset" data-i18n="start_quota_reset">Au rechargement des quotas (+1 min)</option></select></label>
+          <label id="automation-when-label"><span data-i18n="date">Date</span><input id="automation-when" type="datetime-local"></label>
         </div>
-        <label>Étapes<textarea id="automation-steps" rows="6" placeholder="Une étape par ligne :&#10;Implémenter la fonctionnalité&#10;Exécuter les tests&#10;Analyser les résultats et corriger"></textarea></label>
+        <label><span data-i18n="steps">Étapes</span><textarea id="automation-steps" rows="6" placeholder="Une étape par ligne :&#10;Implémenter la fonctionnalité&#10;Exécuter les tests&#10;Analyser les résultats et corriger" data-i18n-placeholder="steps_placeholder"></textarea></label>
         <div class="automation-options plan-controls-grid">
-          <label>Workflow<select id="automation-mode"><option value="review">Relecture</option><option value="fast">Rapide</option><option value="consensus">Consensus</option></select></label>
-          <label>Accès<select id="automation-execution"><option value="workspace-write">Écriture projet</option><option value="read-only">Lecture seule</option></select></label>
-          <label>Corrections max<input id="automation-retries" type="number" min="0" max="5" value="2"></label>
+          <label><span data-i18n="workflow">Workflow</span><select id="automation-mode"><option value="review" data-i18n="review">Relecture</option><option value="fast" data-i18n="fast">Rapide</option><option value="consensus">Consensus</option></select></label>
+          <label><span data-i18n="access">Accès</span><select id="automation-execution"><option value="workspace-write" data-i18n="project_write">Écriture projet</option><option value="read-only" data-i18n="read_only">Lecture seule</option></select></label>
+          <label><span data-i18n="max_corrections">Corrections max</span><input id="automation-retries" type="number" min="0" max="5" value="2"></label>
         </div>
-        <div class="automation-check-row"><label class="check-label"><input id="automation-integrate" type="checkbox" checked> Intégrer automatiquement chaque worktree validé</label><small>Le push reste régi par le réglage du projet.</small></div>
-        <section class="automation-history"><div class="automation-section-head compact"><h3>Plans récents</h3></div><div id="automation-list" class="automation-list"></div></section>
+        <div class="automation-check-row"><label class="check-label"><input id="automation-integrate" type="checkbox" checked> <span data-i18n="auto_integrate">Intégrer automatiquement chaque worktree validé</span></label><small data-i18n="push_project_setting">Le push reste régi par le réglage du projet.</small></div>
+        <section class="automation-history"><div class="automation-section-head compact"><h3 data-i18n="recent_plans">Plans récents</h3></div><div id="automation-list" class="automation-list"></div></section>
       </section>
       <section id="automation-pane-autonomous" class="automation-pane" hidden>
-        <div class="automation-section-head"><h3>Campagne de recherche</h3><p>Boucle bornée : recherche → code → expérience → analyse.</p></div>
+        <div class="automation-section-head"><h3 data-i18n="research_campaign">Campagne de recherche</h3><p data-i18n="research_loop_help">Boucle bornée : recherche → code → expérience → analyse.</p></div>
         <div class="automation-options autonomous-main-grid">
-          <label>Raisonnement<select id="autonomous-mode"><option value="fast">Une IA</option><option value="review">Une IA + relecture</option><option value="consensus">Consensus multi-IA</option></select></label>
-          <label>Budget actif (minutes)<input id="autonomous-budget-minutes" type="number" min="1" max="10080" value="60"></label>
-          <label>Budget tokens connu<input id="autonomous-token-budget" type="number" min="1" placeholder="Facultatif"></label>
-          <label>Appels modèle max<input id="autonomous-call-budget" type="number" min="1" placeholder="Calcul automatique"></label>
+          <label><span data-i18n="reasoning">Raisonnement</span><select id="autonomous-mode"><option value="fast" data-i18n="one_ai">Une IA</option><option value="review" data-i18n="ai_review">Une IA + relecture</option><option value="consensus" data-i18n="multi_ai_consensus">Consensus multi-IA</option></select></label>
+          <label><span data-i18n="active_budget">Budget actif (minutes)</span><input id="autonomous-budget-minutes" type="number" min="1" max="10080" value="60"></label>
+          <label><span data-i18n="known_token_budget">Budget tokens connu</span><input id="autonomous-token-budget" type="number" min="1" placeholder="Facultatif" data-i18n-placeholder="optional"></label>
+          <label><span data-i18n="max_model_calls">Appels modèle max</span><input id="autonomous-call-budget" type="number" min="1" placeholder="Calcul automatique" data-i18n-placeholder="automatic_calculation"></label>
         </div>
         <fieldset class="dialog-section autonomous-schedule-card">
-          <legend>Fenêtre d’exécution</legend>
-          <label class="check-label"><input id="autonomous-schedule-enabled" type="checkbox"> Limiter la campagne à une plage quotidienne</label>
+          <legend data-i18n="execution_window">Fenêtre d’exécution</legend>
+          <label class="check-label"><input id="autonomous-schedule-enabled" type="checkbox"> <span data-i18n="daily_window">Limiter la campagne à une plage quotidienne</span></label>
           <div class="automation-options autonomous-window-grid">
-            <label>Début<input id="autonomous-window-start" type="time" value="08:00"></label>
-            <label>Fin<input id="autonomous-window-end" type="time" value="18:00"></label>
-            <label>Jours<select id="autonomous-window-days"><option value="everyday">Tous les jours</option><option value="weekdays">Du lundi au vendredi</option></select></label>
+            <label><span data-i18n="beginning">Début</span><input id="autonomous-window-start" type="time" value="08:00"></label>
+            <label><span data-i18n="end">Fin</span><input id="autonomous-window-end" type="time" value="18:00"></label>
+            <label><span data-i18n="days">Jours</span><select id="autonomous-window-days"><option value="everyday" data-i18n="every_day">Tous les jours</option><option value="weekdays" data-i18n="weekdays">Du lundi au vendredi</option></select></label>
           </div>
-          <small>Les runs sont interrompus proprement, sauvegardés puis repris au prochain créneau.</small>
+          <small data-i18n="window_help">Les runs sont interrompus proprement, sauvegardés puis repris au prochain créneau.</small>
         </fieldset>
         <fieldset class="dialog-section autonomous-resource-card">
-          <legend>Ressources (facultatif)</legend>
+          <legend data-i18n="resources_optional">Ressources (facultatif)</legend>
           <div class="automation-options autonomous-window-grid">
-            <label>Politique<select id="autonomous-resource-mode"><option value="auto">Choix automatique</option><option value="gpu_only">GPU uniquement</option><option value="cpu_only">CPU uniquement</option></select></label>
-            <label>Indice GPU<input id="autonomous-gpu-index" type="number" min="0" placeholder="Ex. 0"></label>
-            <label>Précisions<input id="autonomous-resource-notes" maxlength="1000" placeholder="Ex. préserver 4 Go de VRAM"></label>
+            <label><span data-i18n="policy">Politique</span><select id="autonomous-resource-mode"><option value="auto" data-i18n="automatic_choice">Choix automatique</option><option value="gpu_only" data-i18n="gpu_only">GPU uniquement</option><option value="cpu_only" data-i18n="cpu_only">CPU uniquement</option></select></label>
+            <label><span data-i18n="gpu_index">Indice GPU</span><input id="autonomous-gpu-index" type="number" min="0" placeholder="Ex. 0"></label>
+            <label><span data-i18n="details">Précisions</span><input id="autonomous-resource-notes" maxlength="1000" placeholder="Ex. préserver 4 Go de VRAM" data-i18n-placeholder="resource_notes_placeholder"></label>
           </div>
-          <small>Tu peux répondre à ces informations ou les laisser vides. Joe vérifiera les ressources au début du premier créneau, pas lors de la création.</small>
+          <small data-i18n="resource_creation_help">Tu peux répondre à ces informations ou les laisser vides. Joe vérifiera les ressources au début du premier créneau, pas lors de la création.</small>
         </fieldset>
-        <div class="autonomous-note"><b>Traçabilité complète</b><p>Les recherches, modèles appelés, choix, commits, expériences et métriques apparaissent dans le journal.</p></div>
-        <div class="risk-note autonomous-risk" role="alert"><strong>Fonctionnalité expérimentale</strong><p>Autonomous peut enchaîner sans intervention des recherches, appels de modèles, commandes et expériences. Les limites réduisent le risque mais ne garantissent ni le coût, ni le résultat, ni l’absence d’erreur. Vérifie le budget et les permissions avant de lancer.</p></div>
-        <label class="check-label autonomous-consent"><input id="autonomous-risk-ack" type="checkbox"> J’ai compris que la campagne continue sans moi et peut consommer mes crédits IA.</label>
-        <section class="automation-history"><div class="automation-section-head compact"><h3>Campagnes récentes</h3></div><div id="autonomous-list" class="automation-list"></div></section>
+        <div class="autonomous-note"><b data-i18n="full_traceability">Traçabilité complète</b><p data-i18n="traceability_help">Les recherches, modèles appelés, choix, commits, expériences et métriques apparaissent dans le journal.</p></div>
+        <div class="risk-note autonomous-risk" role="alert"><strong data-i18n="experimental_feature">Fonctionnalité expérimentale</strong><p data-i18n="autonomous_risk">Autonomous peut enchaîner sans intervention des recherches, appels de modèles, commandes et expériences. Les limites réduisent le risque mais ne garantissent ni le coût, ni le résultat, ni l’absence d’erreur. Vérifie le budget et les permissions avant de lancer.</p></div>
+        <label class="check-label autonomous-consent"><input id="autonomous-risk-ack" type="checkbox"> <span data-i18n="autonomous_consent">J’ai compris que la campagne continue sans moi et peut consommer mes crédits IA.</span></label>
+        <section class="automation-history"><div class="automation-section-head compact"><h3 data-i18n="recent_campaigns">Campagnes récentes</h3></div><div id="autonomous-list" class="automation-list"></div></section>
       </section>
-      <footer class="dialog-actions automation-dialog-actions"><button value="cancel">Fermer</button><button id="save-automation" value="default">Programmer le plan</button><button id="start-parkinsons-autonomous" type="button" hidden>Lancer la campagne DaT Parkinson</button></footer>
+      <footer class="dialog-actions automation-dialog-actions"><button value="cancel" data-i18n="close">Fermer</button><button id="save-automation" value="default" data-i18n="schedule_plan">Programmer le plan</button><button id="start-parkinsons-autonomous" type="button" hidden data-i18n="launch_dat">Lancer la campagne DaT Parkinson</button></footer>
     </form>
   </dialog>
   <dialog id="onboarding-dialog" class="project-dialog onboarding-dialog">
