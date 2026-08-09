@@ -1,4 +1,4 @@
-from joe.autonomous_analysis import analyze_campaign
+from joe.autonomous_analysis import analyze_campaign, iteration_report
 from joe.web_runs import _normalize_token_budget
 
 
@@ -92,3 +92,35 @@ def test_incompatible_split_is_visible_but_excluded_from_comparison() -> None:
     assert analysis["summary"]["best_metric"] == .5
     assert analysis["summary"]["comparable"] == 1
     assert analysis["experiments"][1]["validation_status"] == "incompatible"
+
+
+def test_iteration_report_is_concise_and_hides_raw_telemetry() -> None:
+    result = {
+        "status": "completed", "duration_seconds": 8.237,
+        "metrics": {
+            "schema_version": 1,
+            "experiment": {
+                "variant": "regional-logreg",
+                "hypothesis": "Les agrégats régionaux amélioreront la généralisation.",
+            },
+            "primary_metric": {"name": "log_loss", "value": 0.569634, "direction": "min"},
+            "secondary_metrics": {"accuracy": 0.74, "balanced_accuracy": 0.71, "auc": 0.8},
+            "resources": {"gpu_peak_mb": 1220, "cpu_peak_percent": 80},
+            "validation": {"strategy": "group_kfold", "folds": 3, "split_fingerprint": "same", "leakage_controls": ["subject"]},
+            "reproducibility": {"python": "3.12", "platform": "very long telemetry"},
+        },
+    }
+    campaign = {
+        "iteration": 1, "metric_name": "log_loss", "metric_direction": "min",
+        "history": [{"kind": "experiment", **result}],
+    }
+    report = iteration_report(campaign, result, analyze_campaign(campaign))
+
+    assert "**Expérience terminée** · 8.2 s · `regional-logreg`" in report
+    assert "| **log_loss** | **0.569634** |" in report
+    assert "| Validation | comparable · group_kfold · 3 folds |" in report
+    assert "accuracy" in report and "balanced_accuracy" in report
+    assert "auc" not in report  # Two secondary indicators at most.
+    assert "schema_version" not in report
+    assert "reproducibility" not in report
+    assert "gpu_peak_mb" not in report

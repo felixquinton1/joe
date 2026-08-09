@@ -149,6 +149,100 @@ def analyze_campaign(campaign: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def iteration_report(
+    campaign: dict[str, Any], result: dict[str, Any], analysis: dict[str, Any]
+) -> str:
+    """Build a short human report while keeping raw telemetry in campaign history."""
+    iteration = int(campaign.get("iteration") or 0)
+    status = str(result.get("status") or "unknown")
+    duration_value = _number(result.get("duration_seconds"))
+    duration = None if duration_value is None else f"{duration_value:.1f}".rstrip("0").rstrip(".")
+    metrics = result.get("metrics") if isinstance(result.get("metrics"), dict) else {}
+    primary = metrics.get("primary_metric") if isinstance(metrics.get("primary_metric"), dict) else {}
+    metric_name = str(primary.get("name") or campaign.get("metric_name") or "score")
+    metric = _number(primary.get("value"))
+    if metric is None:
+        metric = metric_value(metrics, metric_name)
+    experiment = metrics.get("experiment") if isinstance(metrics.get("experiment"), dict) else {}
+    validation = metrics.get("validation") if isinstance(metrics.get("validation"), dict) else {}
+    nodes = analysis.get("experiments") or []
+    current = nodes[-1] if nodes else {}
+    best = _number((analysis.get("summary") or {}).get("best_metric"))
+
+    status_text = {
+        "completed": "terminée", "crashed": "en échec", "timed_out": "arrêtée par délai",
+        "interrupted": "interrompue", "cancelled": "annulée",
+    }.get(status, status)
+    headline = f"**Expérience {status_text}**"
+    if duration is not None:
+        headline += f" · {duration} s"
+    variant = str(experiment.get("variant") or "").strip()
+    if variant:
+        headline += f" · `{variant}`"
+
+    lines = [f"### Autonomous — itération {iteration}", "", headline]
+    if metric is not None:
+        lines.extend([
+            "", "| Indicateur | Résultat |", "| --- | ---: |",
+            f"| **{_clean_cell(metric_name)}** | **{_format_number(metric)}** |",
+        ])
+        if best is not None:
+            lines.append(f"| Meilleur de la campagne | {_format_number(best)} |")
+        validation_text = _validation_label(validation, bool(current.get("comparable")))
+        if validation_text:
+            lines.append(f"| Validation | {_clean_cell(validation_text)} |")
+        for name, value in _secondary_metrics(metrics, limit=2):
+            lines.append(f"| {_clean_cell(name)} | {_format_number(value)} |")
+
+    hypothesis = str(experiment.get("hypothesis") or "").strip()
+    if hypothesis:
+        lines.extend(["", f"**Hypothèse testée.** {hypothesis}"])
+    if status != "completed":
+        error = str(result.get("error") or metrics.get("error") or "").strip()
+        if error:
+            lines.extend(["", f"**À corriger.** {error}"])
+    elif metric is None:
+        lines.extend(["", "Aucune métrique principale exploitable n’a été publiée."])
+    lines.extend(["", "Les métriques techniques complètes restent disponibles dans le journal détaillé."])
+    return "\n".join(lines)
+
+
+def _secondary_metrics(metrics: dict[str, Any], limit: int) -> list[tuple[str, float]]:
+    values = metrics.get("secondary_metrics")
+    if not isinstance(values, dict):
+        return []
+    selected: list[tuple[str, float]] = []
+    for name, value in values.items():
+        number = _number(value)
+        if number is not None:
+            selected.append((str(name), number))
+            if len(selected) >= limit:
+                break
+    return selected
+
+
+def _validation_label(validation: dict[str, Any], comparable: bool) -> str:
+    parts = ["comparable" if comparable else "non comparable"]
+    strategy = str(validation.get("strategy") or "").strip()
+    if strategy:
+        parts.append(strategy)
+    folds = validation.get("folds")
+    if isinstance(folds, int) and folds > 1:
+        parts.append(f"{folds} folds")
+    return " · ".join(parts)
+
+
+def _format_number(value: Any, digits: int = 6) -> str | None:
+    number = _number(value)
+    if number is None:
+        return None
+    return f"{number:.{digits}g}"
+
+
+def _clean_cell(value: Any) -> str:
+    return str(value).replace("|", "\\|").replace("\n", " ").strip()
+
+
 def model_usage(campaign: dict[str, Any]) -> dict[str, int]:
     calls = known_tokens = unknown = prompts = 0
     for event in campaign.get("history") or []:

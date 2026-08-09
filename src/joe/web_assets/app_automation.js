@@ -155,7 +155,10 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     }
     if (event.kind === "experiment") {
       const command = Array.isArray(event.command) ? event.command.join(" ") : tr("local_command");
-      const metrics = Object.entries(event.metrics || {}).map(([key, value]) => `${key}=${value}`).join(", ");
+      const primary = event.metrics?.primary_metric;
+      const metrics = primary && primary.value !== null && primary.value !== undefined
+        ? `${primary.name || tr("metric")}=${formatMetric(primary.value)}`
+        : "";
       return `${tr("experiment")} · ${command} · ${statusLabel(event.status)} · ${event.duration_seconds || "?"} s${metrics ? ` · ${metrics}` : ""}`;
     }
     if (event.kind === "paused") return `${tr("planned_pause")} · ${tr("resume")} ${formatDate(event.next_start_at)}`;

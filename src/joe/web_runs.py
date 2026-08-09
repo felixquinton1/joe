@@ -16,7 +16,7 @@ from .capabilities import select_model, select_model_tier
 from .approvals import ApprovalStore
 from .automations import AutomationStore, START_MODES
 from .autonomous import AutonomousStore, TERMINAL_STATUSES, build_autonomous_skill
-from .autonomous_analysis import analyze_campaign, metric_value
+from .autonomous_analysis import analyze_campaign, iteration_report, metric_value
 from .autonomous_state import AutonomousState, infer_state
 from .autonomous_builder import build_campaign_payload
 from .autonomous_schedule import schedule_state
@@ -1833,12 +1833,7 @@ class RunManager:
         )
         scientific = analyze_campaign(campaign)
         best = scientific["summary"]["best_metric"]
-        message = (
-            f"### Autonomous — itération {campaign.get('iteration')}\n\n"
-            f"Expérience **{result.get('status', 'inconnue')}** en "
-            f"{result.get('duration_seconds', '?')} s. Métriques : "
-            f"`{json.dumps(result.get('metrics') or {}, ensure_ascii=False)}`."
-        )
+        message = iteration_report(campaign, result, scientific)
         self.conversations.append_message(str(campaign["conversation_id"]), "assistant", message)
         campaign = self.autonomous.transition(
             campaign["id"], AutonomousState.CHECKPOINTING, "experiment_evaluated",
