@@ -85,3 +85,9 @@ def test_forcing_a_quota_refresh_is_an_elevation_carried_by_the_query():
     route = resolve("GET", "/api/usage")[0]
     assert route.role == "viewer"
     assert route.query_role == ("force", "1", "maintainer")
+
+
+def test_autonomous_manual_handoff_route_is_declared():
+    route, values = resolve("POST", "/api/autonomous/c1/handoff")
+    assert route.handler == "_post_autonomous_handoff"
+    assert values == {"campaign_id": "c1"}

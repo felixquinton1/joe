@@ -27,7 +27,7 @@ TERMINAL_STATES = {
 ALLOWED_TRANSITIONS: dict[AutonomousState, set[AutonomousState]] = {
     AutonomousState.PREPARING: {
         AutonomousState.READY, AutonomousState.COMPLETED,
-        AutonomousState.BLOCKED, AutonomousState.CANCELLED,
+        AutonomousState.PAUSED, AutonomousState.BLOCKED, AutonomousState.CANCELLED,
     },
     AutonomousState.READY: {
         AutonomousState.RESEARCHING, AutonomousState.IMPLEMENTING,
@@ -55,7 +55,8 @@ ALLOWED_TRANSITIONS: dict[AutonomousState, set[AutonomousState]] = {
         AutonomousState.PAUSED, AutonomousState.BLOCKED, AutonomousState.CANCELLED,
     },
     AutonomousState.PAUSED: {
-        AutonomousState.READY, AutonomousState.BLOCKED, AutonomousState.CANCELLED,
+        AutonomousState.PREPARING, AutonomousState.READY,
+        AutonomousState.BLOCKED, AutonomousState.CANCELLED,
     },
     # A terminal campaign can only leave its state through an explicit user resume.
     AutonomousState.COMPLETED: {AutonomousState.READY},

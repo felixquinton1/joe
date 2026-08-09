@@ -129,6 +129,48 @@ def _normalize_token_budget(value: Any, iterations: int, mode: str) -> dict[str,
     }
 
 
+def _checkpoint_manifest(
+    workspace: Path, campaign: dict[str, Any], result: dict[str, Any]
+) -> dict[str, Any]:
+    relative = str(campaign.get("checkpoint_path") or "")
+    target = (workspace / str(campaign.get("working_directory", ".")) / relative).resolve()
+    root = workspace.resolve()
+    if not relative or root not in (target, *target.parents) or not target.exists():
+        return {"path": relative, "available": False, "resume_ready": False}
+    try:
+        size = target.stat().st_size if target.is_file() else sum(
+            item.stat().st_size for index, item in enumerate(target.rglob("*"))
+            if index < 2000 and item.is_file()
+        )
+        modified = target.stat().st_mtime
+    except OSError:
+        size, modified = None, None
+    reproducibility = (
+        result.get("metrics", {}).get("reproducibility", {})
+        if isinstance(result.get("metrics"), dict) else {}
+    )
+    current_commit = _git_commit(workspace)
+    created_commit = reproducibility.get("git_commit")
+    compatible = created_commit is None or current_commit is None or created_commit == current_commit
+    return {
+        "path": relative, "available": True, "size_bytes": size,
+        "modified_at": modified, "created_with_commit": created_commit,
+        "current_commit": current_commit, "compatible": compatible,
+        "resume_ready": bool(campaign.get("resume_command")) and compatible,
+    }
+
+
+def _git_commit(workspace: Path) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(workspace), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=False, timeout=10,
+        )
+        return result.stdout.strip() if result.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
 @dataclass
 class LiveRun:
     run_id: str
@@ -1283,6 +1325,7 @@ class RunManager:
             data_policy=payload.get("data_policy", ""),
             campaign_context=payload.get("campaign_context", ""),
             research_refresh_interval=payload.get("research_refresh_interval", 0),
+            plateau_patience=payload.get("plateau_patience", 2),
             command=payload.get("command"),
             working_directory=working_directory,
             metrics_path=payload.get("metrics_path", "metrics.json"),
@@ -1322,6 +1365,21 @@ class RunManager:
         return self.autonomous.cancel(campaign_id)
 
     def resume_autonomous(self, campaign_id: str) -> dict[str, Any] | None:
+        current = self.autonomous.get(campaign_id)
+        if current:
+            workspace, _, _, _ = self._project_scope(str(current["conversation_id"]))
+            history = list(current.get("history") or [])
+            for index in range(len(history) - 1, -1, -1):
+                if history[index].get("kind") != "experiment":
+                    continue
+                manifest = _checkpoint_manifest(workspace, current, history[index])
+                history[index] = {
+                    **history[index], "checkpoint": manifest,
+                    "checkpoint_available": bool(manifest.get("resume_ready")),
+                }
+                self.autonomous.update(campaign_id, history=history)
+                self.autonomous.add_event(campaign_id, "checkpoint_validation", manifest)
+                break
         campaign = self.autonomous.resume(campaign_id)
         if not campaign:
             return None
@@ -1344,6 +1402,36 @@ class RunManager:
         )
         return self.autonomous.get(campaign_id)
 
+    def handoff_autonomous(self, campaign_id: str) -> dict[str, Any] | None:
+        campaign = self.autonomous.get(campaign_id)
+        if not campaign:
+            return None
+        if campaign.get("status") in TERMINAL_STATUSES:
+            raise ValueError("Cette campagne est déjà terminée ; continue directement dans le chat.")
+        now = time.time()
+        elapsed = float(campaign.get("active_elapsed_seconds", 0))
+        if campaign.get("active_window_started_at") is not None:
+            elapsed += max(0.0, now - float(campaign["active_window_started_at"]))
+        if campaign.get("current_run_id"):
+            self.cancel(str(campaign["current_run_id"]))
+        for events in (
+            self._autonomous_experiment_cancels, self._autonomous_preflight_cancels,
+        ):
+            event = events.get(campaign_id)
+            if event:
+                event.set()
+        workspace, _, _, _ = self._project_scope(str(campaign["conversation_id"]))
+        self.autonomous.add_event(campaign_id, "manual_handoff", {
+            "status": "paused", "git_commit": _git_commit(workspace),
+            "iteration": campaign.get("iteration", 0),
+        })
+        return self.autonomous.transition(
+            campaign_id, AutonomousState.PAUSED, "user_manual_handoff",
+            phase=str(campaign.get("phase") or "planning"), manual_hold=True,
+            current_run_id=None, active_elapsed_seconds=elapsed,
+            active_window_started_at=None, next_start_at=None, error=None,
+        )
+
     def delete_autonomous(self, campaign_id: str) -> bool:
         campaign = self.autonomous.get(campaign_id)
         if not campaign:
@@ -1355,6 +1443,8 @@ class RunManager:
     def _advance_autonomous(self) -> None:
         for campaign in self.autonomous.list():
             if campaign.get("status") in TERMINAL_STATUSES:
+                continue
+            if campaign.get("manual_hold"):
                 continue
             now = time.time()
             window = schedule_state(campaign.get("schedule") or {}, now)
@@ -1713,7 +1803,12 @@ class RunManager:
                     or previous_structured.get("id")
                     or previous.get("id")
                 )
+                result["checkpoint"] = _checkpoint_manifest(workspace, campaign, result)
+                result["checkpoint_available"] = bool(result["checkpoint"]["resume_ready"])
                 self.autonomous.add_event(campaign_id, "experiment", result)
+                current = self.autonomous.get(campaign_id) or {}
+                if current.get("manual_hold"):
+                    return
                 self.autonomous.transition(
                     campaign_id, AutonomousState.EVALUATING, "experiment_finished",
                     phase="evaluation",
@@ -1736,12 +1831,8 @@ class RunManager:
         metric = _autonomous_metric_value(
             result.get("metrics") or {}, str(campaign.get("metric_name") or "score")
         )
-        best = campaign.get("best_metric")
-        if result.get("status") == "completed" and isinstance(metric, (int, float)) and (
-            best is None or (campaign.get("metric_direction") == "min" and metric < best)
-            or (campaign.get("metric_direction") != "min" and metric > best)
-        ):
-            best = metric
+        scientific = analyze_campaign(campaign)
+        best = scientific["summary"]["best_metric"]
         message = (
             f"### Autonomous — itération {campaign.get('iteration')}\n\n"
             f"Expérience **{result.get('status', 'inconnue')}** en "
@@ -1794,15 +1885,43 @@ class RunManager:
             )
         else:
             interval = int(campaign.get("research_refresh_interval", 0))
-            next_phase = (
-                "research_refresh"
-                if interval > 0 and int(campaign.get("iteration", 0)) % interval == 0
-                else "planning"
+            iteration = int(campaign.get("iteration", 0))
+            streak = int(scientific["summary"].get("non_improving_streak", 0))
+            patience = int(campaign.get("plateau_patience", 2))
+            refresh_iteration = campaign.get("plateau_refresh_iteration")
+            streak_start = iteration - streak + 1
+            plateau_needs_research = (
+                streak >= patience
+                and (refresh_iteration is None or int(refresh_iteration) < streak_start)
             )
+            plateau_exhausted = (
+                streak >= patience
+                and refresh_iteration is not None
+                and int(refresh_iteration) >= streak_start
+                and iteration - int(refresh_iteration) >= patience
+            )
+            if plateau_exhausted:
+                self.autonomous.transition(
+                    campaign["id"], AutonomousState.COMPLETED,
+                    "scientific_plateau_after_method_refresh", phase="done",
+                    best_metric=best, current_experiment_id=None, error=None,
+                )
+                self.conversations.append_message(
+                    str(campaign["conversation_id"]), "assistant",
+                    "### Autonomous — plateau scientifique\n\n"
+                    "Après une recherche ciblée de nouvelles méthodologies et plusieurs essais "
+                    "comparables sans amélioration, Joe arrête la campagne proprement.",
+                )
+                return
+            next_phase = "research_refresh" if (
+                plateau_needs_research
+                or (interval > 0 and iteration % interval == 0)
+            ) else "planning"
             self.autonomous.transition(
                 campaign["id"], AutonomousState.READY, "checkpoint_completed",
                 phase=next_phase,
                 best_metric=best, current_experiment_id=None, error=None,
+                plateau_refresh_iteration=(iteration if plateau_needs_research else refresh_iteration),
             )
 
     @staticmethod
@@ -1819,7 +1938,13 @@ class RunManager:
             f"Protocole : {campaign.get('research_protocol') or 'Consulte la documentation publique et les approches comparables.'}\n\n"
             f"Politique de données impérative : {campaign.get('data_policy') or 'Ne transmets aucune donnée privée ou restreinte à un fournisseur IA.'}\n\n"
             "Vérifie que l'état courant reste aligné avec le brief durable et les règles officielles. "
-            "Recherche uniquement des sources publiques. Consigne une synthèse sourcée dans "
+            + (
+                "Les performances plafonnent : cherche prioritairement de nouvelles familles de méthodes, "
+                "des représentations ou protocoles réellement différents, puis sélectionne une direction "
+                "testable. Ne propose pas une simple micro-variation de la méthode actuelle. "
+                if refresh else ""
+            )
+            + "Recherche uniquement des sources publiques. Consigne une synthèse sourcée dans "
             "AUTONOMOUS_RESEARCH.md. N'inspecte, ne joins et ne recopie aucune donnée restreinte. "
             "Ne lance pas encore l'expérience. À partir des règles officielles, détermine toi-même "
             "la stratégie expérimentale et la manière rigoureuse d'en rendre compte; aucune méthode, "
@@ -1852,6 +1977,9 @@ class RunManager:
             "Utilise `joe.autonomous_sdk.ExperimentSpec`, `ExperimentOutcome` et `run_experiment` "
             "dans ce point d'entrée : le SDK publie atomiquement le contrat JSON versionné et expose "
             "le budget, le signal d'arrêt et les chemins de checkpoint. "
+            "Renseigne une fiche légère dans ExperimentSpec : hypothèse, résultat attendu, règle de décision, "
+            "coût GPU estimé et, dans ValidationSpec, stratégie, contrôles de fuite et empreintes stables des "
+            "données/splits. Une seule fiche suffit pour le prochain lot cohérent ; n'ajoute pas de cérémonie. "
             f"Écris le résultat dans {campaign.get('metrics_path') or 'metrics.json'} "
             f"avec la métrique primaire {campaign.get('metric_name') or 'score'} afin que Joe suive le meilleur résultat."
             "</experiment_contract>\n\n"

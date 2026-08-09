@@ -319,6 +319,15 @@ class Handler(BaseHTTPRequestHandler):
             campaign or {}, HTTPStatus.ACCEPTED if campaign else HTTPStatus.NOT_FOUND,
         )
 
+    def _post_autonomous_handoff(self, campaign_id: str) -> None:
+        try:
+            campaign = self.server.manager.handoff_autonomous(campaign_id)
+        except ValueError as error:
+            return self._json({"error": str(error)}, HTTPStatus.CONFLICT)
+        self._json(
+            campaign or {}, HTTPStatus.ACCEPTED if campaign else HTTPStatus.NOT_FOUND,
+        )
+
     def _delete_autonomous(self, campaign_id: str) -> None:
         deleted = self.server.manager.delete_autonomous(campaign_id)
         self._json(

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import platform
+import subprocess
+import sys
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -26,6 +29,8 @@ class ValidationSpec:
     folds: int | None = None
     seed: int | None = None
     leakage_controls: tuple[str, ...] = ()
+    split_fingerprint: str | None = None
+    data_fingerprint: str | None = None
 
 
 @dataclass(frozen=True)
@@ -39,6 +44,9 @@ class ExperimentSpec:
     experiment_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     parent_experiment_id: str | None = None
     variant: str | None = None
+    expected_outcome: str | None = None
+    decision_rule: str | None = None
+    estimated_gpu_minutes: float | None = None
     tags: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -125,6 +133,9 @@ def build_result(
             "parent_experiment_id": spec.parent_experiment_id,
             "variant": spec.variant,
             "hypothesis": spec.hypothesis,
+            "expected_outcome": spec.expected_outcome,
+            "decision_rule": spec.decision_rule,
+            "estimated_gpu_minutes": spec.estimated_gpu_minutes,
             "budget_seconds": spec.budget_seconds,
             "tags": list(spec.tags),
         },
@@ -141,12 +152,30 @@ def build_result(
         },
         "artifacts": [] if outcome is None else outcome.artifacts,
         "metadata": {} if outcome is None else outcome.metadata,
+        "reproducibility": _reproducibility(context.workspace),
         "timing": {
             "started_at": context.started_at,
             "finished_at": finished,
             "duration_seconds": round(finished - context.started_at, 3),
         },
         "error": error,
+    }
+
+
+def _reproducibility(workspace: Path) -> dict[str, Any]:
+    commit = None
+    try:
+        value = subprocess.run(
+            ["git", "-C", str(workspace), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=False, timeout=10,
+        )
+        commit = value.stdout.strip() if value.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return {
+        "git_commit": commit,
+        "python": sys.version.split()[0],
+        "platform": platform.platform(),
     }
 
 

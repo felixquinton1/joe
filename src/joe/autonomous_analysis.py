@@ -34,6 +34,8 @@ def analyze_campaign(campaign: dict[str, Any]) -> dict[str, Any]:
     previous_id: str | None = None
     best: float | None = None
     baseline: float | None = None
+    reference_validation: tuple[Any, ...] | None = None
+    non_improving_streak = 0
     for index, event in enumerate(
         item for item in (campaign.get("history") or []) if item.get("kind") == "experiment"
     ):
@@ -44,13 +46,28 @@ def analyze_campaign(campaign: dict[str, Any]) -> dict[str, Any]:
             "partial" if value is not None else "missing"
         )
         experiment = metrics.get("experiment") if isinstance(metrics.get("experiment"), dict) else {}
+        validation = metrics.get("validation") if isinstance(metrics.get("validation"), dict) else {}
+        signature = _validation_signature(validation)
+        contract_matches = (
+            isinstance(metrics.get("primary_metric"), dict)
+            and metrics["primary_metric"].get("name") == metric_name
+            and metrics["primary_metric"].get("direction") == direction
+        )
+        comparable = bool(contract_matches and signature)
+        if comparable and reference_validation is None:
+            reference_validation = signature
+        elif comparable and signature != reference_validation:
+            comparable = False
         node_id = str(experiment.get("id") or event.get("id") or f"experiment-{index + 1}")
-        if quality == "final":
+        if quality == "final" and comparable:
             baseline = value if baseline is None else baseline
             if best is None or (direction == "min" and value < best) or (
                 direction == "max" and value > best
             ):
                 best = value
+                non_improving_streak = 0
+            else:
+                non_improving_streak += 1
         nodes.append({
             "id": node_id,
             "parent_id": (
@@ -61,14 +78,31 @@ def analyze_campaign(campaign: dict[str, Any]) -> dict[str, Any]:
             "iteration": event.get("iteration", index + 1),
             "status": status,
             "quality": quality,
+            "comparable": comparable,
+            "validation_status": (
+                "comparable" if comparable else (
+                    "incompatible" if contract_matches and signature else "unverified"
+                )
+            ),
             "metric": value,
             "hypothesis": experiment.get("hypothesis") or event.get("hypothesis"),
             "variant": experiment.get("variant"),
+            "decision": {
+                "expected_outcome": experiment.get("expected_outcome"),
+                "decision_rule": experiment.get("decision_rule"),
+                "estimated_gpu_minutes": experiment.get("estimated_gpu_minutes"),
+            },
             "duration_seconds": event.get("duration_seconds"),
             "checkpoint_available": bool(event.get("checkpoint_available")),
+            "checkpoint": event.get("checkpoint") or {
+                "available": bool(event.get("checkpoint_available"))
+            },
+            "reproducibility": metrics.get("reproducibility") or {},
             "reason": (
-                None if quality == "final"
+                None if quality == "final" and comparable
                 else event.get("error") or (
+                    "Validation absente ou incompatible avec la référence de campagne."
+                    if quality == "final" and not comparable else
                     "Processus interrompu : métrique informative mais exclue du meilleur score."
                     if quality == "partial" else "Aucune métrique exploitable publiée."
                 )
@@ -89,11 +123,17 @@ def analyze_campaign(campaign: dict[str, Any]) -> dict[str, Any]:
             "final": sum(node["quality"] == "final" for node in nodes),
             "partial": sum(node["quality"] == "partial" for node in nodes),
             "missing": sum(node["quality"] == "missing" for node in nodes),
+            "comparable": sum(node["comparable"] for node in nodes),
             "baseline_metric": baseline,
             "best_metric": best,
             "improvement": improvement,
+            "non_improving_streak": non_improving_streak,
         },
         "usage": usage,
+        "checkpoints": [
+            {"experiment_id": node["id"], **node["checkpoint"]}
+            for node in nodes if node["checkpoint"].get("available")
+        ],
         "token_budget": {
             "max_tokens": budget.get("max_tokens"),
             "max_model_calls": budget.get("max_model_calls"),
@@ -146,3 +186,17 @@ def _remaining(limit: Any, consumed: int) -> int | None:
         return max(0, int(limit) - consumed) if limit is not None else None
     except (TypeError, ValueError):
         return None
+
+
+def _validation_signature(validation: dict[str, Any]) -> tuple[Any, ...] | None:
+    strategy = str(validation.get("strategy") or "").strip()
+    controls = tuple(sorted(str(item) for item in (validation.get("leakage_controls") or [])))
+    if not strategy or not controls:
+        return None
+    return (
+        strategy,
+        validation.get("folds"),
+        validation.get("split_fingerprint") or "unspecified-split",
+        validation.get("data_fingerprint") or "unspecified-data",
+        controls,
+    )

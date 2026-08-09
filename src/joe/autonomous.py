@@ -55,6 +55,7 @@ def build_autonomous_skill(values: dict[str, Any]) -> str:
         "- Revisit public literature whenever results plateau, contradict assumptions, reveal uncertainty or repeat failures.\n"
         "- Research refreshes are event-driven by new evidence; do not spend a model call on a periodic refresh without a decision it can change.\n"
         "- Preserve resumable checkpoints and the Git history after coherent changes.\n"
+        "- A checkpoint may be resumed only when Joe marks it resume-ready for the current code commit; otherwise start the affected run cleanly while preserving prior results.\n"
         "- Respect the data policy and all explicit prohibitions for every iteration.\n"
         "- Report meaningful transitions: step start, experiment start, result, analysis and next decision.\n"
         "- If a proposed action conflicts with this charter, do not perform it; explain the conflict.\n"
@@ -110,6 +111,8 @@ class AutonomousStore:
             "research_refresh_interval": max(
                 0, min(20, int(values.get("research_refresh_interval", 0)))
             ),
+            "plateau_patience": max(2, min(5, int(values.get("plateau_patience", 2)))),
+            "plateau_refresh_iteration": None,
             "command": command[:32],
             "working_directory": str(values.get("working_directory", ".")),
             "metrics_path": str(values.get("metrics_path", "metrics.json")),
@@ -159,6 +162,7 @@ class AutonomousStore:
             "active_elapsed_seconds": 0.0,
             "active_window_started_at": None,
             "next_start_at": None,
+            "manual_hold": False,
             "best_metric": None,
             "history": [],
             "error": None,
@@ -196,6 +200,8 @@ class AutonomousStore:
             "active_elapsed_seconds", "active_window_started_at", "next_start_at",
             "max_iterations", "resume_count", "resumed_at",
             "state", "state_history",
+            "manual_hold",
+            "plateau_refresh_iteration",
         }
         with self.lock:
             payload = self._read()
@@ -247,6 +253,8 @@ class AutonomousStore:
                 "max_iterations", "resume_count", "resumed_at",
                 "preflight", "resource_policy",
                 "token_budget",
+                "manual_hold",
+                "plateau_refresh_iteration",
             }
             item.update({key: value for key, value in changes.items() if key in allowed})
             item["updated_at"] = time.time()
@@ -288,12 +296,15 @@ class AutonomousStore:
         item = self.get(campaign_id)
         if not item:
             return None
-        if item.get("status") not in TERMINAL_STATUSES:
+        manual_resume = (
+            infer_state(item) == AutonomousState.PAUSED and bool(item.get("manual_hold"))
+        )
+        if item.get("status") not in TERMINAL_STATUSES and not manual_resume:
             raise ValueError("Cette campagne est déjà active.")
         iteration = int(item.get("iteration", 0))
         maximum = int(item.get("max_iterations", 1))
         chunk = int(item.get("iteration_chunk", maximum or 1))
-        if iteration >= maximum:
+        if not manual_resume and iteration >= maximum:
             maximum = iteration + max(1, chunk)
         history = item.get("history") or []
         previous = next(
@@ -307,18 +318,26 @@ class AutonomousStore:
             and item.get("resume_command")
             else "planning"
         )
+        target = (
+            AutonomousState.PREPARING
+            if manual_resume and (item.get("preflight") or {}).get("status") != "completed"
+            else AutonomousState.READY
+        )
         return self.transition(
             campaign_id,
-            AutonomousState.READY,
+            target,
             "user_resumed",
-            phase=phase,
+            phase=("preparing" if target == AutonomousState.PREPARING else phase),
             error=None,
             current_run_id=None,
             current_experiment_id=None,
-            active_elapsed_seconds=0.0,
+            active_elapsed_seconds=(
+                float(item.get("active_elapsed_seconds", 0)) if manual_resume else 0.0
+            ),
             active_window_started_at=None,
             next_start_at=None,
-            started_at=None,
+            started_at=(item.get("started_at") if manual_resume else None),
+            manual_hold=False,
             max_iterations=maximum,
             resume_count=int(item.get("resume_count", 0)) + 1,
             resumed_at=time.time(),

@@ -341,6 +341,64 @@ def test_scheduler_stops_before_new_prompt_when_model_call_budget_is_spent(
     assert persisted["state_history"][-1]["reason"] == "model_call_budget_reached"
 
 
+def test_manual_handoff_preserves_history_and_elapsed_budget_on_resume(tmp_path: Path):
+    manager = RunManager(tmp_path)
+    conversation = manager.conversations.create()
+    campaign = manager.autonomous.create(**(
+        campaign_values() | {"conversation_id": conversation["id"]}
+    ))
+    manager.autonomous.transition(campaign["id"], "ready", "preflight_accepted")
+    manager.autonomous.add_event(campaign["id"], "experiment", {
+        "id": "kept", "status": "completed", "metrics": {},
+    })
+    manager.autonomous.update(
+        campaign["id"], active_elapsed_seconds=120, started_at=time.time() - 120,
+    )
+
+    handed = manager.handoff_autonomous(campaign["id"])
+    resumed = manager.resume_autonomous(campaign["id"])
+
+    assert handed["manual_hold"] is True
+    assert resumed["manual_hold"] is False
+    assert resumed["active_elapsed_seconds"] >= 120
+    assert any(event.get("id") == "kept" for event in resumed["history"])
+
+
+def test_plateau_triggers_method_research_before_stopping(tmp_path: Path):
+    manager = RunManager(tmp_path)
+    conversation = manager.conversations.create()
+    campaign = manager.autonomous.create(**(
+        campaign_values()
+        | {"conversation_id": conversation["id"], "max_iterations": 10,
+           "metric_name": "loss", "metric_direction": "min", "plateau_patience": 2}
+    ))
+    manager.autonomous.transition(campaign["id"], "ready", "preflight_accepted")
+
+    def finish(iteration: int, value: float):
+        manager.autonomous.transition(campaign["id"], "experimenting", "experiment_started")
+        manager.autonomous.add_event(campaign["id"], "experiment", {
+            "id": f"e{iteration}", "iteration": iteration, "status": "completed",
+            "metrics": {
+                "primary_metric": {"name": "loss", "value": value, "direction": "min"},
+                "validation": {"strategy": "group_kfold", "folds": 3,
+                               "leakage_controls": ["subject"], "split_fingerprint": "same"},
+            },
+        })
+        manager.autonomous.transition(
+            campaign["id"], "evaluating", "experiment_finished",
+            phase="evaluation", current_experiment_id=f"e{iteration}", iteration=iteration,
+        )
+        manager._finish_autonomous_iteration(manager.autonomous.get(campaign["id"]))
+
+    finish(1, .5)
+    finish(2, .6)
+    finish(3, .7)
+
+    persisted = manager.autonomous.get(campaign["id"])
+    assert persisted["phase"] == "research_refresh"
+    assert persisted["plateau_refresh_iteration"] == 3
+
+
 def test_timeout_terminates_experiment_children(tmp_path: Path):
     (tmp_path / "metrics.json").write_text('{"score": 999}', encoding="utf-8")
     marker = tmp_path / "orphan.txt"

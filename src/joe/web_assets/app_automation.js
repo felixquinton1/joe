@@ -28,16 +28,16 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     const panel = document.createElement("details");
     panel.className = "autonomous-analysis";
     const heading = document.createElement("summary");
-    heading.textContent = `Arbre d’expériences · ${summary.final || 0} final(aux), ${summary.partial || 0} partiel(s) · meilleur ${formatMetric(summary.best_metric)}`;
+    heading.textContent = `Arbre d’expériences · ${summary.comparable || 0}/${summary.final || 0} comparable(s), ${summary.partial || 0} partiel(s) · meilleur ${formatMetric(summary.best_metric)}`;
     const meta = document.createElement("p");
-    meta.textContent = `${analysis.metric_name || "métrique"} (${analysis.metric_direction || "max"}) · ${usage.prompts || 0} prompt(s) · ${usage.model_calls || 0}/${budget.max_model_calls ?? "∞"} appel(s) · ${usage.known_tokens || 0}/${budget.max_tokens ?? "non borné"} tokens connus${usage.unknown_usage_calls ? ` · ${usage.unknown_usage_calls} appel(s) sans télémétrie` : ""}`;
+    meta.textContent = `${analysis.metric_name || "métrique"} (${analysis.metric_direction || "max"}) · ${(analysis.checkpoints || []).filter(item => item.resume_ready).length} checkpoint(s) prêt(s) · ${usage.prompts || 0} prompt(s) · ${usage.model_calls || 0}/${budget.max_model_calls ?? "∞"} appel(s) · ${usage.known_tokens || 0}/${budget.max_tokens ?? "non borné"} tokens connus${usage.unknown_usage_calls ? ` · ${usage.unknown_usage_calls} appel(s) sans télémétrie` : ""}`;
     const tree = document.createElement("ol");
     tree.className = "experiment-tree";
     for (const node of analysis.experiments || []) {
       const item = document.createElement("li");
       item.className = `metric-${node.quality || "missing"}`;
       const label = document.createElement("b");
-      label.textContent = `#${node.iteration} · ${formatMetric(node.metric)} · ${node.status}`;
+      label.textContent = `#${node.iteration} · ${formatMetric(node.metric)} · ${node.status} · ${node.validation_status}`;
       const detail = document.createElement("small");
       detail.textContent = [node.variant, node.hypothesis || node.reason || "Expérience sans hypothèse structurée"].filter(Boolean).join(" · ");
       if (node.reason && node.hypothesis) detail.title = node.reason;
@@ -85,6 +85,9 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
   function campaignActivity(campaign) {
     if (["completed", "cancelled", "blocked"].includes(campaign.status)) {
       return { active: false, text: campaign.error ? `Arrêté · ${campaign.error}` : "Aucune commande en cours" };
+    }
+    if (campaign.manual_hold) {
+      return { active: false, text: "Pause manuelle · le projet peut être modifié dans le chat puis repris en Autonomous" };
     }
     const activeStep = [...(campaign.history || [])].reverse().find(
       event => event.kind === "agent_step" && event.status === "running"
@@ -199,7 +202,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     for (const campaign of campaigns.slice(0, 8)) {
       const card = document.createElement("article");
       card.className = `automation-card ${campaign.status}`;
-      card.innerHTML = `<div><strong></strong><span></span></div><small></small><p class="autonomous-activity" role="status"><i></i><b></b></p><div class="autonomous-actions"><button type="button" data-action="cancel">Annuler</button><button type="button" data-action="resume">Reprendre Autonomous</button><button type="button" data-action="chat">Continuer dans le chat</button></div>`;
+      card.innerHTML = `<div><strong></strong><span></span></div><small></small><p class="autonomous-activity" role="status"><i></i><b></b></p><div class="autonomous-actions"><button type="button" data-action="cancel">Annuler</button><button type="button" data-action="handoff">Passer en manuel</button><button type="button" data-action="resume">Reprendre Autonomous</button><button type="button" data-action="chat">Continuer dans le chat</button></div>`;
       card.querySelector("strong").textContent = campaign.title;
       card.querySelector("span").textContent = campaign.status;
       card.querySelector("small").textContent = `itération ${campaign.iteration}/${campaign.max_iterations} · phase ${campaign.phase}`;
@@ -237,8 +240,20 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
         await fetcher(`/api/autonomous/${campaign.id}/cancel`, { method: "POST" });
         await load();
       };
+      const handoffButton = card.querySelector('[data-action="handoff"]');
+      handoffButton.hidden = terminal || campaign.manual_hold;
+      handoffButton.onclick = async () => {
+        if (!window.confirm("Mettre Autonomous en pause et reprendre le projet manuellement ?")) return;
+        const response = await fetcher(`/api/autonomous/${campaign.id}/handoff`, { method: "POST" });
+        const payload = await response.json();
+        if (!response.ok) return window.alert(payload.error || "Impossible de passer en manuel.");
+        $("automation-dialog").close();
+        window.dispatchEvent(new CustomEvent("joe:open-conversation", {
+          detail: { conversationId: campaign.conversation_id }
+        }));
+      };
       const resumeButton = card.querySelector('[data-action="resume"]');
-      resumeButton.hidden = !terminal;
+      resumeButton.hidden = !(terminal || campaign.manual_hold);
       resumeButton.onclick = async () => {
         const response = await fetcher(`/api/autonomous/${campaign.id}/resume`, { method: "POST" });
         const payload = await response.json();
@@ -246,7 +261,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
         await load();
       };
       const chatButton = card.querySelector('[data-action="chat"]');
-      chatButton.hidden = !terminal;
+      chatButton.hidden = !(terminal || campaign.manual_hold);
       chatButton.onclick = () => {
         $("automation-dialog").close();
         window.dispatchEvent(new CustomEvent("joe:open-conversation", {

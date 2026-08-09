@@ -111,6 +111,10 @@ ROUTES: tuple[Route, ...] = (
         "_post_autonomous_resume", "maintainer",
     ),
     _route(
+        "POST", "/api/autonomous/{campaign_id}/handoff",
+        "_post_autonomous_handoff", "maintainer",
+    ),
+    _route(
         "POST",
         "/api/automations/{plan_id}/cancel",
         "_post_automation_cancel",
