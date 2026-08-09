@@ -10,6 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from .autonomous_schedule import normalize_schedule
+from .autonomous_state import (
+    AutonomousState,
+    infer_state,
+    legacy_fields,
+    validate_transition,
+)
 
 
 TERMINAL_STATUSES = {"completed", "cancelled", "blocked"}
@@ -132,6 +138,14 @@ class AutonomousStore:
             "execution_mode": str(values.get("execution_mode", "workspace-write")),
             "status": "scheduled",
             "phase": "research",
+            "state": AutonomousState.READY.value,
+            "state_history": [{
+                "at": now,
+                "from": AutonomousState.PREPARING.value,
+                "to": AutonomousState.READY.value,
+                "reason": "campaign_created_and_preflight_accepted",
+                "metadata": {},
+            }],
             "iteration": 0,
             "current_run_id": None,
             "current_experiment_id": None,
@@ -176,6 +190,7 @@ class AutonomousStore:
             "started_at", "deadline_at",
             "active_elapsed_seconds", "active_window_started_at", "next_start_at",
             "max_iterations", "resume_count", "resumed_at",
+            "state", "state_history",
         }
         with self.lock:
             payload = self._read()
@@ -189,6 +204,48 @@ class AutonomousStore:
             self._write(payload)
             return dict(item)
 
+    def transition(
+        self,
+        campaign_id: str,
+        target: AutonomousState | str,
+        reason: str,
+        *,
+        metadata: dict[str, Any] | None = None,
+        phase: str | None = None,
+        **changes: Any,
+    ) -> dict[str, Any] | None:
+        """Atomically validate, journal and apply one canonical state transition."""
+        target_state = AutonomousState(str(target))
+        with self.lock:
+            payload = self._read()
+            item = self._find(payload, campaign_id)
+            if not item:
+                return None
+            current = infer_state(item)
+            validate_transition(current, target_state)
+            history = list(item.get("state_history") or [])
+            if current != target_state:
+                history.append({
+                    "at": time.time(),
+                    "from": current.value,
+                    "to": target_state.value,
+                    "reason": str(reason)[:500],
+                    "metadata": dict(metadata or {}),
+                })
+            item.update(legacy_fields(target_state, phase))
+            item["state"] = target_state.value
+            item["state_history"] = history[-200:]
+            allowed = {
+                "iteration", "current_run_id", "current_experiment_id",
+                "best_metric", "error", "started_at", "deadline_at",
+                "active_elapsed_seconds", "active_window_started_at", "next_start_at",
+                "max_iterations", "resume_count", "resumed_at",
+            }
+            item.update({key: value for key, value in changes.items() if key in allowed})
+            item["updated_at"] = time.time()
+            self._write(payload)
+            return dict(item)
+
     def add_event(self, campaign_id: str, kind: str, details: dict[str, Any]) -> None:
         item = self.get(campaign_id)
         if not item:
@@ -198,7 +255,14 @@ class AutonomousStore:
         self.update(campaign_id, history=history[-100:])
 
     def cancel(self, campaign_id: str) -> dict[str, Any] | None:
-        return self.update(campaign_id, status="cancelled", error=None)
+        item = self.get(campaign_id)
+        if not item:
+            return None
+        if infer_state(item) == AutonomousState.CANCELLED:
+            return item
+        return self.transition(
+            campaign_id, AutonomousState.CANCELLED, "user_cancelled", error=None
+        )
 
     def delete(self, campaign_id: str) -> bool:
         with self.lock:
@@ -236,9 +300,10 @@ class AutonomousStore:
             and item.get("resume_command")
             else "planning"
         )
-        return self.update(
+        return self.transition(
             campaign_id,
-            status="scheduled",
+            AutonomousState.READY,
+            "user_resumed",
             phase=phase,
             error=None,
             current_run_id=None,

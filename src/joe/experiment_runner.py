@@ -132,6 +132,11 @@ def run_experiment(
             status = "crashed"
     if not metrics:
         metrics = _metrics_from_stdout(stdout)
+    if metrics.get("schema_version") == 1 and metrics.get("status") == "crashed":
+        status = "crashed"
+        structured_error = metrics.get("error")
+        if isinstance(structured_error, dict):
+            error = str(structured_error.get("message") or structured_error.get("type") or error)
     result = {
         "id": experiment_id, "status": status, "exit_code": exit_code,
         "duration_seconds": round(time.time() - started, 3), "metrics": metrics,

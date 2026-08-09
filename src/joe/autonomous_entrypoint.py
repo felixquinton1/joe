@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -26,7 +27,13 @@ def main() -> int:
     command = [python, str(runner)]
     if args.resume:
         command.append("--resume")
-    return subprocess.call(command, cwd=workspace)
+    environment = os.environ.copy()
+    package_root = str(Path(__file__).resolve().parents[1])
+    current_pythonpath = environment.get("PYTHONPATH")
+    environment["PYTHONPATH"] = os.pathsep.join(
+        part for part in (package_root, current_pythonpath) if part
+    )
+    return subprocess.call(command, cwd=workspace, env=environment)
 
 
 if __name__ == "__main__":

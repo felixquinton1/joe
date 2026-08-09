@@ -15,6 +15,7 @@ from .capabilities import select_model, select_model_tier
 from .approvals import ApprovalStore
 from .automations import AutomationStore, START_MODES
 from .autonomous import AutonomousStore, TERMINAL_STATUSES, build_autonomous_skill
+from .autonomous_state import AutonomousState, infer_state
 from .autonomous_builder import build_campaign_payload
 from .autonomous_schedule import schedule_state
 from .experiment_runner import run_experiment, validate_experiment_command
@@ -44,6 +45,11 @@ from .worktrees import Worktree, WorktreeError, WorktreeManager
 
 def _autonomous_metric_value(metrics: dict[str, Any], name: str) -> float | None:
     """Resolve common aggregate metric envelopes without project-specific code."""
+    primary = metrics.get("primary_metric")
+    if isinstance(primary, dict) and primary.get("name") == name:
+        value = primary.get("value")
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return float(value)
     aliases = (name, f"selected_{name}", f"{name}_mean", f"raw_{name}")
     containers = [metrics]
     for key in ("summary", "aggregate", "metrics"):
@@ -1354,13 +1360,18 @@ class RunManager:
                 self._pause_autonomous(campaign, now, window.get("next_start"))
                 continue
             if campaign.get("active_window_started_at") is None:
-                campaign = self.autonomous.update(
-                    campaign["id"],
-                    started_at=campaign.get("started_at") or now,
-                    active_window_started_at=now,
-                    next_start_at=None,
-                    status="scheduled" if campaign.get("status") == "paused" else campaign.get("status"),
-                ) or campaign
+                timing = {
+                    "started_at": campaign.get("started_at") or now,
+                    "active_window_started_at": now,
+                    "next_start_at": None,
+                }
+                if infer_state(campaign) == AutonomousState.PAUSED:
+                    campaign = self.autonomous.transition(
+                        campaign["id"], AutonomousState.READY, "schedule_window_opened",
+                        phase=str(campaign.get("phase") or "planning"), **timing,
+                    ) or campaign
+                else:
+                    campaign = self.autonomous.update(campaign["id"], **timing) or campaign
             elapsed = float(campaign.get("active_elapsed_seconds", 0)) + max(
                 0.0, now - float(campaign.get("active_window_started_at") or now)
             )
@@ -1371,8 +1382,9 @@ class RunManager:
                 event = self._autonomous_experiment_cancels.get(str(campaign["id"]))
                 if event:
                     event.set()
-                self.autonomous.update(
-                    campaign["id"], status="completed", phase="time_budget_reached",
+                self.autonomous.transition(
+                    campaign["id"], AutonomousState.COMPLETED, "time_budget_reached",
+                    phase="time_budget_reached",
                     current_run_id=None, error=None, active_elapsed_seconds=elapsed,
                     active_window_started_at=None,
                 )
@@ -1385,8 +1397,9 @@ class RunManager:
             if run_id:
                 task = self.tasks.get(str(run_id))
                 if not task or task.get("status") in {"failed", "cancelled", "conflict"}:
-                    self.autonomous.update(
-                        campaign["id"], status="blocked", current_run_id=None,
+                    self.autonomous.transition(
+                        campaign["id"], AutonomousState.BLOCKED, "agent_step_failed",
+                        current_run_id=None,
                         error=(task or {}).get("error") or "Le run Joe a échoué.",
                     )
                     continue
@@ -1394,8 +1407,9 @@ class RunManager:
                     try:
                         self.integrate_task(str(run_id))
                     except WorktreeError as error:
-                        self.autonomous.update(
-                            campaign["id"], status="blocked", error=str(error),
+                        self.autonomous.transition(
+                            campaign["id"], AutonomousState.BLOCKED,
+                            "agent_step_integration_failed", error=str(error),
                         )
                     continue
                 if task.get("status") in {"running", "waiting_quota", "integrating", "resolving"}:
@@ -1426,8 +1440,9 @@ class RunManager:
                         if campaign.get("phase") in {"research", "research_refresh"}
                         else "experiment"
                     )
-                    self.autonomous.update(
-                        campaign["id"], status="scheduled", phase=next_phase,
+                    self.autonomous.transition(
+                        campaign["id"], AutonomousState.READY, "agent_step_completed",
+                        phase=next_phase,
                         current_run_id=None, error=None,
                     )
                     continue
@@ -1458,8 +1473,12 @@ class RunManager:
                 )
             except ActiveConversationError:
                 continue
-            self.autonomous.update(
-                campaign["id"], status=status, current_run_id=run.run_id,
+            target = (
+                AutonomousState.RESEARCHING
+                if status == "researching" else AutonomousState.IMPLEMENTING
+            )
+            self.autonomous.transition(
+                campaign["id"], target, "agent_step_started", current_run_id=run.run_id,
                 iteration=(0 if phase == "research" else iteration), error=None,
             )
             task = self.tasks.get(run.run_id) or {}
@@ -1498,8 +1517,9 @@ class RunManager:
         event = self._autonomous_experiment_cancels.get(str(campaign["id"]))
         if event:
             event.set()
-        self.autonomous.update(
-            campaign["id"], status="paused", current_run_id=None,
+        self.autonomous.transition(
+            campaign["id"], AutonomousState.PAUSED, "schedule_window_closed",
+            phase=str(campaign.get("phase") or "planning"), current_run_id=None,
             active_elapsed_seconds=elapsed, active_window_started_at=None,
             next_start_at=next_start, error=None,
         )
@@ -1513,7 +1533,9 @@ class RunManager:
         self._autonomous_experiments.add(campaign_id)
         cancel_event = threading.Event()
         self._autonomous_experiment_cancels[campaign_id] = cancel_event
-        self.autonomous.update(campaign_id, status="experimenting")
+        self.autonomous.transition(
+            campaign_id, AutonomousState.EXPERIMENTING, "experiment_started"
+        )
         command = list(campaign.get("command") or [])
         self.conversations.append_message(
             str(campaign["conversation_id"]),
@@ -1562,13 +1584,15 @@ class RunManager:
                 result["command"] = command
                 result["working_directory"] = str(campaign.get("working_directory", "."))
                 self.autonomous.add_event(campaign_id, "experiment", result)
-                self.autonomous.update(
-                    campaign_id, status="evaluating", phase="evaluation",
+                self.autonomous.transition(
+                    campaign_id, AutonomousState.EVALUATING, "experiment_finished",
+                    phase="evaluation",
                     current_experiment_id=result["id"], error=result.get("error"),
                 )
             except Exception as error:
-                self.autonomous.update(
-                    campaign_id, status="blocked", error=str(error),
+                self.autonomous.transition(
+                    campaign_id, AutonomousState.BLOCKED,
+                    "experiment_runner_failed", error=str(error),
                 )
             finally:
                 self._autonomous_experiments.discard(campaign_id)
@@ -1595,6 +1619,10 @@ class RunManager:
             f"`{json.dumps(result.get('metrics') or {}, ensure_ascii=False)}`."
         )
         self.conversations.append_message(str(campaign["conversation_id"]), "assistant", message)
+        campaign = self.autonomous.transition(
+            campaign["id"], AutonomousState.CHECKPOINTING, "experiment_evaluated",
+            best_metric=best,
+        ) or campaign
         if result.get("status") == "crashed":
             signature = result.get("failure_signature")
             previous_crashes = [
@@ -1611,14 +1639,15 @@ class RunManager:
                     "### Autonomous — arrêt de sécurité\n\n" + error
                     + "\nAucune nouvelle itération ne sera consommée avant correction du contrat d'exécution.",
                 )
-                self.autonomous.update(
-                    campaign["id"], status="blocked", phase="planning",
+                self.autonomous.transition(
+                    campaign["id"], AutonomousState.BLOCKED, "repeated_experiment_crash",
+                    phase="planning",
                     best_metric=best, current_experiment_id=None, error=error,
                 )
                 return
         if result.get("status") == "interrupted":
-            self.autonomous.update(
-                campaign["id"], status="scheduled",
+            self.autonomous.transition(
+                campaign["id"], AutonomousState.READY, "experiment_interrupted",
                 phase=(
                     "experiment"
                     if result.get("checkpoint_available") and campaign.get("resume_command")
@@ -1628,8 +1657,9 @@ class RunManager:
             )
             return
         if int(campaign.get("iteration", 0)) >= int(campaign.get("max_iterations", 1)):
-            self.autonomous.update(
-                campaign["id"], status="completed", phase="done", best_metric=best,
+            self.autonomous.transition(
+                campaign["id"], AutonomousState.COMPLETED, "iteration_budget_reached",
+                phase="done", best_metric=best,
                 error=None,
             )
         else:
@@ -1639,8 +1669,9 @@ class RunManager:
                 if interval > 0 and int(campaign.get("iteration", 0)) % interval == 0
                 else "planning"
             )
-            self.autonomous.update(
-                campaign["id"], status="scheduled", phase=next_phase,
+            self.autonomous.transition(
+                campaign["id"], AutonomousState.READY, "checkpoint_completed",
+                phase=next_phase,
                 best_metric=best, current_experiment_id=None, error=None,
             )
 
@@ -1688,7 +1719,10 @@ class RunManager:
             f"dossier relatif : {campaign.get('working_directory') or '.'}. "
             "Crée exactement le point d'entrée référencé, vérifie son existence et sa liaison "
             "au code voulu avant de terminer ce tour. Un lanceur alternatif ne remplace pas ce contrat. "
-            f"Le batch doit écrire un objet JSON dans {campaign.get('metrics_path') or 'metrics.json'} "
+            "Utilise `joe.autonomous_sdk.ExperimentSpec`, `ExperimentOutcome` et `run_experiment` "
+            "dans ce point d'entrée : le SDK publie atomiquement le contrat JSON versionné et expose "
+            "le budget, le signal d'arrêt et les chemins de checkpoint. "
+            f"Écris le résultat dans {campaign.get('metrics_path') or 'metrics.json'} "
             f"avec la métrique primaire {campaign.get('metric_name') or 'score'} afin que Joe suive le meilleur résultat."
             "</experiment_contract>\n\n"
             f"<deterministic_preflight>{preflight_contract}</deterministic_preflight>\n\n"
