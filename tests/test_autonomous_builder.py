@@ -28,7 +28,7 @@ def test_generic_payload_creates_cross_platform_runner_and_safe_charter():
     payload = build_campaign_payload(request, "conversation-1", parsed)
 
     assert payload["conversation_id"] == "conversation-1"
-    assert payload["command"][1] == "autonomous_run.py"
+    assert payload["command"][1:3] == ["-m", "joe.autonomous_entrypoint"]
     assert payload["resume_command"][-1] == "--resume"
     assert payload["max_duration_seconds"] == 1800
     assert "sans autorisation explicite" in payload["data_policy"]

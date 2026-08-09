@@ -3,7 +3,9 @@ from __future__ import annotations
 import re
 import sys
 import unicodedata
+from datetime import datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 
 def parse_autonomous_request(request: str) -> dict[str, Any] | None:
@@ -34,6 +36,9 @@ def parse_autonomous_request(request: str) -> dict[str, Any] | None:
         "restricted_data": bool(
             re.search(r"\b(?:donnees?|data|dataset|fichiers? locaux?|_root)\b", folded)
         ),
+        "schedule": _schedule_from_request(folded, duration),
+        "metric_name": "log_loss" if "log loss" in folded else "primary_metric",
+        "metric_direction": "min" if "log loss" in folded else "max",
     }
 
 
@@ -70,17 +75,17 @@ def build_campaign_payload(
             "qu'aux appels de modèles."
         ),
         "research_refresh_interval": 0,
-        "command": [sys.executable, "autonomous_run.py"],
-        "resume_command": [sys.executable, "autonomous_run.py", "--resume"],
+        "command": [sys.executable, "-m", "joe.autonomous_entrypoint"],
+        "resume_command": [sys.executable, "-m", "joe.autonomous_entrypoint", "--resume"],
         "working_directory": ".",
         "metrics_path": "artifacts/metrics.json",
-        "metric_name": "primary_metric",
-        "metric_direction": "max",
+        "metric_name": str(parsed.get("metric_name", "primary_metric")),
+        "metric_direction": str(parsed.get("metric_direction", "max")),
         "timeout_seconds": min(86400, max(300, int(parsed["max_duration_seconds"]))),
         "max_iterations": int(parsed["max_iterations"]),
         "max_duration_seconds": int(parsed["max_duration_seconds"]),
         "restricted_data": bool(parsed.get("restricted_data")),
-        "schedule": {"timezone": "Europe/Paris", "windows": []},
+        "schedule": parsed.get("schedule") or {"timezone": "Europe/Paris", "windows": []},
         "checkpoint_path": "checkpoints/latest",
         "stop_signal_path": "artifacts/STOP_REQUESTED",
         "stop_grace_seconds": 30,
@@ -90,6 +95,24 @@ def build_campaign_payload(
 
 
 def _duration_seconds(text: str) -> int:
+    explicit = re.search(
+        r"pendant\s+(\d+(?:[.,]\d+)?)\s*(heures?|hours?|hrs?|h|min(?:utes?)?)\b",
+        text,
+    )
+    if explicit:
+        value = float(explicit.group(1).replace(",", "."))
+        multiplier = 60 if explicit.group(2).startswith("min") else 3600
+        return max(60, min(604800, round(value * multiplier)))
+    window = re.search(
+        r"(?:de|entre)\s*(\d{1,2})(?:\s*h(?:\s*(\d{1,2}))?)?\s*(?:a|et)\s*"
+        r"(\d{1,2})(?:\s*h(?:\s*(\d{1,2}))?)?",
+        text,
+    )
+    if window:
+        start = int(window.group(1)) * 60 + int(window.group(2) or 0)
+        end = int(window.group(3)) * 60 + int(window.group(4) or 0)
+        minutes = (end - start) % (24 * 60)
+        return max(60, minutes * 60)
     match = re.search(r"(\d+(?:[.,]\d+)?)\s*(heures?|hours?|hrs?|h|min(?:utes?)?)\b", text)
     if not match:
         return 3600
@@ -101,3 +124,40 @@ def _duration_seconds(text: str) -> int:
 def _integer_after(text: str, pattern: str, default: int, minimum: int, maximum: int) -> int:
     match = re.search(pattern, text)
     return max(minimum, min(maximum, int(match.group(1)))) if match else default
+
+
+def _schedule_from_request(text: str, duration_seconds: int) -> dict[str, Any]:
+    timezone = ZoneInfo("Europe/Paris")
+    now = datetime.now(timezone)
+    range_match = re.search(
+        r"(?:de|entre)\s*(\d{1,2})(?:\s*h(?:\s*(\d{1,2}))?)?\s*(?:a|et)\s*"
+        r"(\d{1,2})(?:\s*h(?:\s*(\d{1,2}))?)?",
+        text,
+    )
+    at_match = re.search(r"\ba\s*(\d{1,2})\s*h(?:\s*(\d{1,2}))?\b", text)
+    if not range_match and not at_match:
+        return {"timezone": "Europe/Paris", "windows": []}
+    if range_match:
+        start_hour, start_minute = int(range_match.group(1)), int(range_match.group(2) or 0)
+        end_hour, end_minute = int(range_match.group(3)), int(range_match.group(4) or 0)
+    else:
+        start_hour, start_minute = int(at_match.group(1)), int(at_match.group(2) or 0)
+        end = datetime(2000, 1, 1, start_hour, start_minute) + timedelta(seconds=duration_seconds)
+        end_hour, end_minute = end.hour, end.minute
+    if not (0 <= start_hour < 24 and 0 <= end_hour < 24 and 0 <= start_minute < 60 and 0 <= end_minute < 60):
+        return {"timezone": "Europe/Paris", "windows": []}
+    target = now.replace(hour=start_hour, minute=start_minute, second=0, microsecond=0)
+    if "demain" in text:
+        target += timedelta(days=1)
+    elif "cette nuit" in text and target <= now:
+        target += timedelta(days=1)
+    elif target <= now:
+        target += timedelta(days=1)
+    return {
+        "timezone": "Europe/Paris",
+        "windows": [{
+            "days": [target.weekday()],
+            "start": f"{start_hour:02d}:{start_minute:02d}",
+            "end": f"{end_hour:02d}:{end_minute:02d}",
+        }],
+    }
