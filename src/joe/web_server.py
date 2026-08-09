@@ -207,6 +207,9 @@ class Handler(BaseHTTPRequestHandler):
     def _get_projects(self) -> None:
         self._json(self.server.manager.conversations.list_projects())
 
+    def _get_project_trash(self) -> None:
+        self._json(self.server.manager.conversations.list_trashed_projects())
+
     def _get_project(self, project_id: str) -> None:
         item = self.server.manager.conversations.get_project(project_id)
         self._json(item, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
@@ -380,6 +383,26 @@ class Handler(BaseHTTPRequestHandler):
             item = self.server.manager.conversations.update_project(item["id"], changes) or item
         self._json(item, HTTPStatus.CREATED)
 
+    def _post_project_trash(self, project_id: str) -> None:
+        conversations = [
+            item for item in self.server.manager.conversations.list()
+            if item.get("project_id") == project_id
+        ]
+        if any(self.server.manager.has_active_conversation(str(item["id"])) for item in conversations):
+            return self._json(
+                {"error": "Interromps d’abord les runs actifs de ce projet."},
+                HTTPStatus.CONFLICT,
+            )
+        try:
+            item = self.server.manager.conversations.trash_project(project_id)
+        except ValueError as error:
+            return self._json({"error": str(error)}, HTTPStatus.CONFLICT)
+        self._json(item or {}, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
+
+    def _post_project_restore(self, project_id: str) -> None:
+        item = self.server.manager.conversations.restore_project(project_id)
+        self._json(item or {}, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
+
     def _post_global_skill_create(self) -> None:
         payload = self._read_payload()
         if payload is None:
@@ -487,6 +510,16 @@ class Handler(BaseHTTPRequestHandler):
         self._json(item, HTTPStatus.OK if item else HTTPStatus.NOT_FOUND)
 
     # --- Suppression -----------------------------------------------------
+
+    def _delete_project(self, project_id: str) -> None:
+        try:
+            deleted = self.server.manager.conversations.delete_project_permanently(project_id)
+        except ValueError as error:
+            return self._json({"error": str(error)}, HTTPStatus.CONFLICT)
+        self._json(
+            {"deleted": deleted, "files_deleted": False},
+            HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND,
+        )
 
     def _delete_task(self, task_id: str) -> None:
         try:

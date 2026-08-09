@@ -87,6 +87,7 @@ ROUTES: tuple[Route, ...] = (
     _route("GET", "/api/approvals", "_get_approvals", "viewer"),
     # Lire les projets reste accessible : Joe Web en a besoin pour se rendre.
     _route("GET", "/api/projects", "_get_projects", "viewer"),
+    _route("GET", "/api/project-trash", "_get_project_trash", "viewer"),
     _route("GET", "/api/projects/{project_id}", "_get_project", "viewer"),
     _route("GET", "/api/projects/{project_id}/skills", "_get_project_skills", "viewer"),
     _route("GET", "/api/skills/global", "_get_global_skills", "viewer"),
@@ -123,6 +124,8 @@ ROUTES: tuple[Route, ...] = (
     _route("POST", "/api/conversations", "_post_conversations", "operator"),
     _route("POST", "/api/files", "_post_files", "operator"),
     _route("POST", "/api/projects", "_post_projects", "maintainer"),
+    _route("POST", "/api/projects/{project_id}/trash", "_post_project_trash", "maintainer"),
+    _route("POST", "/api/projects/{project_id}/restore", "_post_project_restore", "maintainer"),
     # Un skill global est visible par tous les projets : sa création exige au
     # moins autant qu'un skill de projet.
     _route("POST", "/api/skills/global/create", "_post_global_skill_create", "maintainer"),
@@ -165,6 +168,7 @@ ROUTES: tuple[Route, ...] = (
         "_delete_autonomous", "maintainer",
     ),
     _route("DELETE", "/api/files/{item_id}", "_delete_file", "operator"),
+    _route("DELETE", "/api/projects/{project_id}", "_delete_project", "maintainer"),
     _route(
         "DELETE",
         "/api/conversations/{conversation_id}",

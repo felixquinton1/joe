@@ -52,7 +52,7 @@ DEFAULT_SETTINGS = {
 DEFAULT_PREFERENCES = {"agent": "", "mode": ""}
 DEFAULT_PROJECT_ID = "main"
 FREE_PROJECT_ID = "free"
-CURRENT_SCHEMA_VERSION = 10
+CURRENT_SCHEMA_VERSION = 11
 
 
 class ConversationStore:
@@ -131,7 +131,7 @@ class ConversationStore:
     def list_projects(self) -> list[dict[str, Any]]:
         with self.lock:
             return sorted(
-                self._read()["projects"],
+                (item for item in self._read()["projects"] if not item.get("trashed_at")),
                 key=lambda item: (
                     int(item.get("position", 1_000_000)),
                     float(item.get("created_at", 0)),
@@ -140,7 +140,8 @@ class ConversationStore:
 
     def get_project(self, project_id: str) -> dict[str, Any] | None:
         with self.lock:
-            return self._find_project(self._read(), project_id)
+            project = self._find_project(self._read(), project_id)
+            return project if project and not project.get("trashed_at") else None
 
     def create_project(self, name: str = "Nouveau projet") -> dict[str, Any]:
         existing = self.list_projects()
@@ -222,6 +223,47 @@ class ConversationStore:
             self._write(payload)
             return project
 
+    def trash_project(self, project_id: str) -> dict[str, Any] | None:
+        if project_id in {DEFAULT_PROJECT_ID, FREE_PROJECT_ID}:
+            raise ValueError("Les projets système de Joe ne peuvent pas être supprimés.")
+        with self.lock:
+            payload = self._read()
+            project = self._find_project(payload, project_id)
+            if not project:
+                return None
+            project["trashed_at"] = time.time()
+            self._write(payload)
+            return dict(project)
+
+    def restore_project(self, project_id: str) -> dict[str, Any] | None:
+        with self.lock:
+            payload = self._read()
+            project = self._find_project(payload, project_id)
+            if not project or not project.get("trashed_at"):
+                return None
+            project["trashed_at"] = None
+            project["position"] = len(
+                [item for item in payload["projects"] if not item.get("trashed_at")]
+            )
+            self._write(payload)
+            return dict(project)
+
+    def delete_project_permanently(self, project_id: str) -> bool:
+        if project_id in {DEFAULT_PROJECT_ID, FREE_PROJECT_ID}:
+            raise ValueError("Les projets système de Joe ne peuvent pas être supprimés.")
+        with self.lock:
+            payload = self._read()
+            project = self._find_project(payload, project_id)
+            if not project or not project.get("trashed_at"):
+                return False
+            payload["projects"] = [item for item in payload["projects"] if item["id"] != project_id]
+            payload["conversations"] = [
+                item for item in payload["conversations"]
+                if item.get("project_id") != project_id
+            ]
+            self._write(payload)
+            return True
+
     def list(self) -> list[dict[str, Any]]:
         with self.lock:
             conversations = self._read()["conversations"]
@@ -236,6 +278,21 @@ class ConversationStore:
                         else -float(item.get("last_call_at", item["updated_at"]))
                     ),
                 ),
+            )
+
+    def list_trashed_projects(self) -> list[dict[str, Any]]:
+        with self.lock:
+            payload = self._read()
+            counts: dict[str, int] = {}
+            for conversation in payload["conversations"]:
+                project_id = str(conversation.get("project_id", ""))
+                counts[project_id] = counts.get(project_id, 0) + 1
+            return sorted(
+                (
+                    {**item, "conversation_count": counts.get(str(item["id"]), 0)}
+                    for item in payload["projects"] if item.get("trashed_at")
+                ),
+                key=lambda item: float(item.get("trashed_at", 0)), reverse=True,
             )
 
     def list_summaries(self) -> list[dict[str, Any]]:
@@ -724,6 +781,7 @@ class ConversationStore:
             )
             project.setdefault("collapsed", False)
             project.setdefault("position", payload["projects"].index(project))
+            project.setdefault("trashed_at", None)
         payload["version"] = CURRENT_SCHEMA_VERSION
         if version < CURRENT_SCHEMA_VERSION:
             self._write(payload)

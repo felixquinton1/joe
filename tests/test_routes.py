@@ -72,6 +72,9 @@ def test_an_undeclared_sub_resource_is_refused_not_diverted():
         ("GET", "/api/tasks/xyz/diff", "/api/tasks/{task_id}/diff"),
         ("POST", "/api/runs/xyz/cancel", "/api/runs/{run_id}/cancel"),
         ("POST", "/api/runs/xyz/reject", "/api/runs/{run_id}/reject"),
+        ("POST", "/api/projects/abc/trash", "/api/projects/{project_id}/trash"),
+        ("POST", "/api/projects/abc/restore", "/api/projects/{project_id}/restore"),
+        ("DELETE", "/api/projects/abc", "/api/projects/{project_id}"),
     ],
 )
 def test_parameterised_paths_resolve_to_their_own_route(method, path, template):

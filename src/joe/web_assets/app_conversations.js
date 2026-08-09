@@ -571,6 +571,7 @@ window.createJoeConversations = function createJoeConversations({
     $("skill-source").value = "";
     $("project-skills").innerHTML = "<small>Enregistre le projet pour ajouter des skills.</small>";
     setSkillProjectAvailability(false);
+    $("trash-project").hidden = true;
     loadGlobalSkills();
     $("project-dialog").showModal();
     requestAnimationFrame(() => $("project-name").focus());
@@ -596,10 +597,87 @@ window.createJoeConversations = function createJoeConversations({
     $("skill-instructions").value = "";
     $("skill-source").value = "";
     setSkillProjectAvailability(true);
+    $("trash-project").hidden = ["main", "free"].includes(project.id);
     loadProjectSkills(project.id).catch(() => {});
     loadGlobalSkills();
     $("project-dialog").showModal();
   }
+
+  function confirmTrashProject() {
+    const project = state.projects.find(item => item.id === state.editingProjectId);
+    if (!project || ["main", "free"].includes(project.id)) return;
+    $("trash-project-name").textContent = project.name;
+    $("trash-project-dialog").showModal();
+  }
+
+  async function trashProject(event) {
+    event.preventDefault();
+    const projectId = state.editingProjectId;
+    if (!projectId) return;
+    const response = await fetcher(`/api/projects/${projectId}/trash`, { method: "POST" });
+    const payload = await response.json();
+    if (!response.ok) return window.alert(payload.error || "Impossible de mettre ce projet à la corbeille.");
+    $("trash-project-dialog").close();
+    $("project-dialog").close();
+    state.editingProjectId = null;
+    if (state.activeProjectId === projectId) {
+      state.activeProjectId = "free";
+      state.activeConversationId = null;
+    }
+    await loadConversations(false);
+    const activeProjects = new Set(state.projects.map(item => item.id));
+    const next = state.conversations.find(item => activeProjects.has(item.project_id));
+    if (next) await selectConversation(next.id);
+    else clearConversation();
+  }
+
+  async function openProjectTrash() {
+    const response = await fetcher("/api/project-trash");
+    const projects = response.ok ? await response.json() : [];
+    const target = $("project-trash-list");
+    target.replaceChildren();
+    if (!projects.length) {
+      const empty = document.createElement("small");
+      empty.textContent = tr("empty_trash");
+      target.appendChild(empty);
+    }
+    for (const project of projects) {
+      const row = document.createElement("article");
+      row.className = "project-trash-row";
+      const details = document.createElement("div");
+      const name = document.createElement("strong");
+      name.textContent = project.name;
+      const meta = document.createElement("small");
+      meta.textContent = `${project.conversation_count || 0} ${tr("conversations_count")}${project.workspace_root ? ` · ${project.workspace_root}` : ""}`;
+      details.append(name, meta);
+      const restore = document.createElement("button");
+      restore.type = "button";
+      restore.textContent = tr("restore");
+      restore.onclick = async () => {
+        const restored = await fetcher(`/api/projects/${project.id}/restore`, { method: "POST" });
+        if (!restored.ok) return;
+        await loadConversations(false);
+        await openProjectTrash();
+      };
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "danger-button";
+      remove.textContent = tr("delete_permanently");
+      remove.onclick = async () => {
+        if (!window.confirm(`${project.name}\n\n${tr("permanent_delete_confirm")}`)) return;
+        const deleted = await fetcher(`/api/projects/${project.id}`, { method: "DELETE" });
+        if (!deleted.ok) return;
+        await openProjectTrash();
+      };
+      row.append(details, restore, remove);
+      target.appendChild(row);
+    }
+    if (!$("project-trash-dialog").open) $("project-trash-dialog").showModal();
+  }
+
+  $("trash-project").onclick = confirmTrashProject;
+  $("confirm-trash-project").onclick = trashProject;
+  $("open-project-trash").onclick = openProjectTrash;
 
   const SKILL_SCOPE_LABELS = { project: "projet", configured: "configuré", global: "commun" };
 

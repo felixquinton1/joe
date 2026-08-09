@@ -104,6 +104,12 @@
       experimenting: "Expérimentation", evaluating: "Évaluation", crashed: "Crash", timed_out: "Délai dépassé",
       unverified: "non vérifié", comparable_status: "comparable"
       ,compute: "calcul", longest_run: "run le plus long", substantive_runs: "runs substantiels", gpu_measured: "GPU mesuré"
+      ,project_trash: "Corbeille des projets", move_to_trash: "Mettre à la corbeille", reversible_action: "Action réversible",
+      trash_project_question: "Mettre ce projet à la corbeille ?", trash_project_explanation: "Le projet et ses conversations disparaîtront de Joe, mais pourront être restaurés. Aucun fichier ni dépôt sur le disque ne sera supprimé.",
+      confirm_trash: "Confirmer la mise à la corbeille", reversible_deletion: "Suppression réversible",
+      project_trash_help: "Restaurer un projet remet également ses conversations dans Joe. Les fichiers sur le disque ne sont jamais supprimés.",
+      restore: "Restaurer", delete_permanently: "Supprimer définitivement", empty_trash: "La corbeille est vide.", conversations_count: "conversation(s)",
+      permanent_delete_confirm: "Supprimer définitivement ce projet et ses conversations de Joe ? Les fichiers sur le disque resteront intacts."
     },
     en: {
       language: "Language",
@@ -205,6 +211,12 @@
       experimenting: "Experimenting", evaluating: "Evaluating", crashed: "Crashed", timed_out: "Timed out",
       unverified: "unverified", comparable_status: "comparable"
       ,compute: "compute", longest_run: "longest run", substantive_runs: "substantive runs", gpu_measured: "measured GPU"
+      ,project_trash: "Project trash", move_to_trash: "Move to trash", reversible_action: "Reversible action",
+      trash_project_question: "Move this project to trash?", trash_project_explanation: "The project and its conversations will disappear from Joe, but can be restored. No files or repositories on disk will be deleted.",
+      confirm_trash: "Confirm move to trash", reversible_deletion: "Reversible deletion",
+      project_trash_help: "Restoring a project also restores its conversations in Joe. Files on disk are never deleted.",
+      restore: "Restore", delete_permanently: "Delete permanently", empty_trash: "Trash is empty.", conversations_count: "conversation(s)",
+      permanent_delete_confirm: "Permanently delete this project and its conversations from Joe? Files on disk will remain untouched."
     }
   };
 

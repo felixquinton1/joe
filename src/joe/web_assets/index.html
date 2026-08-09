@@ -18,7 +18,7 @@
       <div class="sidebar-brand">
         <div class="brand"><span class="brand-mark">J</span><div><strong>Joe</strong><small>AI control room · <span id="version">…</span></small></div></div>
       </div>
-      <div class="panel-title"><h2 data-i18n="conversations">Conversations</h2><button id="new-project" class="icon-button" type="button" title="Nouveau projet" aria-label="Nouveau projet" data-i18n-title="new_project" data-i18n-aria-label="new_project">＋</button></div>
+      <div class="panel-title"><h2 data-i18n="conversations">Conversations</h2><div><button id="open-project-trash" class="icon-button" type="button" title="Corbeille des projets" aria-label="Corbeille des projets" data-i18n-title="project_trash" data-i18n-aria-label="project_trash">♲</button><button id="new-project" class="icon-button" type="button" title="Nouveau projet" aria-label="Nouveau projet" data-i18n-title="new_project" data-i18n-aria-label="new_project">＋</button></div></div>
       <div class="history-search-wrap">
         <span aria-hidden="true">⌕</span>
         <input id="history-search" class="history-search" type="search" placeholder="Rechercher…" aria-label="Rechercher dans l’historique" data-i18n-placeholder="search_history" data-i18n-aria-label="search_history">
@@ -178,7 +178,25 @@
           <small class="setting-help" id="project-remote-access-help">Activé par défaut. Pour l’instant, ce contrôle est effectif uniquement sur Codex.</small>
         </div>
       </details>
-      <div class="dialog-actions"><button id="cancel-project" type="button">Annuler</button><button id="save-project" value="default">Enregistrer</button></div>
+      <div class="dialog-actions"><button id="trash-project" class="danger-button" type="button" data-i18n="move_to_trash">Mettre à la corbeille</button><span></span><button id="cancel-project" type="button" data-i18n="cancel">Annuler</button><button id="save-project" value="default" data-i18n="save">Enregistrer</button></div>
+    </form>
+  </dialog>
+  <dialog id="trash-project-dialog" class="project-dialog confirm-dialog">
+    <form method="dialog">
+      <span class="eyebrow" data-i18n="reversible_action">Action réversible</span>
+      <h2 data-i18n="trash_project_question">Mettre ce projet à la corbeille ?</h2>
+      <p><span data-i18n="trash_project_explanation">Le projet et ses conversations disparaîtront de Joe, mais pourront être restaurés. Aucun fichier ni dépôt sur le disque ne sera supprimé.</span></p>
+      <p>« <strong id="trash-project-name"></strong> »</p>
+      <div class="dialog-actions"><button value="cancel" data-i18n="cancel">Annuler</button><button id="confirm-trash-project" class="danger-button" value="default" data-i18n="confirm_trash">Confirmer la mise à la corbeille</button></div>
+    </form>
+  </dialog>
+  <dialog id="project-trash-dialog" class="project-dialog project-trash-dialog">
+    <form method="dialog">
+      <span class="eyebrow" data-i18n="reversible_deletion">Suppression réversible</span>
+      <h2 data-i18n="project_trash">Corbeille des projets</h2>
+      <p data-i18n="project_trash_help">Restaurer un projet remet également ses conversations dans Joe. Les fichiers sur le disque ne sont jamais supprimés.</p>
+      <div id="project-trash-list" class="project-trash-list"></div>
+      <div class="dialog-actions"><button value="cancel" data-i18n="close">Fermer</button></div>
     </form>
   </dialog>
   <dialog id="delete-conversation-dialog" class="project-dialog confirm-dialog">

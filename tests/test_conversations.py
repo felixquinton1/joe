@@ -456,3 +456,43 @@ def test_one_daily_backup_is_kept_outside_the_project(tmp_path):
     daily = list((backup.parent / "daily").glob("*.json"))
     assert len(daily) == 1
     assert daily[0].stat().st_mode & 0o777 == 0o600
+def test_project_trash_is_reversible_and_never_deletes_workspace(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+    project = store.create_project("À restaurer")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    marker = workspace / "keep.txt"
+    marker.write_text("safe", encoding="utf-8")
+    store.update_project(project["id"], {"workspace_root": str(workspace)})
+    conversation = store.create(project_id=project["id"])
+
+    trashed = store.trash_project(project["id"])
+
+    assert trashed["trashed_at"]
+    assert store.get_project(project["id"]) is None
+    assert project["id"] not in {item["id"] for item in store.list_projects()}
+    assert store.list_trashed_projects()[0]["conversation_count"] == 1
+    assert marker.read_text(encoding="utf-8") == "safe"
+
+    restored = store.restore_project(project["id"])
+    assert restored["trashed_at"] is None
+    assert store.get(conversation["id"])["project_id"] == project["id"]
+
+
+def test_permanent_project_delete_requires_trash(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+    project = store.create_project("Suppression")
+    conversation = store.create(project_id=project["id"])
+
+    assert store.delete_project_permanently(project["id"]) is False
+    store.trash_project(project["id"])
+    assert store.delete_project_permanently(project["id"]) is True
+    assert store.get(conversation["id"]) is None
+    with pytest.raises(ValueError):
+        store.trash_project("main")

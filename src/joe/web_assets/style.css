@@ -1285,9 +1285,17 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 .confirm-dialog { width: min(430px, calc(100vw - 24px)); }
 .confirm-dialog p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 2px; }
+.dialog-actions > span { flex: 1; }
 .dialog-actions button { padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; cursor: pointer; }
 .dialog-actions button:last-child { border-color: var(--green); color: #fff; background: var(--green); }
 .dialog-actions .danger-button:last-child { border-color: var(--danger); background: var(--danger); }
+.project-trash-dialog { width: min(560px, calc(100vw - 28px)); }
+.project-trash-list { display: grid; gap: 8px; max-height: 52vh; overflow: auto; }
+.project-trash-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; }
+.project-trash-row div { display: grid; gap: 3px; min-width: 0; }
+.project-trash-row strong, .project-trash-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-trash-row button { padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; cursor: pointer; }
+.project-trash-row .danger-button { color: var(--danger); }
 .task-diff-dialog { width: min(760px, calc(100vw - 24px)); }
 .task-diff-stats { margin: 0; color: var(--muted); font-size: 10px; }
 .task-diff-files {
