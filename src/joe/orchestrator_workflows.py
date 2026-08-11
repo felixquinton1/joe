@@ -191,15 +191,9 @@ def run_consensus_workflow(
 ) -> tuple[str, str]:
     proposal_prompt = (
         context
-        + "\n\nPropose independently a solution. Do not modify files. "
-        "State assumptions, trade-offs, and validation. Consensus stages are "
-        "intentionally read-only: do not attempt test suites, git fetch, or "
-        "authentication probes, and do not add a generic Refusé section merely "
-        "because those operational checks belong to a REVIEW workflow. Start "
-        "with files explicitly named by the user and inspect only sources "
-        "needed to answer. Do not broaden a focused request into a repository-wide "
-        "audit unless the named evidence is insufficient, and explain why before "
-        "expanding the scope."
+        + "\n\nForm an independent proposal for the requested consensus. "
+        "Use your normal tools and investigation process within the enforced "
+        "read-only permissions. State assumptions, trade-offs, and validation."
         + REPORT_RULES
     )
     first, second = participants

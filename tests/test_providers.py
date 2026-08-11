@@ -394,12 +394,19 @@ def test_additional_project_roots_are_forwarded_to_each_cli():
         assert command[command.index(flag) + 1] == str(extra[0])
 
 
-def test_codex_remote_access_is_scoped_to_workspace_write():
+def test_codex_remote_access_enables_native_search_and_write_network():
     command = Provider("codex", "codex", remote_access=True).command(
         "p", Path("/tmp/project"), Intent.MODIFY
     )
 
+    assert "--search" in command
     assert "sandbox_workspace_write.network_access=true" in command
+
+    read_only = Provider("codex", "codex", remote_access=True).command(
+        "p", Path("/tmp/project"), Intent.ANALYZE
+    )
+    assert "--search" in read_only
+    assert "sandbox_workspace_write.network_access=true" not in read_only
 
 
 def test_error_classification():

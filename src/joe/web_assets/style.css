@@ -68,7 +68,9 @@ button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-v
   padding: 18px 16px;
 }
 .history-panel {
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: rgba(243, 241, 235, .72);
 }
 .activity-panel {
@@ -188,7 +190,10 @@ button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-v
   font-size: 9px;
 }
 .history-filter-status:empty { display: none; }
-.history-list { display: grid; gap: 13px; }
+.history-list { display: grid; gap: 13px; min-height: 0; overflow: auto; }
+.history-footer { flex: 0 0 auto; padding: 10px 4px 0; margin-top: 8px; border-top: 1px solid var(--line); }
+.history-footer-action { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 9px; border: 0; border-radius: 9px; color: var(--muted); background: transparent; cursor: pointer; font-size: 10px; text-align: left; }
+.history-footer-action:hover { color: var(--ink-soft); background: rgba(255,255,255,.68); }
 .history-empty {
   display: grid;
   gap: 3px;
@@ -1515,7 +1520,7 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
     background: var(--paper);
     box-shadow: var(--shadow-lg);
   }
-  .history-panel.mobile-open { overflow: auto; }
+  .history-panel.mobile-open { overflow: hidden; }
   .activity-panel.mobile-open { right: 0; left: auto; }
   .activity-tools { padding-right: 112px; }
   .usage-panel { top: calc(100% + 8px); right: 0; left: auto; width: min(330px, calc(100vw - 24px)); }

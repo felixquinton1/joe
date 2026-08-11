@@ -11,7 +11,6 @@ from typing import Callable
 
 from .capabilities import provider_defaults
 from .provider_registry import counterpart
-from .external_sources import collect_sources
 from .usage_tracking import parse_provider_usage
 from .memory import ProjectMemory
 from .models import Intent, Mode, ProviderResult, Route
@@ -23,12 +22,6 @@ from .orchestrator_workflows import (
 from .provider_health import recent_failure, record_result
 from .providers import Provider, default_providers
 from .router import Router
-
-def _external_reference_context(request: str) -> str:
-    """Fetch bounded public references with an explicit evidence ledger."""
-    context, _ = collect_sources(request)
-    return context
-
 
 _MUTABLE_STATE_PATTERN = re.compile(
     r"(?i)\b("
@@ -175,19 +168,6 @@ class Orchestrator:
             context += "\n\n" + extra_context
         if observation:
             context += "\n\n" + _freshness_context(observation)
-        if not health_check and (
-            "external-research" in route.reason
-            or "http://" in request.lower()
-            or "https://" in request.lower()
-        ):
-            external = _external_reference_context(request)
-            if external:
-                context += "\n\n" + external
-                context += (
-                    "\n\nUse only sources marked [VERIFIED] for factual claims. "
-                    "Do not state that a site was checked when its ledger entry is "
-                    "[REFUSED] or absent. List unavailable sources explicitly."
-                )
         if route.mode is Mode.FAST and route.intent is not Intent.MODIFY:
             context += (
                 "\n\n# Direct-answer style\n"

@@ -6,7 +6,6 @@ from joe.models import Intent, Mode, ProviderResult, Route
 from joe.orchestrator import (
     OrchestrationError,
     Orchestrator,
-    _external_reference_context,
     requires_fresh_workspace,
 )
 from joe.orchestrator_workflows import clean_report
@@ -300,7 +299,7 @@ def test_consensus_is_read_only_and_uses_distinct_proposals(tmp_path):
         for provider in providers.values()
         for mode in provider.execution_modes
     )
-    assert "operational checks belong to a REVIEW workflow" in (
+    assert "normal tools and investigation process" in (
         providers["codex"].calls[0][0]
     )
     assert all(
@@ -543,38 +542,6 @@ def test_health_check_skips_project_context_and_uses_short_timeout(tmp_path):
     assert "SECRET CONVERSATION CONTEXT" not in prompt
     assert "17 × 23" in prompt
     assert timeout == 30
-
-
-def test_external_github_reference_is_added_as_bounded_context(monkeypatch):
-    class Response:
-        def __enter__(self): return self
-        def __exit__(self, *args): return None
-        def read(self, size): return b"# Maestro\nagent orchestration"
-
-    monkeypatch.setattr(
-        "joe.orchestrator.urllib.request.urlopen",
-        lambda *args, **kwargs: Response(),
-    )
-    context = _external_reference_context(
-        "Compare https://github.com/RunMaestro/Maestro"
-    )
-    assert "External public reference: RunMaestro/Maestro" in context
-    assert "agent orchestration" in context
-
-
-def test_known_product_source_is_fetched_and_ledgered(monkeypatch):
-    class Response:
-        def __enter__(self): return self
-        def __exit__(self, *args): return None
-        def read(self, size): return b"<h1>Maestro</h1> worktrees"
-
-    monkeypatch.setattr(
-        "joe.orchestrator.urllib.request.urlopen",
-        lambda *args, **kwargs: Response(),
-    )
-    context = _external_reference_context("Compare Maestro and Crewly")
-    assert "[VERIFIED]" in context
-    assert "## Source: maestro" in context
 
 
 def test_clean_report_omits_internal_validation_refusal_section():
