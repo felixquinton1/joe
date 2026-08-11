@@ -486,6 +486,7 @@ def _collect_streams(
         else None
     )
     closed = 0
+    process_exited_at: float | None = None
     while closed < 2:
         if cancel_event and cancel_event.is_set():
             _stop_process(process)
@@ -522,6 +523,15 @@ def _collect_streams(
             stream_name, line = events.get(timeout=min(0.25, remaining))
         except queue.Empty:
             now = time.monotonic()
+            if process.poll() is not None:
+                process_exited_at = process_exited_at or now
+                if now - process_exited_at >= 1:
+                    # Some CLIs leave a helper process holding stdout/stderr
+                    # open after their main process exits. Waiting for both EOF
+                    # markers would then consume the whole provider timeout even
+                    # though the requested command has already finished.
+                    _stop_orphaned_process_group(process)
+                    break
             if callback and now >= next_heartbeat:
                 elapsed = max(0, int(now - started_at))
                 minutes, seconds = divmod(elapsed, 60)
@@ -564,6 +574,21 @@ def _collect_streams(
             _stop_process(process)
     process.wait()
     return "".join(output["stdout"]), "".join(output["stderr"])
+
+
+def _stop_orphaned_process_group(process: subprocess.Popen[str]) -> None:
+    """Best-effort cleanup when the group leader exited before its helpers."""
+    if os.name == "nt":
+        for stream in (process.stdout, process.stderr):
+            try:
+                stream.close()
+            except (AttributeError, OSError):
+                pass
+        return
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
 
 
 def _process_group_options(

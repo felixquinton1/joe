@@ -97,6 +97,20 @@ test("all translation markers in the page exist in both catalogs", () => {
   }
 });
 
+test("live history refresh deduplicates the optimistic user prompt by run id", () => {
+  const source = readFileSync(
+    new URL("../src/joe/web_assets/app_conversations.js", import.meta.url),
+    "utf8"
+  );
+  const app = readFileSync(
+    new URL("../src/joe/web_assets/app.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(source, /querySelectorAll\("\.message\.user"\)/);
+  assert.match(source, /dataset\.source === message\.content/);
+  assert.match(app, /optimisticUserBubble\.closest\("\.message"\)\.dataset\.runId = run_id/);
+});
+
 test("applies translated text, placeholders, titles, and aria labels", () => {
   const nodes = {
     "[data-i18n]": [{ dataset: { i18n: "send" }, textContent: "" }],

@@ -303,6 +303,11 @@ def test_consensus_is_read_only_and_uses_distinct_proposals(tmp_path):
     assert "operational checks belong to a REVIEW workflow" in (
         providers["codex"].calls[0][0]
     )
+    assert all(
+        call[3] == 300
+        for provider in providers.values()
+        for call in provider.calls
+    )
 
 
 def test_consensus_can_use_codex_and_gemini_participants(tmp_path):

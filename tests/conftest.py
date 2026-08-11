@@ -8,6 +8,9 @@ def isolated_joe_data_home(tmp_path, monkeypatch):
     clear_cooldowns()
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "joe-test-data"))
     monkeypatch.setenv("JOE_DISABLE_LLM_ROUTER", "1")
+    # Unit tests exercise scheduling deterministically. A daemon scheduler
+    # surviving the test that created it must never launch a real provider.
+    monkeypatch.setenv("JOE_DISABLE_BACKGROUND_WORKERS", "1")
     yield
     clear_cooldowns()
 

@@ -1,4 +1,4 @@
-const APP_VERSION = "0.32.0";
+const APP_VERSION = "0.32.1";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -1561,6 +1561,7 @@ async function startRun(
   // message de l'utilisateur et une bulle placeholder, sans attendre la
   // réponse du serveur (le routage peut prendre un instant à démarrer).
   const visible = conversationId === state.activeConversationId;
+  let optimisticUserBubble = null;
   if (visible) {
     state.agents.clear();
     $("agents").replaceChildren();
@@ -1570,7 +1571,7 @@ async function startRun(
     $("stop").classList.remove("hidden");
     $("run-state").textContent = t("running");
     $("run-state").className = "run-state running";
-    addMessage("Toi", shownRequest, "user");
+    optimisticUserBubble = addMessage("Toi", shownRequest, "user");
   }
   const finalBubble = visible
     ? addMessage(
@@ -1621,6 +1622,9 @@ async function startRun(
     return;
   }
   const { run_id } = await response.json();
+  if (optimisticUserBubble) {
+    optimisticUserBubble.closest(".message").dataset.runId = run_id;
+  }
   selectedFileIds.clear();
   renderAttachmentChips();
   renderFileLibrary();

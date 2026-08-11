@@ -1,3 +1,4 @@
+import os
 import sys
 import threading
 import time
@@ -166,6 +167,24 @@ def test_provider_can_be_cancelled_without_waiting_for_timeout(tmp_path):
 
     assert result.error_kind == "cancelled"
     assert time.monotonic() - started < 3
+
+
+def test_provider_does_not_wait_for_timeout_when_helper_keeps_pipes_open(tmp_path):
+    if os.name == "nt":
+        return
+    provider = ScriptProvider(
+        "import subprocess, sys; "
+        "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)']); "
+        "print('done', flush=True)",
+        watchdog_seconds=None,
+    )
+    started = time.monotonic()
+
+    result = provider.run("hello", tmp_path, Intent.ANALYZE, timeout=10)
+
+    assert result.ok
+    assert result.stdout.strip() == "done"
+    assert time.monotonic() - started < 4
 
 
 def test_provider_process_groups_are_portable():

@@ -444,6 +444,19 @@ window.createJoeConversations = function createJoeConversations({
       }
       let bubble;
       if (message.role === "user") {
+        const existing = [...document.querySelectorAll(".message.user")].find(
+          node => (
+            message.run_id && node.dataset.runId === message.run_id
+          ) || (
+            !node.dataset.historyIndex
+            && node.querySelector(".bubble")?.dataset.source === message.content
+          )
+        );
+        if (existing) {
+          existing.dataset.historyIndex = String(index);
+          if (message.run_id) existing.dataset.runId = message.run_id;
+          continue;
+        }
         bubble = addMessage("Toi", message.content, "user", { suppressScroll: true });
       } else {
         bubble = addMessage("Joe · synthèse", "", "assistant", { suppressScroll: true });

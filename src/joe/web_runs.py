@@ -263,7 +263,8 @@ class RunManager:
         self.pending_path = self.orchestrator.memory.root / "pending_runs.json"
         self._recover_pending()
         self._automation_stop = threading.Event()
-        threading.Thread(target=self._automation_loop, daemon=True).start()
+        if os.environ.get("JOE_DISABLE_BACKGROUND_WORKERS") != "1":
+            threading.Thread(target=self._automation_loop, daemon=True).start()
 
     def start(
         self,
