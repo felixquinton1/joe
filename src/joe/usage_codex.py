@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import threading
 import time
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Callable
 
 
@@ -97,9 +97,9 @@ def windows_aware_executable(name: str, shutil_module=shutil) -> str | None:
     if os.name == "nt":
         appdata = os.environ.get("APPDATA")
         if appdata:
-            npm_shim = Path(appdata) / "npm" / f"{name}.cmd"
-            if npm_shim.is_file():
-                return str(npm_shim)
+            npm_shim = os.path.join(appdata, "npm", f"{name}.cmd")
+            if os.path.isfile(npm_shim):
+                return npm_shim
         command = shutil_module.which(f"{name}.cmd")
         if command:
             return command
