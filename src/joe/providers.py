@@ -175,6 +175,9 @@ class Provider:
             "restricted": "read-only",
         }[access]
         command = [self.executable, "--ask-for-approval", "never"]
+        # Joe already injects the shared AGENTS.md contract. Prevent Codex from
+        # discovering and loading the same file a second time.
+        command.extend(["--config", "project_doc_max_bytes=0"])
         if effort:
             command.extend(["--config", f'model_reasoning_effort="{effort}"'])
         command.extend([
@@ -655,6 +658,12 @@ def _activity_codex(event: dict) -> dict[str, str] | None:
     item = event.get("item") or {}
     item_type = item.get("type")
     if item_type in {"command_execution", "mcp_tool_call", "file_change"}:
+        # Codex emits the same item when it starts and when it completes. Keep a
+        # single activity row instead of making one command look like two.
+        event_type = event.get("type")
+        expected = "item.completed" if item_type == "file_change" else "item.started"
+        if event_type != expected:
+            return None
         detail = (
             item.get("command")
             or item.get("name")

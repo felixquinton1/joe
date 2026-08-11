@@ -22,7 +22,7 @@ def test_memory_is_created_and_active_files_are_rewritten(tmp_path):
     assert memory.previous_provider() == "claude"
 
 
-def test_context_is_bounded_and_includes_project_instructions(tmp_path):
+def test_context_is_bounded_and_includes_shared_project_instructions(tmp_path):
     (tmp_path / "AGENTS.md").write_text("important rule")
     memory = ProjectMemory(tmp_path)
     memory.ensure()

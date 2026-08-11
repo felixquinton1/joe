@@ -9,7 +9,6 @@ from typing import Callable
 from .models import Intent, ProviderResult, Route
 from .provider_registry import counterpart
 
-CONSENSUS_STAGE_TIMEOUT_SECONDS = 300
 
 REPORT_RULES = (
     "\n\nReporting rules: use factual collective or impersonal phrasing. "
@@ -190,14 +189,17 @@ def run_consensus_workflow(
     execution_mode: str | None = None,
     cancel_event: threading.Event | None = None,
 ) -> tuple[str, str]:
-    stage_timeout = CONSENSUS_STAGE_TIMEOUT_SECONDS
     proposal_prompt = (
         context
         + "\n\nPropose independently a solution. Do not modify files. "
         "State assumptions, trade-offs, and validation. Consensus stages are "
         "intentionally read-only: do not attempt test suites, git fetch, or "
         "authentication probes, and do not add a generic Refusé section merely "
-        "because those operational checks belong to a REVIEW workflow."
+        "because those operational checks belong to a REVIEW workflow. Start "
+        "with files explicitly named by the user and inspect only sources "
+        "needed to answer. Do not broaden a focused request into a repository-wide "
+        "audit unless the named evidence is insufficient, and explain why before "
+        "expanding the scope."
         + REPORT_RULES
     )
     first, second = participants
@@ -225,7 +227,6 @@ def run_consensus_workflow(
                 cancel_event,
                 on_event,
                 True,
-                stage_timeout,
             ): provider
             for provider, other in ((first, second), (second, first))
         }
@@ -295,7 +296,6 @@ def run_consensus_workflow(
                 cancel_event,
                 on_event,
                 True,
-                stage_timeout,
             ): provider
             for provider, other in ((first, second), (second, first))
         }
@@ -390,7 +390,6 @@ def run_consensus_workflow(
         on_event=on_event,
         cancel_event=cancel_event,
         respect_cooldown=True,
-        timeout_override=stage_timeout,
     )
     workflow_event(
         on_event,
@@ -424,7 +423,6 @@ def isolated_run(
     cancel_event: threading.Event | None,
     on_event: Callable[[dict], None] | None,
     allow_quota_fallback: bool = False,
-    timeout_override: int | None = None,
 ) -> tuple[ProviderResult, list[ProviderResult]]:
     local_results: list[ProviderResult] = []
     result = orchestrator._run_with_fallback(
@@ -445,7 +443,6 @@ def isolated_run(
             if allow_quota_fallback
             else None
         ),
-        timeout_override=timeout_override,
     )
     return result, local_results
 

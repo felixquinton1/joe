@@ -197,7 +197,9 @@ def test_provider_process_groups_are_portable():
 def test_commands_match_inspected_noninteractive_interfaces():
     cwd = Path("/tmp/project")
     codex = Provider("codex", "codex").command("p", cwd, Intent.ANALYZE)
-    assert codex[:5] == ["codex", "--ask-for-approval", "never", "exec", "--json"]
+    assert codex[:3] == ["codex", "--ask-for-approval", "never"]
+    assert "project_doc_max_bytes=0" in codex
+    assert ["exec", "--json"] == codex[5:7]
     assert codex[-1] == "-"
     assert "p" not in codex
     assert "--print" in Provider("claude", "claude").command("p", cwd, Intent.ANALYZE)
@@ -452,6 +454,22 @@ def test_codex_json_stream_exposes_command_and_final_message():
         "detail": "sed -n 1,40p app.py",
     }
     assert _final_output("codex", f"{command}\n{message}\n") == "Terminé."
+
+
+def test_codex_command_disables_duplicate_native_project_docs(tmp_path):
+    provider = Provider("codex", "codex")
+    command = provider.command("inspect", tmp_path, Intent.ANALYZE)
+
+    assert "project_doc_max_bytes=0" in command
+
+
+def test_codex_json_stream_does_not_repeat_completed_command():
+    completed = (
+        '{"type":"item.completed","item":{"type":"command_execution",'
+        '"command":"sed -n 1,40p app.py"}}'
+    )
+
+    assert _activity("codex", "stdout", completed) is None
 
 
 def test_claude_json_stream_exposes_file_tool_and_result():

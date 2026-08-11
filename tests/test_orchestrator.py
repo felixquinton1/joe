@@ -304,7 +304,7 @@ def test_consensus_is_read_only_and_uses_distinct_proposals(tmp_path):
         providers["codex"].calls[0][0]
     )
     assert all(
-        call[3] == 300
+        call[3] == 900
         for provider in providers.values()
         for call in provider.calls
     )

@@ -211,10 +211,12 @@ class ProjectMemory:
 
     def _instructions(self) -> str:
         chunks = []
-        for name in ("AGENTS.md", "CLAUDE.md", "CODEX.md"):
-            path = self.project / name
-            if path.exists():
-                chunks.append(f"## {name}\n{path.read_text(errors='replace')}")
+        # AGENTS.md is Joe's provider-neutral repository contract. Provider-
+        # specific files remain native to their CLI and are not copied into
+        # every provider's prompt.
+        agents = self.project / "AGENTS.md"
+        if agents.exists():
+            chunks.append(f"## AGENTS.md\n{agents.read_text(errors='replace')}")
         from .skills import global_skills_root
 
         skill_roots = [
