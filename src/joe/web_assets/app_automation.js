@@ -297,11 +297,24 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
   }
 
   async function load() {
-    const response = await fetcher("/api/automations");
-    if (!response.ok) return;
-    plans = await response.json();
-    const autonomousResponse = await fetcher("/api/autonomous");
-    campaigns = autonomousResponse.ok ? await autonomousResponse.json() : [];
+    try {
+      const response = await fetcher("/api/automations");
+      if (response.ok) {
+        plans = await response.json();
+      }
+    } catch (e) {
+      console.warn("Failed to load automations", e);
+      plans = [];
+    }
+    try {
+      const autonomousResponse = await fetcher("/api/autonomous");
+      if (autonomousResponse.ok) {
+        campaigns = await autonomousResponse.json();
+      }
+    } catch (e) {
+      console.warn("Failed to load autonomous campaigns", e);
+      campaigns = [];
+    }
     render();
   }
 
