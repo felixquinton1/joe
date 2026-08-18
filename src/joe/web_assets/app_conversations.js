@@ -16,6 +16,7 @@ window.createJoeConversations = function createJoeConversations({
   renderPromptQueue,
   fetcher
 }) {
+  const lastConversationKey = "joe-last-conversation-id";
   const tr = key => translate ? translate(key) : key;
   let draggedItem = null;
   let historyFilter = "";
@@ -83,7 +84,15 @@ window.createJoeConversations = function createJoeConversations({
     }
     renderConversations();
     if (selectFirst && !state.activeConversationId) {
-      await selectConversation(state.conversations[0].id);
+      let remembered = "";
+      try {
+        remembered = window.localStorage.getItem(lastConversationKey) || "";
+      } catch {
+        // Storage may be unavailable in a hardened/private browser context.
+      }
+      const initial = state.conversations.find(item => item.id === remembered)
+        || state.conversations[0];
+      await selectConversation(initial.id);
     }
   }
 
@@ -326,6 +335,11 @@ window.createJoeConversations = function createJoeConversations({
     const conversation = await fetcher(`/api/conversations/${conversationId}`).then(response => response.json());
     state.activeConversationId = conversationId;
     state.activeProjectId = conversation.project_id || "free";
+    try {
+      window.localStorage.setItem(lastConversationKey, conversationId);
+    } catch {
+      // Keeping the conversation usable matters more than persistence.
+    }
     if (conversation.unread_completion) {
       conversation.unread_completion = false;
       const cached = state.conversations.find(item => item.id === conversationId);

@@ -121,6 +121,17 @@ test("live history refresh reuses the pending assistant bubble by run id", () =>
   assert.match(source, /existing\.dataset\.runId = message\.run_id/);
 });
 
+test("conversation navigation remembers and restores the last opened item", () => {
+  const source = readFileSync(
+    new URL("../src/joe/web_assets/app_conversations.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(source, /joe-last-conversation-id/);
+  assert.match(source, /localStorage\.getItem\(lastConversationKey\)/);
+  assert.match(source, /state\.conversations\.find\(item => item\.id === remembered\)/);
+  assert.match(source, /localStorage\.setItem\(lastConversationKey, conversationId\)/);
+});
+
 test("applies translated text, placeholders, titles, and aria labels", () => {
   const nodes = {
     "[data-i18n]": [{ dataset: { i18n: "send" }, textContent: "" }],
