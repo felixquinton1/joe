@@ -83,6 +83,12 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert "renderMarkdown" in markdown
         assert "isTableSeparator" in markdown
 
+        connection.request("GET", "/katex.min.js")
+        response = connection.getresponse()
+        katex = response.read()
+        assert response.status == 200
+        assert b"renderToString" in katex
+
         connection.request("GET", "/api/capabilities")
         response = connection.getresponse()
         capabilities = json.loads(response.read())

@@ -1243,6 +1243,10 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 .markdown h3 { padding-bottom: .25em; border-bottom: 1px solid var(--line); font-size: 1.13em; }
 .markdown h4 { font-size: 1em; }
 .markdown p { margin: .65em 0; }
+.markdown .math-block { overflow-x: auto; margin: .85em 0; padding: .7em .9em; border-radius: 9px; background: rgba(243, 241, 235, .62); text-align: center; }
+.markdown .math-inline { display: inline-block; margin: 0 .08em; vertical-align: -.08em; }
+.markdown .math-block math { font-size: 1.08em; }
+.markdown .math-error { color: var(--danger); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-align: left; }
 .markdown ul, .markdown ol { margin: .55em 0; padding-left: 1.45em; }
 .markdown li { margin: .28em 0; }
 .markdown code { padding: .14em .36em; border-radius: 5px; color: #244b40; background: #eceae3; font: .9em ui-monospace, SFMono-Regular, Menlo, monospace; }

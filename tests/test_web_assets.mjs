@@ -17,6 +17,7 @@ globalThis.document = globalThis.document || {
 };
 require("../src/joe/web_assets/markdown.js");
 const { window } = globalThis;
+const katex = require("../src/joe/web_assets/katex.min.js");
 
 test("pairs from the fragment and removes it from browser history", async () => {
   const calls = [];
@@ -191,6 +192,35 @@ test("ignores a malformed or single-option question block", () => {
     parse('```joe:question\n{"question":"Ok ?","options":["Oui"]}\n```'),
     null
   );
+});
+
+test("renders LaTeX delimiters as math blocks and inline math", () => {
+  const target = {
+    innerHTML: "",
+    dataset: {},
+    classList: { add() {} },
+    querySelectorAll() { return []; }
+  };
+  window.JoeMarkdown.renderMarkdown(
+    target,
+    "Objectif :\n\n\\[\n\\mathcal L = \\lambda_V \\mathcal L_{prix}\n\\]"
+      + "\n\nLa dérivée \\(\\Delta V\\) et $\\Gamma V$ restent contrôlées."
+  );
+  assert.match(target.innerHTML, /class="math-block"/);
+  assert.match(target.innerHTML, /\\mathcal L_\{prix\}/);
+  assert.match(target.innerHTML, /class="math-inline"/);
+  assert.match(target.innerHTML, /\\Gamma V/);
+  assert.doesNotMatch(target.innerHTML, /<em>\{prix\}/);
+});
+
+test("vendored KaTeX converts Joe formulas to native MathML", () => {
+  const rendered = katex.renderToString(
+    String.raw`\mathcal L=\lambda_V\mathcal L_{\text{prix}}+\lambda_\Delta\mathcal L_\Delta`,
+    { output: "mathml", throwOnError: false }
+  );
+  assert.match(rendered, /<math/);
+  assert.match(rendered, /<msub>/);
+  assert.match(rendered, /prix/);
 });
 
 test("turns a validated plan into autonomous steps", () => {

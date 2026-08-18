@@ -30,6 +30,26 @@
         html.push(`<pre><code${language ? ` data-language="${escapeHtml(language)}"` : ""}>${escapeHtml(code.join("\n"))}</code></pre>`);
         continue;
       }
+      const mathDelimiter = line.trim();
+      const compactMath = mathDelimiter.match(/^\\\[([\s\S]+)\\\]$/)
+        || mathDelimiter.match(/^\$\$([\s\S]+)\$\$$/);
+      if (compactMath) {
+        html.push(`<div class="math-block">${escapeHtml(compactMath[1].trim())}</div>`);
+        index += 1;
+        continue;
+      }
+      if (mathDelimiter === "\\[" || mathDelimiter === "$$") {
+        const closing = mathDelimiter === "\\[" ? "\\]" : "$$";
+        const math = [];
+        index += 1;
+        while (index < lines.length && lines[index].trim() !== closing) {
+          math.push(lines[index]);
+          index += 1;
+        }
+        index += index < lines.length ? 1 : 0;
+        html.push(`<div class="math-block">${escapeHtml(math.join("\n").trim())}</div>`);
+        continue;
+      }
       const heading = line.match(/^(#{1,4})\s+(.+)$/);
       if (heading) {
         const level = heading[1].length;
@@ -90,12 +110,15 @@
     }
     target.innerHTML = html.join("");
     target.classList.add("markdown");
+    renderMath(target);
   }
 
   function startsMarkdownBlock(lines, index) {
     const line = lines[index];
     return /^(#{1,4})\s+/.test(line)
       || line.trim().startsWith("```")
+      || line.trim() === "\\["
+      || line.trim() === "$$"
       || /^\s*[-*+]\s+/.test(line)
       || /^\s*\d+\.\s+/.test(line)
       || /^>\s?/.test(line)
@@ -113,16 +136,45 @@
 
   function inlineMarkdown(value) {
     const code = [];
-    let text = escapeHtml(value).replace(/`([^`]+)`/g, (_, content) => {
+    const math = [];
+    let raw = String(value).replace(/`([^`]+)`/g, (_, content) => {
       code.push(content);
       return `\u0000CODE${code.length - 1}\u0000`;
     });
+    raw = raw.replace(/\\\((.+?)\\\)/g, (_, content) => {
+      math.push(content);
+      return `\u0000MATH${math.length - 1}\u0000`;
+    });
+    raw = raw.replace(/(^|[^\\$])\$([^$\n]+)\$/g, (_, prefix, content) => {
+      math.push(content);
+      return `${prefix}\u0000MATH${math.length - 1}\u0000`;
+    });
+    let text = escapeHtml(raw);
     text = text
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/__([^_]+)__/g, "<strong>$1</strong>")
       .replace(/\*([^*]+)\*/g, "<em>$1</em>")
       .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-    return text.replace(/\u0000CODE(\d+)\u0000/g, (_, position) => `<code>${code[Number(position)]}</code>`);
+    return text
+      .replace(/\u0000CODE(\d+)\u0000/g, (_, position) => `<code>${escapeHtml(code[Number(position)])}</code>`)
+      .replace(/\u0000MATH(\d+)\u0000/g, (_, position) => `<span class="math-inline">${escapeHtml(math[Number(position)])}</span>`);
+  }
+
+  function renderMath(target) {
+    if (!window.katex || typeof target.querySelectorAll !== "function") return;
+    for (const node of target.querySelectorAll(".math-block, .math-inline")) {
+      const tex = node.textContent;
+      try {
+        window.katex.render(tex, node, {
+          displayMode: node.classList.contains("math-block"),
+          output: "mathml",
+          throwOnError: false,
+          trust: false
+        });
+      } catch {
+        node.classList.add("math-error");
+      }
+    }
   }
 
   function extractQuestion(text) {
