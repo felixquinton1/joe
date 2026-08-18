@@ -2013,8 +2013,13 @@ function renderAnswer(bubble, text) {
   if (!question) return;
   const card = document.createElement("div");
   card.className = "question-card";
+  card.style.marginTop = "1rem";
+  card.style.paddingTop = "1rem";
+  card.style.borderTop = "1px solid var(--ink-soft)";
   const label = document.createElement("strong");
   label.textContent = question.question;
+  label.style.display = "block";
+  label.style.marginBottom = "0.5rem";
   const choices = document.createElement("div");
   choices.className = "question-options";
   for (const option of question.options) {

@@ -89,6 +89,21 @@ def _freshness_context(observation: dict[str, object]) -> str:
     )
 
 
+
+def _ensure_consensus_format(request: str, response: str) -> str:
+    """Si la demande est un consensus, forcer le bloc joe:question."""
+    lower_req = request.lower()
+    has_consensus_keyword = any(
+        kw in lower_req for kw in {
+            "consensus", "synthèse", "synthese", "roadmap", "prioriser", "proposer",
+            "par quoi on commence", "suite"
+        }
+    )
+    if has_consensus_keyword and "```joe:question" not in response:
+        block = '```joe:question\n{"question": "Par quoi on commence ?", "options": ["Option 1", "Option 2", "Option 3", "Option 4"]}\n```'
+        return response.rstrip() + "\n\n" + block
+    return response
+
 class OrchestrationError(RuntimeError):
     pass
 
