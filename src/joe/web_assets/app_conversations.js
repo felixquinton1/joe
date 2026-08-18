@@ -409,8 +409,15 @@ window.createJoeConversations = function createJoeConversations({
     $("run-state").textContent = t(running ? "running" : "ready");
     $("run-state").className = `run-state ${running ? "running" : "idle"}`;
     if (running) {
-      const bubble = addMessage("Joe", "Cette tâche continue en arrière-plan…", "assistant");
       const activeRun = state.runs.get(conversationId);
+      const existing = [...document.querySelectorAll(".message.assistant")].find(
+        node => activeRun.runId && node.dataset.runId === activeRun.runId
+      );
+      const bubble = existing?.querySelector(".bubble") || addMessage(
+        "Joe",
+        "Cette tâche continue en arrière-plan…",
+        "assistant"
+      );
       activeRun.bubble = bubble;
       for (const event of activeRun.workflow.values()) {
         renderWorkflowUpdate(event, bubble, activeRun.runId);
@@ -459,6 +466,21 @@ window.createJoeConversations = function createJoeConversations({
         }
         bubble = addMessage("Toi", message.content, "user", { suppressScroll: true });
       } else {
+        const activeRun = state.runs.get(conversationId);
+        const existing = message.run_id && activeRun?.runId === message.run_id
+          ? activeRun.bubble?.closest(".message")
+          : [...document.querySelectorAll(".message.assistant")].find(
+              node => message.run_id && node.dataset.runId === message.run_id
+            );
+        if (existing) {
+          bubble = existing.querySelector(".bubble");
+          renderHistoricalRunSummary(message, bubble);
+          renderMarkdown(bubble, message.content);
+          if (message.git_report) renderGitReport(message.git_report, message.run_id);
+          existing.dataset.historyIndex = String(index);
+          existing.dataset.runId = message.run_id;
+          continue;
+        }
         bubble = addMessage("Joe · synthèse", "", "assistant", { suppressScroll: true });
         renderHistoricalRunSummary(message, bubble);
         renderMarkdown(bubble, message.content);

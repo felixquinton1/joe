@@ -34,6 +34,25 @@ def test_conversation_messages_settings_and_pin_persist(tmp_path):
     assert "Analyse ce dépôt" in store.context(conversation["id"])
 
 
+def test_assistant_result_is_idempotent_per_run(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+    conversation = store.create()
+
+    store.append_message(
+        conversation["id"], "assistant", "Première version", "run-1"
+    )
+    store.append_message(
+        conversation["id"], "assistant", "Version finale", "run-1"
+    )
+
+    messages = store.get(conversation["id"])["messages"]
+    assert len(messages) == 1
+    assert messages[0]["content"] == "Version finale"
+
+
 def test_conversations_default_to_pinned_then_most_recent(tmp_path):
     root = tmp_path / ".agentflow"
     runs = root / "runs"

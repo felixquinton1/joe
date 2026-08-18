@@ -175,6 +175,9 @@ class Provider:
             "restricted": "read-only",
         }[access]
         command = [self.executable, "--ask-for-approval", "never"]
+        if self.remote_access:
+            # `--search` is a global Codex option: it must precede `exec`.
+            command.append("--search")
         # Joe already injects the shared AGENTS.md contract. Prevent Codex from
         # discovering and loading the same file a second time.
         command.extend(["--config", "project_doc_max_bytes=0"])
@@ -185,10 +188,6 @@ class Provider:
             "--ephemeral", "--skip-git-repo-check", "--color", "never",
             "--sandbox", sandbox,
         ])
-        # Note: --search flag not supported in Codex 0.147.0, causes
-        # "unexpected argument" error. Disabled until Codex version supports it.
-        # if self.remote_access:
-        #     command.append("--search")
         if self.remote_access and sandbox == "workspace-write":
             command.extend(
                 ["--config", "sandbox_workspace_write.network_access=true"]

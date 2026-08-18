@@ -509,6 +509,31 @@ class ConversationStore:
             conversation = self._find(payload, conversation_id)
             if not conversation:
                 return
+            if role == "assistant" and run_id:
+                existing = next(
+                    (
+                        item
+                        for item in reversed(conversation["messages"])
+                        if item.get("role") == role
+                        and item.get("run_id") == run_id
+                    ),
+                    None,
+                )
+                if existing is not None:
+                    existing.update(
+                        content=content,
+                        provider=provider,
+                        at=time.time(),
+                    )
+                    if git_report:
+                        existing["git_report"] = git_report
+                    if run_summary:
+                        existing["run_summary"] = run_summary
+                    conversation["unread_completion"] = True
+                    conversation["last_call_at"] = existing["at"]
+                    conversation["updated_at"] = existing["at"]
+                    self._write(payload)
+                    return
             message = {
                 "role": role,
                 "content": content,
