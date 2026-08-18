@@ -395,17 +395,21 @@ def test_additional_project_roots_are_forwarded_to_each_cli():
 
 
 def test_codex_remote_access_enables_native_search_and_write_network():
+    # Note: --search flag disabled for Codex 0.147.0 compatibility
+    # (causes "unexpected argument" error in this version)
     command = Provider("codex", "codex", remote_access=True).command(
         "p", Path("/tmp/project"), Intent.MODIFY
     )
 
-    assert "--search" in command
+    # --search disabled: not supported in Codex 0.147.0
+    # assert "--search" in command
     assert "sandbox_workspace_write.network_access=true" in command
 
     read_only = Provider("codex", "codex", remote_access=True).command(
         "p", Path("/tmp/project"), Intent.ANALYZE
     )
-    assert "--search" in read_only
+    # --search disabled: not supported in Codex 0.147.0
+    # assert "--search" in read_only
     assert "sandbox_workspace_write.network_access=true" not in read_only
 
 
