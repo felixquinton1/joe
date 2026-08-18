@@ -120,6 +120,11 @@ test("live history refresh reuses the pending assistant bubble by run id", () =>
   assert.match(source, /activeRun\?\.runId === message\.run_id/);
   assert.match(source, /querySelectorAll\("\.message\.assistant"\)/);
   assert.match(source, /existing\.dataset\.runId = message\.run_id/);
+  const app = readFileSync(
+    new URL("../src/joe/web_assets/app.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(app, /finalBubble\.closest\("\.message"\)\.dataset\.runId = run_id/);
 });
 
 test("conversation navigation remembers and restores the last opened item", () => {

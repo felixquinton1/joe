@@ -1,4 +1,4 @@
-const APP_VERSION = "0.32.6";
+const APP_VERSION = "0.32.7";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -1629,6 +1629,9 @@ async function startRun(
   const { run_id } = await response.json();
   if (optimisticUserBubble) {
     optimisticUserBubble.closest(".message").dataset.runId = run_id;
+  }
+  if (finalBubble) {
+    finalBubble.closest(".message").dataset.runId = run_id;
   }
   selectedFileIds.clear();
   renderAttachmentChips();
