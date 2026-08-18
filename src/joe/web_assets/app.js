@@ -1140,6 +1140,11 @@ function failRunningWorkflow() {
     const status = stage.querySelector("summary b");
     if (status) status.textContent = "Échec";
   }
+  // Arrêter toutes les animations d'agents (heartbeats)
+  for (const heartbeat of document.querySelectorAll(".agent-heartbeat")) {
+    heartbeat.classList.add("hidden");
+    heartbeat.textContent = "";
+  }
 }
 
 function setSummaryPending(finalBubble, pending) {

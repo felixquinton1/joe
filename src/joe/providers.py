@@ -185,10 +185,10 @@ class Provider:
             "--ephemeral", "--skip-git-repo-check", "--color", "never",
             "--sandbox", sandbox,
         ])
-        if self.remote_access:
-            # Use Codex's native Web search instead of reproducing a Web client
-            # in Joe. The project/user switch remains the single opt-out.
-            command.append("--search")
+        # Note: --search flag not supported in Codex 0.147.0, causes
+        # "unexpected argument" error. Disabled until Codex version supports it.
+        # if self.remote_access:
+        #     command.append("--search")
         if self.remote_access and sandbox == "workspace-write":
             command.extend(
                 ["--config", "sandbox_workspace_write.network_access=true"]
