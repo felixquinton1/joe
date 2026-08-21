@@ -8,7 +8,7 @@ from joe.orchestrator import (
     Orchestrator,
     requires_fresh_workspace,
 )
-from joe.orchestrator_workflows import clean_report
+from joe.orchestrator_workflows import clean_report, complete_synthesis
 from joe.provider_health import clear_cooldowns, record_result
 
 
@@ -325,6 +325,40 @@ def test_consensus_can_use_codex_and_gemini_participants(tmp_path):
     assert providers["codex"].calls
     assert providers["gemini"].calls
     assert providers["claude"].calls == []
+
+
+def test_consensus_rejects_incomplete_synthesis_and_falls_back(tmp_path):
+    incomplete = (
+        "Ce que je vais faire :\n\n"
+        "1. Vérifier les résultats.\n"
+        "2. Synthétiser les propositions.\n\n"
+        "Je commence par lire les fichiers pertinents."
+    )
+    providers = {
+        "codex": FakeProvider("codex", responses=[
+            "codex proposal", "codex review", "## Résultat\n\nConsensus complet."
+        ]),
+        "claude": FakeProvider(
+            "claude", responses=["claude proposal", "claude review"]
+        ),
+        "gemini": FakeProvider("gemini", responses=[incomplete]),
+        "copilot": FakeProvider("copilot"),
+    }
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    response, _ = orchestrator.execute(
+        "important",
+        Route(Intent.ANALYZE, Mode.CONSENSUS, "codex"),
+    )
+
+    assert response.startswith("> ⚠️ **Consensus dégradé**")
+    assert "Consensus complet" in response
+    assert len(providers["gemini"].calls) == 1
+    assert len(providers["codex"].calls) == 3
+
+
+def test_complete_synthesis_accepts_short_finished_answer():
+    assert complete_synthesis("## Résultat\n\nAccord établi. Recommandation finale : lancer A.")
 
 
 def test_consensus_uses_gemini_when_claude_quota_is_exhausted(tmp_path):

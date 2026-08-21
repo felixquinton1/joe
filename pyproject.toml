@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "joe-orchestrator"
-version = "0.32.7"
+version = "0.32.8"
 description = "Lightweight local multi-AI CLI orchestrator"
 readme = "README.md"
 license = {file = "LICENSE"}

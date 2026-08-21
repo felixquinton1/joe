@@ -1,4 +1,4 @@
-const APP_VERSION = "0.32.7";
+const APP_VERSION = "0.32.8";
 const state = {
   agents: new Map(),
   capabilities: {},

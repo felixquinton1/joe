@@ -62,6 +62,39 @@ def clean_report(text: str) -> str:
     return "\n\n".join(chunk for chunk in chunks if chunk).strip()
 
 
+def complete_synthesis(text: str) -> bool:
+    """Reject a successful CLI exit that only contains an unfinished preamble."""
+    report = clean_report(text)
+    if not report:
+        return False
+    lowered = report.casefold()
+    trailing_paragraph = lowered.rsplit("\n\n", 1)[-1].strip()
+    unfinished_endings = (
+        "je commence",
+        "nous commençons",
+        "je vais maintenant",
+        "nous allons maintenant",
+        "let me ",
+        "i will now ",
+    )
+    if any(marker in trailing_paragraph for marker in unfinished_endings):
+        return False
+    plan_only = lowered.startswith(("ce que je vais faire", "what i will do"))
+    completion_markers = (
+        "## résultat",
+        "# conclusion",
+        "## conclusion",
+        "recommandation finale",
+        "final recommendation",
+        "## arbitrage",
+    )
+    return not (
+        plan_only
+        and len(report) < 1_000
+        and not any(marker in lowered for marker in completion_markers)
+    )
+
+
 def run_review_workflow(
     orchestrator,
     context: str,
@@ -384,6 +417,7 @@ def run_consensus_workflow(
         on_event=on_event,
         cancel_event=cancel_event,
         respect_cooldown=True,
+        output_validator=complete_synthesis,
     )
     workflow_event(
         on_event,

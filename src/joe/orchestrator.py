@@ -296,6 +296,7 @@ class Orchestrator:
         allow_fallback: bool = True,
         fallback_error_kinds: set[str] | None = None,
         respect_cooldown: bool = False,
+        output_validator: Callable[[str], bool] | None = None,
     ) -> ProviderResult:
         config = self.memory.config()
         candidates = [provider_name]
@@ -372,6 +373,17 @@ class Orchestrator:
                     else None
                 ),
             )
+            if (
+                result.ok
+                and result.stdout.strip()
+                and output_validator is not None
+                and not output_validator(result.stdout)
+            ):
+                result.error_kind = "incomplete"
+                result.stderr = (
+                    result.stderr.rstrip()
+                    + "\nJoe rejected an incomplete provider response."
+                ).lstrip()
             results.append(result)
             record_result(result)
             usage = parse_provider_usage(name, result.stdout, selected_model)
