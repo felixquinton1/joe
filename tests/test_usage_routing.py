@@ -41,6 +41,24 @@ def test_low_claude_switches_back_to_codex():
     assert balanced.primary == "codex"
 
 
+def test_a_provider_outside_the_historic_pair_also_switches_on_low_quota():
+    """La bascule ne dépend plus d'une liste de deux noms écrite en dur.
+
+    Tout fournisseur à court de quota doit pouvoir passer la main à son pair,
+    sans quoi un nouveau venu reste collé à un quota épuisé.
+    """
+    route = Route(Intent.MODIFY, Mode.FAST, "cursor-agent", None, "preferred=cursor")
+
+    balanced = balance_route(
+        route,
+        [status("cursor-agent", 3, 100_000), status("codex", 90, 130_000)],
+        now=10_000,
+    )
+
+    assert balanced.primary == "codex"
+    assert "quota-switch=cursor-agent->codex" in balanced.reason
+
+
 def test_reset_within_24_hours_does_not_switch_unless_almost_exhausted():
     route = Route(Intent.MODIFY, Mode.FAST, "codex", None, "preferred=codex")
 

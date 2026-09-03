@@ -165,9 +165,14 @@ def balance_route(
     now: float | None = None,
 ) -> Route:
     """Move a FAST automatic route away from a constrained main provider."""
-    if route.mode is not Mode.FAST or route.primary not in {"codex", "claude"}:
+    # La bascule ne valait que pour deux fournisseurs nommés : tout nouveau
+    # venu restait collé à son quota épuisé faute d'être dans la liste. Le
+    # registre désigne déjà un pair pour chacun, il suffit de le demander.
+    if route.mode is not Mode.FAST:
         return route
     alternative = counterpart(route.primary)
+    if not alternative:
+        return route
     by_provider = {item.get("provider"): item for item in statuses}
     current = by_provider.get(route.primary)
     other = by_provider.get(alternative)
