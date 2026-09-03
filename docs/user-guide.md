@@ -9,6 +9,11 @@ Pour Cursor, la CLI attendue est `cursor-agent`, sans fenêtre : la commande
 documentées et n’en lit pas le quota restant ; un quota épuisé reste détecté
 au moment du run, et la demande bascule sur un autre fournisseur.
 
+Le sélecteur de modèles n’est rempli que pour les CLI qui publient leur
+catalogue : Codex l’expose, celui de Claude est tenu à jour dans Joe. Gemini et
+Copilot n’offrent aucune liste et ne proposent donc que « auto », qui laisse la
+CLI choisir ; le modèle voulu s’impose dans les réglages du projet.
+
 ## Installation
 
 Joe nécessite Python 3.10 ou plus. `pipx` est recommandé, car il isole les

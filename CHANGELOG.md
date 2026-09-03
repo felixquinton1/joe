@@ -1,0 +1,69 @@
+# Changelog
+
+Toutes les évolutions notables de Joe. Le format suit
+[Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), et les versions
+respectent [SemVer](https://semver.org/lang/fr/).
+
+## [1.0.0] — 2026-09-03
+
+Première version publiable. Le dépôt ne contient plus que l'orchestrateur, et
+chaque comportement propre à un fournisseur se déclare au registre.
+
+### Ajouté
+
+- **Cursor** rejoint Codex, Claude, Gemini et Copilot. La CLI attendue est
+  `cursor-agent`, sans fenêtre : `cursor` lance l'éditeur et ne convient pas.
+  Le jeu d'options se limite à ce que la documentation confirme, faute d'avoir
+  pu exécuter cette CLI.
+- **Lecture et suppression des skills**, par projet ou communs, depuis
+  l'interface. Tout skill listé entre dans le contexte partagé des
+  fournisseurs : il fallait pouvoir vérifier ce qu'il demande, et le retirer.
+- **Autorisation durable de l'accès complet.** La confirmation proposait
+  seulement « une fois » ; « Toujours autoriser » bascule le projet en accès
+  automatique, réversible dans ses réglages.
+- **Campagnes autonomes décrites au formulaire** : titre, objectif, commande,
+  contexte et métrique suivie.
+
+### Modifié
+
+- **Catalogue Claude complet et à jour.** Il tenait trois alias, or un alias
+  suit le défaut de la CLI, qui reste une version en arrière : l'interface
+  proposait Opus 4.8 alors qu'Opus 5 était disponible. Six modèles y figurent
+  désormais par identifiant complet.
+- **L'arbitre du consensus se déduit du disponible** au lieu d'être nommé dans
+  le code. Un tiers est préféré ; s'il ne reste que les deux proposants, l'un
+  d'eux arbitre plutôt que de faire échouer le consensus.
+- **La bascule pour quota vaut pour tout fournisseur** ayant un pair déclaré,
+  et non plus pour deux noms écrits en dur.
+
+### Corrigé
+
+- **Les questions de fin de réponse redeviennent des boutons.** Le parser
+  exigeait un balisage strict ; les modèles rendent aussi le JSON nu, qui
+  s'affichait alors tel quel.
+- **Écoute sur la loopback IPv6.** `::1` passait la validation puis échouait au
+  bind : un transfert de port résolvant `localhost` en IPv6 — le cas courant
+  sous VS Code Remote — ne trouvait personne à l'écoute.
+- **Une demande longue ne déclenche plus la sonde de santé.** Un simple mot
+  suffisait à remplacer une spécification entière par un test arithmétique.
+- **Un accès en écriture peut réellement lancer des commandes.** L'auto-
+  acceptation ne couvrait que l'édition de fichiers : les tests que le modèle
+  venait d'écrire restaient refusés.
+
+### Retiré
+
+- **La campagne de recherche DaT Parkinson**, qui était écrite en dur dans le
+  produit : quatre fichiers à la racine, et un bouton envoyant toujours le même
+  objectif, les mêmes URL et jusqu'au modèle de GPU d'une machine précise.
+
+### Limites connues
+
+- Le quota restant n'est lu que chez Codex, Claude et Gemini. Ailleurs, un
+  quota épuisé reste détecté au moment du run et la demande bascule sur un
+  autre fournisseur.
+- Gemini et Copilot n'exposent aucune liste de modèles et n'en proposent donc
+  qu'un, « auto », qui laisse la CLI choisir. Le modèle voulu peut être imposé
+  dans les réglages du projet.
+- Le contexte est plafonné en caractères, pas en jetons, et le même est envoyé
+  à tous les fournisseurs sans tenir compte de leurs fenêtres respectives. La
+  troncature est silencieuse.
