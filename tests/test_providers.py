@@ -583,6 +583,60 @@ def test_registry_is_the_single_source_of_provider_behaviour():
         assert set(spec.reviewer_peers) <= names, spec.name
 
 
+def test_cursor_only_writes_when_the_access_level_allows_it():
+    """Sans `--force`, Cursor propose les changements au lieu de les appliquer.
+
+    Aucun compte n'était disponible pour exécuter cette CLI : ce test fige la
+    forme documentée, et le jeu d'options reste volontairement minimal.
+    """
+    cwd = Path("/tmp/project")
+    provider = Provider("cursor-agent", "cursor-agent")
+
+    read = provider.command("p", cwd, Intent.ANALYZE, execution_mode="plan")
+    write = provider.command("p", cwd, Intent.MODIFY, execution_mode="workspace-write")
+    full = provider.command(
+        "p", cwd, Intent.MODIFY, execution_mode="danger-full-access"
+    )
+
+    assert "--force" not in read
+    assert "--force" in write
+    assert "--force" in full
+    # Le mode sans interface et une sortie texte : Joe ne sait pas analyser le
+    # flux JSON de cette CLI, il ne le demande donc pas.
+    for command in (read, write, full):
+        assert command[0] == "cursor-agent"
+        assert "--print" in command
+        assert command[command.index("--output-format") + 1] == "text"
+        assert command[-1] == "p"
+
+
+def test_cursor_passes_a_model_but_never_an_effort():
+    cwd = Path("/tmp/project")
+    provider = Provider("cursor-agent", "cursor-agent")
+
+    command = provider.command(
+        "p", cwd, Intent.ANALYZE, model="sonnet-4.5", effort="high"
+    )
+
+    assert command[command.index("--model") + 1] == "sonnet-4.5"
+    # Aucune option d'effort n'est documentée : en inventer une ferait échouer
+    # tout le run sur un argument inconnu.
+    assert not any(argument.startswith("--effort") for argument in command)
+    assert "high" not in command
+
+
+def test_a_cursor_quota_error_is_classified_like_any_other():
+    """La détection de quota est générique : Cursor bascule sur ses replis."""
+    assert classify_error("Rate limit exceeded", 1, "cursor-agent") == "quota"
+    assert classify_error("You've hit your limit", 1, "cursor-agent") == "quota"
+    assert classify_error("Please run cursor-agent login", 1, "cursor-agent") == (
+        "authentication"
+    )
+    from joe.provider_registry import get_provider_spec
+
+    assert get_provider_spec("cursor-agent").fallbacks[0] == "claude"
+
+
 def test_the_watchdog_is_armed_by_the_declared_delay_alone():
     """Plus aucun test sur le nom du fournisseur n'arme le chien de garde."""
     from joe.provider_registry import get_provider_spec

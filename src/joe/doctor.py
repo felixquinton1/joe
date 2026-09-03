@@ -5,6 +5,7 @@ from typing import Any
 
 from .maintenance import provider_audit
 from .models import Intent
+from .provider_registry import get_provider_spec
 from .providers import (
     Provider,
     default_providers,
@@ -79,7 +80,10 @@ def format_doctor(report: dict[str, Any]) -> str:
         if item.get("runtime_issue"):
             state = f"incomplet · {item['runtime_issue']}"
         version = f" · {item['version']}" if item.get("version") else ""
-        line = f"- {item['provider'].capitalize()} : {state}{version}"
+        # Le libellé du registre, pas le nom technique : capitaliser donnait
+        # « Cursor-agent » là où le produit s'appelle Cursor.
+        label = get_provider_spec(item["provider"]).label
+        line = f"- {label} : {state}{version}"
         live = item.get("live")
         if live:
             line += (

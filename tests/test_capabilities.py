@@ -9,7 +9,9 @@ from joe.capabilities import (
 
 def test_capabilities_have_safe_defaults_and_provider_specific_controls():
     capabilities = provider_capabilities(refresh=True)
-    assert set(capabilities) == {"codex", "claude", "gemini", "copilot"}
+    assert set(capabilities) == {
+        "codex", "claude", "gemini", "copilot", "cursor-agent"
+    }
     assert any(
         mode["id"] == "read-only"
         for mode in capabilities["codex"]["execution_modes"]

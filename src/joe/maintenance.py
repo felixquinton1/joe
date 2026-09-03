@@ -22,7 +22,11 @@ def provider_audit() -> list[dict[str, Any]]:
                 "available": current is not None,
                 "known_version": known_version,
                 "current_version": current,
-                "changed": current is not None and current != known_version,
+                # Sans version de référence, rien ne peut avoir changé : le
+                # signaler à chaque audit serait un faux positif permanent.
+                "changed": bool(known_version)
+                and current is not None
+                and current != known_version,
             }
         )
     return results

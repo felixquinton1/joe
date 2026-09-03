@@ -98,6 +98,16 @@ PROVIDERS = (
         fallbacks=("gemini", "codex", "claude"),
         minimum_version="1.0.75",
     ),
+    # Le nom porte le suffixe `-agent` parce qu'il sert aussi à trouver
+    # l'exécutable : `cursor` est l'éditeur, `cursor-agent` la CLI sans fenêtre.
+    # Pointer sur le premier ferait croire Cursor disponible sans qu'aucun run
+    # ne puisse aboutir. L'interface affiche le libellé, pas ce nom.
+    ProviderSpec(
+        "cursor-agent",
+        "Cursor",
+        reviewer_peers=("codex", "claude"),
+        fallbacks=("claude", "codex", "gemini"),
+    ),
 )
 
 _BY_NAME = {provider.name: provider for provider in PROVIDERS}
@@ -135,11 +145,12 @@ def default_fallbacks() -> dict[str, list[str]]:
 
 
 def minimum_versions() -> dict[str, str]:
-    return {
-        provider.name: provider.minimum_version
-        for provider in PROVIDERS
-        if provider.minimum_version
-    }
+    """Every provider, including those whose working version is unknown.
+
+    Filtrer les versions vides sortait le fournisseur de l'audit : il
+    disparaissait du diagnostic au lieu d'y figurer comme non vérifié.
+    """
+    return {provider.name: provider.minimum_version for provider in PROVIDERS}
 
 
 def usage_providers() -> tuple[str, ...]:

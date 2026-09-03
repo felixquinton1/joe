@@ -286,6 +286,35 @@ class Provider:
             args.append("--allow-tool=shell")
         return [*args, "--prompt", prompt]
 
+    def _argv_cursor(
+        self,
+        access: str,
+        prompt: str,
+        cwd: Path,
+        model: str | None,
+        effort: str | None,
+    ) -> list[str]:
+        """Build the Cursor CLI invocation.
+
+        Écrit sur documentation, sans exécution réelle : aucun compte Cursor
+        n'était disponible. On s'en tient donc aux options confirmées par
+        plusieurs sources — `--print`, `--output-format`, `--model`, `--force`
+        — et on écarte les autres. Un drapeau inconnu ne dégrade pas, il fait
+        échouer tout le run sur « unexpected argument », comme `--search` l'a
+        montré sur Codex.
+
+        Le répertoire de travail passe par `cwd` du processus, pas par un
+        drapeau. Sans `--force`, Cursor propose les modifications sans les
+        appliquer : c'est notre lecture seule, sans drapeau supplémentaire.
+        L'effort n'a pas d'équivalent connu et n'est pas transmis.
+        """
+        args = [self.executable, "--print", "--output-format", "text"]
+        if model:
+            args.extend(["--model", model])
+        if access in {"write", "project-full"}:
+            args.append("--force")
+        return [*args, prompt]
+
     def run(
         self,
         prompt: str,
@@ -424,6 +453,7 @@ _ARGV_BUILDERS = {
     "claude": Provider._argv_claude,
     "gemini": Provider._argv_gemini,
     "copilot": Provider._argv_copilot,
+    "cursor-agent": Provider._argv_cursor,
 }
 if set(_ARGV_BUILDERS) != set(get_provider_names()):
     raise RuntimeError(

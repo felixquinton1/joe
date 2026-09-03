@@ -56,6 +56,7 @@ def provider_capabilities(refresh: bool = False) -> dict[str, Any]:
                 _mode("modify", "Modifications autorisées"),
             ],
         },
+        "cursor-agent": _cursor,
     }
     result = {}
     for provider in get_provider_specs():
@@ -196,6 +197,56 @@ def _codex() -> dict[str, Any]:
                 "danger-full-access",
                 "Accès complet — Git et commandes hors sandbox",
             ),
+        ],
+    }
+
+
+def _cursor_models(output: str) -> list[dict[str, Any]]:
+    """Keep only the lines that can be a model identifier.
+
+    Le format de `cursor-agent models` n'a pas pu être observé : aucun compte
+    n'était disponible. On ne retient donc que ce qui a la forme d'un
+    identifiant — un seul mot, sans ponctuation de phrase — ce qui écarte les
+    en-têtes et les puces. Rien de reconnaissable, aucun modèle : l'interface
+    retombe sur « défaut du fournisseur », qui reste utilisable.
+    """
+    models = []
+    for line in output.splitlines():
+        candidate = line.strip().lstrip("*-• ").strip()
+        if not 2 <= len(candidate) <= 60:
+            continue
+        if not all(character.isalnum() or character in "-._" for character in candidate):
+            continue
+        models.append({"id": candidate, "label": candidate, "cost_tier": 1})
+    return models
+
+
+def _cursor() -> dict[str, Any]:
+    executable = shutil.which("cursor-agent")
+    models: list[dict[str, Any]] = []
+    if executable:
+        try:
+            completed = subprocess.run(
+                [executable, "models"],
+                text=True,
+                capture_output=True,
+                timeout=8,
+                check=False,
+            )
+            if completed.returncode == 0:
+                models = _cursor_models(completed.stdout)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return {
+        "available": bool(executable),
+        "models": models,
+        # Aucun équivalent de l'effort n'est documenté sur cette CLI.
+        "efforts": [],
+        "execution_modes": [
+            _mode("auto", "Automatique"),
+            _mode("plan", "Plan — lecture seule"),
+            _mode("workspace-write", "Modifications autorisées"),
+            _mode("danger-full-access", "Accès complet"),
         ],
     }
 
