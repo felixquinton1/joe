@@ -19,7 +19,7 @@ def provider_capabilities(refresh: bool = False) -> dict[str, Any]:
         "codex": _codex,
         "claude": {
             "available": bool(shutil.which("claude")),
-            "models": _models("opus", "sonnet", "fable"),
+            "models": _CLAUDE_MODELS,
             "efforts": ["low", "medium", "high", "xhigh", "max"],
             "execution_modes": [
                 _mode("auto", "Automatique"),
@@ -198,6 +198,55 @@ def _codex() -> dict[str, Any]:
             ),
         ],
     }
+
+
+# Le CLI Claude n'expose aucun listing de modèles, contrairement à Codex : ce
+# catalogue est donc tenu à la main. Les identifiants sont complets et non des
+# alias — « opus » suit le défaut du CLI, qui reste une version en arrière et
+# affichait Opus 4.8 alors que le 5 est disponible. `cost_tier` suit le prix
+# publié, `models[0]` est le défaut proposé.
+_CLAUDE_MODELS: list[dict[str, Any]] = [
+    {
+        "id": "claude-opus-5",
+        "label": "Opus 5",
+        "description": "Le meilleur rapport qualité-prix pour le travail complexe.",
+        "cost_tier": 4,
+    },
+    {
+        # Palier rapide de la gamme : c'est lui que le routage automatique
+        # choisit pour une demande simple. Haiku est moins cher encore, mais
+        # trop court pour du code — il reste sélectionnable à la main.
+        "id": "claude-sonnet-5",
+        "label": "Sonnet 5",
+        "description": "Rapide et économique, pour le volume.",
+        "cost_tier": 2,
+        "speed_tiers": ["fast"],
+    },
+    {
+        "id": "claude-haiku-4-5",
+        "label": "Haiku 4.5",
+        "description": "Le plus léger, pour les tâches simples.",
+        "cost_tier": 1,
+    },
+    {
+        "id": "claude-fable-5-1",
+        "label": "Fable 5.1",
+        "description": "Le plus capable, pour le raisonnement long. Coût élevé.",
+        "cost_tier": 5,
+    },
+    {
+        "id": "claude-opus-4-8",
+        "label": "Opus 4.8",
+        "description": "Génération précédente d'Opus.",
+        "cost_tier": 4,
+    },
+    {
+        "id": "claude-sonnet-4-6",
+        "label": "Sonnet 4.6",
+        "description": "Génération précédente de Sonnet.",
+        "cost_tier": 3,
+    },
+]
 
 
 def _models(*names: str) -> list[dict[str, Any]]:

@@ -78,5 +78,11 @@ def test_claude_uses_sonnet_for_simple_and_opus_for_complex_requests(monkeypatch
     monkeypatch.setattr(capabilities_module, "_cache", None)
     capabilities = provider_capabilities(refresh=True)
 
-    assert select_model("claude", complex_request=False) == "sonnet"
-    assert select_model("claude", complex_request=True) == "opus"
+    assert select_model("claude", complex_request=False) == "claude-sonnet-5"
+    assert select_model("claude", complex_request=True) == "claude-opus-5"
+
+    # Des identifiants complets, jamais des alias : « opus » suit le défaut du
+    # CLI, qui reste une version en arrière de la dernière publiée.
+    identifiers = [model["id"] for model in capabilities["claude"]["models"]]
+    assert identifiers[0] == "claude-opus-5"
+    assert all(identifier.startswith("claude-") for identifier in identifiers)
