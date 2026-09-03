@@ -158,6 +158,8 @@ def test_contract_requires_confirmation_for_full_access(tmp_path):
         assert payload["approval"] == "run"
         approval_id = payload["approval_id"]
         assert approval_id
+        # Le client doit savoir quel projet basculer pour « toujours autoriser ».
+        assert payload["project_id"] == "main"
         assert not server.manager.conversations.get(
             conversation["id"]
         )["messages"]
@@ -196,6 +198,43 @@ def test_contract_requires_confirmation_for_full_access(tmp_path):
         )
         assert status == 202
         assert payload["run_id"] == "approved"
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_contract_stops_asking_once_the_project_grants_access(tmp_path):
+    """« Toujours autoriser » bascule le projet et supprime la confirmation."""
+    server, thread = start_server(tmp_path)
+    try:
+        server.manager.conversations.update_project("main", {"ai_access": "manual"})
+        conversation = server.manager.conversations.create("main")
+        connection = http.client.HTTPConnection(
+            "127.0.0.1", server.server_port, timeout=5
+        )
+        request = {
+            "conversation_id": conversation["id"],
+            "request": "Implémente et teste cette fonctionnalité",
+            "agent": "claude",
+            "mode": "fast",
+        }
+        status, payload = json_request(connection, "POST", "/api/runs", request)
+        assert status == 428
+
+        status, _ = json_request(
+            connection,
+            "PATCH",
+            f"/api/projects/{payload['project_id']}",
+            {"ai_access": "auto"},
+        )
+        assert status == 200
+
+        server.manager.start = lambda *args, **kwargs: SimpleNamespace(
+            run_id="granted"
+        )
+        status, payload = json_request(connection, "POST", "/api/runs", request)
+        assert status == 202
+        assert payload["run_id"] == "granted"
     finally:
         server.shutdown()
         thread.join(timeout=2)

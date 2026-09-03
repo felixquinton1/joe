@@ -731,6 +731,11 @@ class Handler(BaseHTTPRequestHandler):
                     ),
                     "approval": "run",
                     "approval_id": approval["id"],
+                    # Le projet à basculer si l'utilisateur choisit d'autoriser
+                    # durablement, pour ne pas avoir à rouvrir ses réglages.
+                    "project_id": str(
+                        conversation.get("project_id", FREE_PROJECT_ID)
+                    ),
                 },
                 HTTPStatus.PRECONDITION_REQUIRED,
             )

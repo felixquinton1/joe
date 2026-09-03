@@ -1604,12 +1604,13 @@ async function startRun(
   });
   if (response.status === 428) {
     const pending = await response.json();
-    const approved = await confirmFullAccess();
-    if (!approved) {
+    const choice = await confirmFullAccess();
+    if (!choice) {
       failVisibly("Demande annulée : accès complet refusé.");
       await loadTasks();
       return;
     }
+    if (choice === "always") await grantAlwaysFullAccess(pending.project_id);
     await joeFetch(`/api/approvals/${encodeURIComponent(pending.approval_id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -1640,15 +1641,28 @@ async function startRun(
   loadConversations(false);
 }
 
+// Rend le choix tel quel : « une fois », « toujours », ou rien. Le second
+// bascule le projet en accès automatique — le réglage existait déjà, mais
+// enfoui dans les réglages du projet, loin du moment où la friction se produit.
 function confirmFullAccess() {
   const dialog = $("permission-dialog");
   return new Promise(resolve => {
     const onClose = () => {
       dialog.removeEventListener("close", onClose);
-      resolve(dialog.returnValue === "default");
+      const choice = dialog.returnValue;
+      resolve(choice === "default" || choice === "always" ? choice : null);
     };
     dialog.addEventListener("close", onClose);
     dialog.showModal();
+  });
+}
+
+async function grantAlwaysFullAccess(projectId) {
+  if (!projectId) return;
+  await joeFetch(`/api/projects/${encodeURIComponent(projectId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ai_access: "auto" })
   });
 }
 

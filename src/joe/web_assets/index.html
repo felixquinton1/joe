@@ -210,10 +210,11 @@
   </dialog>
   <dialog id="permission-dialog" class="project-dialog confirm-dialog">
     <form method="dialog">
-      <span class="eyebrow">Autorisation ponctuelle</span>
+      <span class="eyebrow">Autorisation</span>
       <h2>Autoriser l’accès complet ?</h2>
-      <p>Cette tâche pourra modifier le projet, lancer ses tests et utiliser le réseau. L’autorisation vaut uniquement pour ce run.</p>
-      <div class="dialog-actions"><button value="cancel">Annuler</button><button id="confirm-full-access" value="default">Autoriser une fois</button></div>
+      <p>Cette tâche pourra modifier le projet, lancer ses tests et utiliser le réseau, dans la racine du projet et ses racines additionnelles.</p>
+      <p class="setting-help">« Toujours » passe le projet en accès automatique : plus aucune confirmation ne sera demandée. Réversible dans les réglages du projet, à la ligne « Accès de l’IA ».</p>
+      <div class="dialog-actions"><button value="cancel">Annuler</button><button id="always-full-access" value="always">Toujours autoriser</button><button id="confirm-full-access" value="default">Autoriser une fois</button></div>
     </form>
   </dialog>
   <dialog id="task-diff-dialog" class="project-dialog task-diff-dialog">
