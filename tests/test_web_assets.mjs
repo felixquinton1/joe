@@ -188,6 +188,44 @@ test("turns a joe:question block into a question and a clean body", () => {
   assert.equal(parsed.body, "Voici mon analyse.");
 });
 
+test("turns an unfenced question payload into buttons", () => {
+  // Le balisage est demandé au modèle, jamais garanti : sans ce repli, le JSON
+  // s'affichait brut à la place des boutons.
+  const parse = window.JoeMarkdown.extractQuestion;
+  const parsed = parse(
+    'Voici mon analyse.\n\n'
+    + '{"question": "Quel claim pilote le MVP ?", '
+    + '"options": ["Induction multi-tâches", "Recherche Bermudan seule"]}'
+  );
+  assert.equal(parsed.question, "Quel claim pilote le MVP ?");
+  assert.deepEqual(parsed.options, ["Induction multi-tâches", "Recherche Bermudan seule"]);
+  assert.equal(parsed.body, "Voici mon analyse.");
+});
+
+test("accepts another fence label and a single-line block", () => {
+  const parse = window.JoeMarkdown.extractQuestion;
+  const labelled = parse(
+    'Analyse.\n\n```json\n{"question":"Quelle option ?","options":["A","B"]}\n```'
+  );
+  assert.deepEqual(labelled.options, ["A", "B"]);
+  assert.equal(labelled.body, "Analyse.");
+  // Bloc replié sur une ligne : aucun ``` ne doit rester dans le corps.
+  const inline = parse(
+    'Analyse.\n\n```joe:question {"question":"Quelle option ?","options":["A","B"]}```'
+  );
+  assert.deepEqual(inline.options, ["A", "B"]);
+  assert.equal(inline.body, "Analyse.");
+});
+
+test("keeps the last question when the answer quotes an earlier one", () => {
+  const parse = window.JoeMarkdown.extractQuestion;
+  const parsed = parse(
+    'Tu avais demandé {"question":"Ancienne ?","options":["X","Y"]}.\n\n'
+    + '```joe:question\n{"question":"Nouvelle ?","options":["A","B"]}\n```'
+  );
+  assert.equal(parsed.question, "Nouvelle ?");
+});
+
 test("ignores a malformed or single-option question block", () => {
   const parse = window.JoeMarkdown.extractQuestion;
   assert.equal(parse("texte sans bloc"), null);

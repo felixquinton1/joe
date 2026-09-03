@@ -177,15 +177,10 @@
     }
   }
 
-  function extractQuestion(text) {
-    // L'IA n'a aucun canal interactif : elle termine son tour sur un bloc
-    // `joe:question`, que Joe transforme en boutons. Le clic renvoie l'option
-    // choisie comme message suivant — ni blocage, ni protocole.
-    const match = /```joe:question\s*\n([\s\S]*?)```/.exec(text || "");
-    if (!match) return null;
+  function questionPayload(raw) {
     let parsed;
     try {
-      parsed = JSON.parse(match[1]);
+      parsed = JSON.parse(raw);
     } catch (error) {
       return null;
     }
@@ -193,10 +188,68 @@
       ? parsed.options.map(item => String(item)).filter(Boolean).slice(0, 4)
       : [];
     if (!parsed || !parsed.question || options.length < 2) return null;
+    return { question: String(parsed.question), options };
+  }
+
+  // Objets JSON de premier niveau, accolades des chaînes ignorées.
+  function jsonSpans(source) {
+    const spans = [];
+    let depth = 0;
+    let start = -1;
+    let inString = false;
+    let escaped = false;
+    for (let index = 0; index < source.length; index += 1) {
+      const character = source[index];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === '"') inString = false;
+        continue;
+      }
+      if (character === '"') inString = true;
+      else if (character === "{") {
+        if (depth === 0) start = index;
+        depth += 1;
+      } else if (character === "}") {
+        depth = Math.max(0, depth - 1);
+        if (depth === 0 && start >= 0) {
+          spans.push([start, index + 1]);
+          start = -1;
+        }
+      }
+    }
+    return spans;
+  }
+
+  // Absorbe le balisage autour du JSON, pour ne pas laisser de ``` orphelins.
+  function withFence(source, start, end) {
+    const opening = /```[^\n`]*[ \t]*\n?[ \t]*$/.exec(source.slice(0, start));
+    if (!opening) return [start, end];
+    const closing = /^[ \t]*\n?[ \t]*```/.exec(source.slice(end));
+    return [opening.index, closing ? end + closing[0].length : end];
+  }
+
+  function extractQuestion(text) {
+    // L'IA n'a aucun canal interactif : elle termine son tour sur une question
+    // fermée que Joe transforme en boutons. Le clic renvoie l'option choisie
+    // comme message suivant — ni blocage, ni protocole.
+    //
+    // Le balisage `joe:question` est demandé mais pas garanti : les modèles
+    // rendent aussi le JSON nu, ou sous une autre étiquette de bloc. Le JSON
+    // s'affichait alors tel quel, sans boutons. On reconnaît donc la charge
+    // utile à sa forme, et le balisage n'est qu'un emballage optionnel.
+    const source = String(text || "");
+    let found = null;
+    for (const [start, end] of jsonSpans(source)) {
+      const payload = questionPayload(source.slice(start, end));
+      if (payload) found = { payload, start, end };
+    }
+    if (!found) return null;
+    const [from, to] = withFence(source, found.start, found.end);
     return {
-      question: String(parsed.question),
-      options,
-      body: text.replace(match[0], "").trimEnd()
+      question: found.payload.question,
+      options: found.payload.options,
+      body: (source.slice(0, from) + source.slice(to)).trimEnd()
     };
   }
 

@@ -2957,8 +2957,13 @@ _QUESTION_CONTEXT = """
 
 # Demander un avis à l'utilisateur
 Si un choix t'appartient mal — arbitrage produit, priorité, option ambiguë —
-termine ta réponse par un bloc de code balisé `joe:question` contenant un JSON
-`{"question": "...", "options": ["...", "..."]}` (2 à 4 options courtes).
+termine ta réponse par un bloc de code balisé `joe:question`, exactement sous
+cette forme (2 à 4 options courtes) :
+
+```joe:question
+{"question": "Par quoi commencer ?", "options": ["Option courte", "Autre option"]}
+```
+
 Joe l'affichera comme des boutons ; le clic renverra l'option choisie comme
 message suivant. N'utilise ce bloc que lorsque la réponse change réellement la
 suite du travail, jamais pour demander une permission d'exécution.
