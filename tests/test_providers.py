@@ -637,6 +637,28 @@ def test_a_cursor_quota_error_is_classified_like_any_other():
     assert get_provider_spec("cursor-agent").fallbacks[0] == "claude"
 
 
+def test_the_arbiter_prefers_a_third_party_but_never_blocks_the_consensus():
+    """Le rôle était figé sur un nom ; il se déduit désormais du disponible."""
+    from joe.provider_registry import arbitration_order
+
+    proposers = ("codex", "claude")
+
+    # Un tiers passe devant les deux proposants.
+    assert arbitration_order(proposers)[0] == "gemini"
+    assert arbitration_order(proposers, ("codex", "claude", "cursor-agent"))[0] == (
+        "cursor-agent"
+    )
+
+    # Quand il ne reste que les proposants, l'un d'eux arbitre : le consensus
+    # aboutit au lieu d'échouer faute d'arbitre.
+    order = arbitration_order(proposers, proposers)
+    assert set(order) == set(proposers)
+
+    # Les proposants restent toujours en fin de classement.
+    full = arbitration_order(proposers)
+    assert set(full[-2:]) == set(proposers)
+
+
 def test_the_watchdog_is_armed_by_the_declared_delay_alone():
     """Plus aucun test sur le nom du fournisseur n'arme le chien de garde."""
     from joe.provider_registry import get_provider_spec

@@ -56,6 +56,17 @@ class ProviderSpec:
     exposes_usage: bool = False
     """La CLI expose une mesure de quota exploitable."""
 
+    arbitration_priority: int = 3
+    """Préférence pour arbitrer un consensus. Plus bas = préféré.
+
+    Le rôle était tenu par un nom écrit dans le workflow. Chez qui n'avait pas
+    ce fournisseur, la synthèse partait quand même vers lui, échouait, puis se
+    rabattait en annonçant une dégradation qui n'en était pas une.
+
+    Arbitrer demande surtout de ne pas être déjà juge et partie : la priorité
+    départage, elle n'exclut personne.
+    """
+
 
 PROVIDERS = (
     ProviderSpec(
@@ -90,6 +101,8 @@ PROVIDERS = (
         fallbacks=("codex", "claude", "copilot"),
         minimum_version="0.52.0",
         exposes_usage=True,
+        # Rarement dans la paire par défaut, donc rarement juge et partie.
+        arbitration_priority=1,
     ),
     ProviderSpec(
         "copilot",
@@ -155,6 +168,30 @@ def minimum_versions() -> dict[str, str]:
 
 def usage_providers() -> tuple[str, ...]:
     return tuple(provider.name for provider in PROVIDERS if provider.exposes_usage)
+
+
+def arbitration_order(
+    proposers: tuple[str, ...] = (),
+    eligible: tuple[str, ...] | None = None,
+) -> tuple[str, ...]:
+    """Rank who should synthesise a consensus, best first.
+
+    Un tiers est préférable — il n'a pas à départager sa propre proposition —
+    mais l'exclusion n'est qu'une préférence : quand les proposants sont les
+    seuls disponibles, l'un d'eux arbitre plutôt que de faire échouer le
+    consensus. Ils passent simplement en fin de liste.
+    """
+    allowed = eligible if eligible is not None else get_provider_names()
+    candidates = [name for name in allowed if name in _BY_NAME]
+
+    def rank(name: str) -> tuple[int, int, str]:
+        return (
+            1 if name in proposers else 0,
+            _BY_NAME[name].arbitration_priority,
+            name,
+        )
+
+    return tuple(sorted(candidates, key=rank))
 
 
 def counterpart(primary: str, eligible: tuple[str, ...] | None = None) -> str | None:

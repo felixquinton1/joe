@@ -321,10 +321,12 @@ def test_consensus_can_use_codex_and_gemini_participants(tmp_path):
         Route(Intent.ANALYZE, Mode.CONSENSUS, "codex", "gemini"),
     )
 
-    assert response == "gemini response"
     assert providers["codex"].calls
     assert providers["gemini"].calls
-    assert providers["claude"].calls == []
+    # Gemini propose ici : il n'arbitre donc plus sa propre proposition, et la
+    # synthèse revient au premier tiers disponible.
+    assert response == "claude response"
+    assert providers["claude"].calls
 
 
 def test_consensus_rejects_incomplete_synthesis_and_falls_back(tmp_path):

@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
 from .models import Intent, ProviderResult, Route
-from .provider_registry import counterpart
+from .provider_registry import arbitration_order, counterpart
 
 
 REPORT_RULES = (
@@ -371,6 +371,12 @@ def run_consensus_workflow(
     )
     results.extend(review_results[first])
     results.extend(review_results[second])
+    # L'arbitre se déduit de ce qui tourne réellement ici : un tiers de
+    # préférence, l'un des deux proposants s'il ne reste qu'eux.
+    arbiter = arbitration_order(
+        proposers=participants,
+        eligible=tuple(orchestrator.providers),
+    )[0]
     synthesis_prompt = (
         context
         + "\n\nSynthesize the following independent proposals and cross-reviews. "
@@ -386,7 +392,7 @@ def run_consensus_workflow(
             {
                 "proposal_roles": {role: proposal.provider for role, proposal in proposals.items()},
                 "review_roles": {role: review.provider for role, review in reviews.items()},
-                "synthesis_requested": "gemini",
+                "synthesis_requested": arbiter,
             },
             ensure_ascii=False,
         )
@@ -405,12 +411,12 @@ def run_consensus_workflow(
         on_event,
         "consensus",
         "synthesis",
-        "gemini",
+        arbiter,
         "Synthèse du consensus",
         "running",
     )
     synthesis = orchestrator._run_with_fallback(
-        "gemini",
+        arbiter,
         synthesis_prompt,
         Intent.ANALYZE,
         results,
@@ -428,8 +434,8 @@ def run_consensus_workflow(
         "complete",
     )
     final = clean_report(synthesis.stdout)
-    if synthesis.provider != "gemini":
-        degraded_providers["synthèse Gemini"] = synthesis.provider
+    if synthesis.provider != arbiter:
+        degraded_providers[f"synthèse {arbiter.capitalize()}"] = synthesis.provider
     if degraded_providers:
         replacements = ", ".join(
             f"{role.capitalize()} indisponible, relais par {provider.capitalize()}"
