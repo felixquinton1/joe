@@ -9,8 +9,8 @@
 > and experiments without further intervention; always configure limits and
 > monitor active campaigns.
 
-Joe is a lightweight local orchestrator for Codex, Claude Code, Gemini CLI, and
-GitHub Copilot CLI. It routes a natural-language request without requiring
+Joe is a lightweight local orchestrator for Codex, Claude Code, Gemini CLI,
+GitHub Copilot CLI, and Cursor CLI. It routes a natural-language request without requiring
 workflow verbs, carries compact project context between providers, and stores
 full run logs outside the active prompt.
 

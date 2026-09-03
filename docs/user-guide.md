@@ -1,8 +1,13 @@
 # Guide d’utilisation de Joe
 
-Joe relie une interface locale aux CLI Codex, Claude Code, Gemini et Copilot
-déjà installées et authentifiées sur la machine. Il ne demande ni ne stocke
-leurs mots de passe.
+Joe relie une interface locale aux CLI Codex, Claude Code, Gemini, Copilot et
+Cursor déjà installées et authentifiées sur la machine. Il ne demande ni ne
+stocke leurs mots de passe.
+
+Pour Cursor, la CLI attendue est `cursor-agent`, sans fenêtre : la commande
+`cursor` lance l’éditeur et ne convient pas. Joe la pilote sur ses options
+documentées et n’en lit pas le quota restant ; un quota épuisé reste détecté
+au moment du run, et la demande bascule sur un autre fournisseur.
 
 ## Installation
 
