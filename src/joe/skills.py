@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -167,6 +168,59 @@ def promote_skill(project: Path, name: str) -> dict[str, Any]:
         "path": str(destination),
         "scope": "global",
         "active": True,
+    }
+
+
+def _skill_directory(
+    project: Path | None, name: str, *, global_scope: bool
+) -> tuple[Path, Path]:
+    """Resolve a skill directory, refusing anything outside its root."""
+    skill_name = _skill_name(name)
+    root = (
+        global_skills_root() if global_scope else _project_skills_root(project)
+    ).resolve()
+    directory = (root / skill_name).resolve()
+    # Le nom est déjà normalisé, mais un lien symbolique pourrait sortir de la
+    # racine : la vérification porte donc sur le chemin résolu.
+    if root not in directory.parents or not (directory / "SKILL.md").is_file():
+        raise FileNotFoundError(f"Skill introuvable : {skill_name}")
+    return directory, root
+
+
+def read_skill(
+    project: Path | None, name: str, *, global_scope: bool = False
+) -> dict[str, Any]:
+    """Return a skill's full text.
+
+    La liste n'annonçait qu'une taille en octets. Or tout skill listé entre
+    dans le contexte partagé : sans son contenu, on ne peut ni vérifier ce
+    qu'il demande aux fournisseurs, ni décider de le retirer.
+    """
+    directory, _ = _skill_directory(project, name, global_scope=global_scope)
+    document = directory / "SKILL.md"
+    return {
+        "name": directory.name,
+        "path": str(document),
+        "scope": "global" if global_scope else "project",
+        "size": document.stat().st_size,
+        "content": document.read_text(errors="replace"),
+    }
+
+
+def delete_skill(
+    project: Path | None, name: str, *, global_scope: bool = False
+) -> dict[str, Any]:
+    """Remove a skill and everything it ships.
+
+    Un skill listé est toujours actif : sans suppression, rien ne permettait
+    de le sortir du contexte partagé, qui ne pouvait donc que grossir.
+    """
+    directory, _ = _skill_directory(project, name, global_scope=global_scope)
+    shutil.rmtree(directory)
+    return {
+        "name": directory.name,
+        "scope": "global" if global_scope else "project",
+        "deleted": True,
     }
 
 

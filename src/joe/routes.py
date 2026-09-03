@@ -91,6 +91,15 @@ ROUTES: tuple[Route, ...] = (
     _route("GET", "/api/projects/{project_id}", "_get_project", "viewer"),
     _route("GET", "/api/projects/{project_id}/skills", "_get_project_skills", "viewer"),
     _route("GET", "/api/skills/global", "_get_global_skills", "viewer"),
+    # Lire le contenu, pas seulement le nom et la taille : tout skill listé
+    # entre dans le contexte partagé des fournisseurs.
+    _route(
+        "GET",
+        "/api/projects/{project_id}/skills/{name}",
+        "_get_project_skill",
+        "viewer",
+    ),
+    _route("GET", "/api/skills/global/{name}", "_get_global_skill", "viewer"),
     _route("GET", "/api/history", "_get_history", "viewer"),
     _route("GET", "/api/history/{run_id}", "_get_history_item", "viewer"),
     _route("GET", "/api/events/{run_id}", "_get_events", "viewer"),
@@ -169,6 +178,14 @@ ROUTES: tuple[Route, ...] = (
     ),
     _route("DELETE", "/api/files/{item_id}", "_delete_file", "operator"),
     _route("DELETE", "/api/projects/{project_id}", "_delete_project", "maintainer"),
+    # Supprimer exige autant que créer : un skill commun sert tous les projets.
+    _route(
+        "DELETE",
+        "/api/projects/{project_id}/skills/{name}",
+        "_delete_project_skill",
+        "maintainer",
+    ),
+    _route("DELETE", "/api/skills/global/{name}", "_delete_global_skill", "maintainer"),
     _route(
         "DELETE",
         "/api/conversations/{conversation_id}",

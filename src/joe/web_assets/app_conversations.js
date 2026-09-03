@@ -755,6 +755,24 @@ window.createJoeConversations = function createJoeConversations({
         promote.onclick = () => promoteSkill(skill.name);
         row.appendChild(promote);
       }
+      // Un skill listé est toujours actif : sans ces deux gestes, on ne peut
+      // ni vérifier ce qu'il demande aux fournisseurs, ni le retirer.
+      const global = skill.scope === "global";
+      const show = document.createElement("button");
+      show.type = "button";
+      show.className = "skill-show";
+      show.textContent = "Voir";
+      show.title = "Afficher le contenu envoyé aux fournisseurs";
+      show.onclick = () => showSkill(skill.name, global);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "skill-delete";
+      remove.textContent = "Supprimer";
+      remove.title = global
+        ? "Retirer ce skill de tous les projets"
+        : "Retirer ce skill du projet";
+      remove.onclick = () => deleteSkill(skill.name, global);
+      row.append(show, remove);
       target.appendChild(row);
     }
   }
@@ -776,6 +794,39 @@ window.createJoeConversations = function createJoeConversations({
     } catch {
       /* liste facultative : on ignore les erreurs réseau */
     }
+  }
+
+  function skillPath(name, global) {
+    return global
+      ? `/api/skills/global/${encodeURIComponent(name)}`
+      : `/api/projects/${state.editingProjectId}/skills/${encodeURIComponent(name)}`;
+  }
+
+  async function showSkill(name, global) {
+    const response = await fetcher(skillPath(name, global));
+    const skill = await response.json();
+    if (!response.ok) {
+      window.alert(skill.message || "Skill introuvable.");
+      return;
+    }
+    window.alert(`${skill.name}\n\n${skill.content}`);
+  }
+
+  async function deleteSkill(name, global) {
+    const scope = global ? "de tous les projets" : "de ce projet";
+    if (!window.confirm(`Supprimer définitivement « ${name} » ${scope} ?`)) return;
+    const response = await fetcher(skillPath(name, global), { method: "DELETE" });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      window.alert(error.message || "Suppression impossible.");
+      return;
+    }
+    await refreshSkills();
+  }
+
+  async function refreshSkills() {
+    if (state.editingProjectId) await loadProjectSkills(state.editingProjectId);
+    await loadGlobalSkills();
   }
 
   async function promoteSkill(name) {

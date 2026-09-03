@@ -366,6 +366,64 @@ def test_skills_import_promote_and_global_listing(tmp_path, monkeypatch):
         thread.join(timeout=2)
 
 
+def test_a_skill_can_be_read_then_removed_at_both_scopes(tmp_path, monkeypatch):
+    """Un skill listé est toujours actif : il faut pouvoir le lire et le sortir.
+
+    La liste n'exposait que nom et taille, et aucune route ne supprimait : le
+    contexte partagé ne pouvait donc que grossir, sans qu'on puisse vérifier
+    ce qu'il contenait.
+    """
+    from joe import skills
+
+    global_root = tmp_path / "global-skills"
+    monkeypatch.setattr(skills, "global_skills_root", lambda: global_root)
+    server, thread = start_server(tmp_path)
+    try:
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port)
+
+        def call(method, path, payload=None):
+            connection.request(
+                method,
+                path,
+                body=json.dumps(payload) if payload is not None else None,
+                headers={"Content-Type": "application/json"},
+            )
+            response = connection.getresponse()
+            return response.status, json.loads(response.read() or b"{}")
+
+        _, project = call("POST", "/api/projects", {"name": "Projet"})
+        base = f"/api/projects/{project['id']}/skills"
+        call("POST", f"{base}/create", {
+            "name": "Revue stricte",
+            "instructions": "Toujours relire les migrations.",
+        })
+        call("POST", "/api/skills/global/create", {
+            "name": "Commun",
+            "instructions": "Règle partagée par tous les projets.",
+        })
+
+        # Le contenu est lisible, pas seulement la taille.
+        status, skill = call("GET", f"{base}/revue-stricte")
+        assert status == 200
+        assert "Toujours relire les migrations." in skill["content"]
+        status, shared = call("GET", "/api/skills/global/commun")
+        assert status == 200
+        assert "Règle partagée" in shared["content"]
+
+        # La suppression sort réellement le skill de la liste.
+        assert call("DELETE", f"{base}/revue-stricte")[0] == 200
+        assert call("DELETE", "/api/skills/global/commun")[0] == 200
+        assert call("GET", base)[1] == []
+        assert call("GET", "/api/skills/global")[1] == []
+
+        # Un skill absent se distingue d'une demande invalide.
+        assert call("GET", f"{base}/revue-stricte")[0] == 404
+        assert call("DELETE", "/api/skills/global/commun")[0] == 404
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
 def test_skills_can_be_created_or_imported_at_both_scopes(tmp_path, monkeypatch):
     from joe import skills
 

@@ -24,11 +24,13 @@ from .providers import NETWORK_CONTROLLED_PROVIDERS
 from .routes import Route, resolve
 from .skills import (
     create_skill,
+    delete_skill,
     import_skill,
     list_global_skills,
     list_skills,
     parse_skill_request,
     promote_skill,
+    read_skill,
 )
 from .web_runs import (
     ActiveConversationError,
@@ -241,6 +243,24 @@ class Handler(BaseHTTPRequestHandler):
 
     def _get_global_skills(self) -> None:
         self._json(list_global_skills())
+
+    def _get_project_skill(self, project_id: str, name: str) -> None:
+        workspace = self._project_workspace(project_id)
+        if workspace is None:
+            return self._json({}, HTTPStatus.NOT_FOUND)
+        self._skill_lookup(read_skill, workspace, name)
+
+    def _get_global_skill(self, name: str) -> None:
+        self._skill_lookup(read_skill, None, name, global_scope=True)
+
+    def _delete_project_skill(self, project_id: str, name: str) -> None:
+        workspace = self._project_workspace(project_id)
+        if workspace is None:
+            return self._json({}, HTTPStatus.NOT_FOUND)
+        self._skill_lookup(delete_skill, workspace, name)
+
+    def _delete_global_skill(self, name: str) -> None:
+        self._skill_lookup(delete_skill, None, name, global_scope=True)
 
     def _get_history(self) -> None:
         self._json(self.server.manager.history())
@@ -582,6 +602,16 @@ class Handler(BaseHTTPRequestHandler):
             _existing_directory(project.get("workspace_root"))
             or self.server.manager.project
         )
+
+    def _skill_lookup(self, operation, *args, **kwargs) -> None:
+        """Act on one existing skill, absent meaning 404 rather than 400."""
+        try:
+            result = operation(*args, **kwargs)
+        except FileNotFoundError as error:
+            return self._json({"message": str(error)}, HTTPStatus.NOT_FOUND)
+        except (OSError, ValueError) as error:
+            return self._json({"message": str(error)}, HTTPStatus.BAD_REQUEST)
+        self._json(result)
 
     def _skill_result(self, operation, *args, **kwargs) -> None:
         try:
