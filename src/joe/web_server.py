@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ipaddress
 import json
 import mimetypes
+import socket
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
@@ -55,10 +57,26 @@ API_VERSION = "1.3"
 ACQUITTAL_FIELDS = {"unread_completion"}
 
 
+def _is_ipv6(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(host.strip().strip("[]")).version == 6
+    except ValueError:
+        return False
+
+
 class JoeServer(ThreadingHTTPServer):
     manager: RunManager
     auth = LocalAuth("", "viewer", True)
     auth_path = auth_token_path()
+
+    def __init__(self, address: tuple[str, int], handler: Any) -> None:
+        # `validate_bind` accepte `::1`, mais la famille d'adresses par défaut
+        # est IPv4 : le serveur échouait alors sur une gaierror illisible. Un
+        # transfert de port qui résout `localhost` en IPv6 — le cas courant
+        # sous VS Code Remote — ne trouvait donc personne à l'écoute.
+        if _is_ipv6(address[0]):
+            self.address_family = socket.AF_INET6
+        super().__init__(address, handler)
 
 
 class Handler(BaseHTTPRequestHandler):

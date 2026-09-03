@@ -27,6 +27,26 @@ def start_server(tmp_path):
     return build_test_server(tmp_path)
 
 
+def test_the_server_listens_on_the_ipv6_loopback_too():
+    """`::1` était accepté à la validation puis refusé au bind.
+
+    Un transfert de port qui résout `localhost` en IPv6 — le cas courant sous
+    VS Code Remote — ne trouvait alors personne à l'écoute.
+    """
+    import socket
+
+    from joe.http_utils import validate_bind
+    from joe.web import Handler, JoeServer
+
+    for host, family in (("::1", socket.AF_INET6), ("127.0.0.1", socket.AF_INET)):
+        validate_bind(host)
+        server = JoeServer((host, 0), Handler)
+        try:
+            assert server.address_family == family
+        finally:
+            server.server_close()
+
+
 def test_web_status_and_assets(tmp_path, monkeypatch):
     usage_calls = []
     monkeypatch.setattr(
