@@ -1902,7 +1902,7 @@ $("open-automation").onclick = () => automation.open().catch(
 $("save-automation").onclick = event => automation.save(event).catch(
   error => window.alert(error.message)
 );
-$("start-parkinsons-autonomous").onclick = () => automation.startParkinsons().catch(
+$("start-autonomous-campaign").onclick = () => automation.startCampaign().catch(
   error => window.alert(error.message)
 );
 $("open-project-skills").onclick = () => {

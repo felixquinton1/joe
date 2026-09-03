@@ -296,6 +296,17 @@
           <label><span data-i18n="known_token_budget">Budget tokens connu</span><input id="autonomous-token-budget" type="number" min="1" placeholder="Facultatif" data-i18n-placeholder="optional"></label>
           <label><span data-i18n="max_model_calls">Appels modèle max</span><input id="autonomous-call-budget" type="number" min="1" placeholder="Calcul automatique" data-i18n-placeholder="automatic_calculation"></label>
         </div>
+        <div class="automation-options">
+          <label><span data-i18n="campaign_title">Titre</span><input id="autonomous-title" type="text" placeholder="Nom de la campagne" data-i18n-placeholder="campaign_title_hint"></label>
+          <label><span data-i18n="experiment_command">Commande d’expérience</span><input id="autonomous-command" type="text" placeholder="python train.py" data-i18n-placeholder="experiment_command_hint"></label>
+        </div>
+        <label class="automation-full"><span data-i18n="campaign_objective">Objectif</span><textarea id="autonomous-objective" rows="3" placeholder="Ce que la campagne doit accomplir, et comment le succès se mesure." data-i18n-placeholder="campaign_objective_hint"></textarea></label>
+        <label class="automation-full"><span data-i18n="campaign_context">Contexte et contraintes</span><textarea id="autonomous-context" rows="3" placeholder="Facultatif : sources à consulter, matériel, règles à respecter." data-i18n-placeholder="campaign_context_hint"></textarea></label>
+        <div class="automation-options">
+          <label><span data-i18n="metrics_file">Fichier de métriques</span><input id="autonomous-metrics-path" type="text" value="artifacts/metrics.json"></label>
+          <label><span data-i18n="tracked_metric">Métrique suivie</span><input id="autonomous-metric-name" type="text" placeholder="score" data-i18n-placeholder="tracked_metric_hint"></label>
+          <label><span data-i18n="metric_direction">Direction</span><select id="autonomous-metric-direction"><option value="min" data-i18n="minimise">Minimiser</option><option value="max" data-i18n="maximise">Maximiser</option></select></label>
+        </div>
         <fieldset class="dialog-section autonomous-schedule-card">
           <legend data-i18n="execution_window">Fenêtre d’exécution</legend>
           <label class="check-label"><input id="autonomous-schedule-enabled" type="checkbox"> <span data-i18n="daily_window">Limiter la campagne à une plage quotidienne</span></label>
@@ -320,7 +331,7 @@
         <label class="check-label autonomous-consent"><input id="autonomous-risk-ack" type="checkbox"> <span data-i18n="autonomous_consent">J’ai compris que la campagne continue sans moi et peut consommer mes crédits IA.</span></label>
         <section class="automation-history"><div class="automation-section-head compact"><h3 data-i18n="recent_campaigns">Campagnes récentes</h3></div><div id="autonomous-list" class="automation-list"></div></section>
       </section>
-      <footer class="dialog-actions automation-dialog-actions"><button value="cancel" data-i18n="close">Fermer</button><button id="save-automation" value="default" data-i18n="schedule_plan">Programmer le plan</button><button id="start-parkinsons-autonomous" type="button" hidden data-i18n="launch_dat">Lancer la campagne DaT Parkinson</button></footer>
+      <footer class="dialog-actions automation-dialog-actions"><button value="cancel" data-i18n="close">Fermer</button><button id="save-automation" value="default" data-i18n="schedule_plan">Programmer le plan</button><button id="start-autonomous-campaign" type="button" hidden data-i18n="launch_campaign">Lancer la campagne</button></footer>
     </form>
   </dialog>
   <dialog id="onboarding-dialog" class="project-dialog onboarding-dialog">

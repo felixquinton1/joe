@@ -179,7 +179,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     $("automation-pane-plan").hidden = autonomous;
     $("automation-pane-autonomous").hidden = !autonomous;
     $("save-automation").hidden = autonomous;
-    $("start-parkinsons-autonomous").hidden = !autonomous;
+    $("start-autonomous-campaign").hidden = !autonomous;
   }
 
   function syncAutonomousSchedule() {
@@ -318,49 +318,48 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     render();
   }
 
-  async function startParkinsons() {
+  // La campagne se décrit dans le formulaire. Elle était auparavant écrite en
+  // dur — titre, objectif, sources et matériel d'un challenge précis —, si bien
+  // que le bouton lançait toujours la même recherche, chez n'importe qui.
+  async function startCampaign() {
     if (!state.activeConversationId) return;
     if (!$("autonomous-risk-ack").checked) {
       window.alert(tr("risk_confirmation"));
       $("autonomous-risk-ack").focus();
       return;
     }
+    const objective = $("autonomous-objective").value.trim();
+    if (!objective) {
+      window.alert(tr("objective_required"));
+      $("autonomous-objective").focus();
+      return;
+    }
+    const command = $("autonomous-command").value.trim();
+    if (!command) {
+      window.alert(tr("command_required"));
+      $("autonomous-command").focus();
+      return;
+    }
     const scheduled = $("autonomous-schedule-enabled").checked;
     const days = $("autonomous-window-days").value === "weekdays"
       ? [0, 1, 2, 3, 4]
       : [0, 1, 2, 3, 4, 5, 6];
+    const metric = $("autonomous-metric-name").value.trim();
     const response = await fetcher("/api/autonomous", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        title: "DaT Parkinson — Autonomous",
+        title: $("autonomous-title").value.trim() || tr("untitled_campaign"),
         conversation_id: state.activeConversationId,
-        objective: "Maximiser la meilleure performance locale rigoureusement validée sur le DaT Parkinson's Challenge dans le temps, les ressources de calcul et les tokens impartis. Concevoir, implémenter et évaluer les solutions les plus prometteuses à partir des règles officielles; fournir les fichiers au format demandé, sans jamais effectuer de soumission.",
-        research_protocol: "Commencer par les pages officielles, le leaderboard accessible et une recherche bibliographique ciblée. Revenir à la littérature seulement si un résultat, un plateau ou un blocage méthodologique le justifie; éviter les recherches périodiques sans information nouvelle.",
-        data_policy: "Les données DrivenData restent exclusivement sur ce PC. Ne jamais transmettre de scan, ligne individuelle, identifiant, métadonnée privée ou extrait de fichier à une IA. Les processus locaux peuvent lire les données; les IA ne reçoivent que du code, de la documentation publique, des métriques agrégées et des erreurs nettoyées.",
-        campaign_context: `Challenge officiel : DaT Parkinson's Challenge de DrivenData.
-Pages publiques à consulter :
-- accueil : https://www.drivendata.org/competitions/311/dat-parkinsons-challenge/page/987/
-- description : https://www.drivendata.org/competitions/311/dat-parkinsons-challenge/page/990/
-- format d'exécution : https://www.drivendata.org/competitions/311/dat-parkinsons-challenge/page/989/
-- règles : https://www.drivendata.org/competitions/311/dat-parkinsons-challenge/rules/
-- leaderboard : https://www.drivendata.org/competitions/311/dat-parkinsons-challenge/leaderboard/
-- données : https://www.drivendata.org/competitions/311/dat-parkinsons-challenge/data/
-Les données privées sont déjà disponibles uniquement pour les processus locaux via DAT_PARKINSON_DATA_ROOT. N'en lis jamais le contenu dans une session IA : écris des scripts locaux qui ne renvoient que des agrégats nettoyés.
-Environnement : Windows, GPU NVIDIA RTX A5000 Laptop 16 Go. Utilise un environnement Python isolé dans le projet.
-Politique de calcul : vérifie CUDA et mesure l'utilisation GPU. Après un baseline de plomberie bref, teste rapidement au moins une architecture 2D/2.5D ou 3D adaptée et accélérée. Une architecture publique peut être réimplémentée sans poids externes; audite séparément toute licence de poids préentraînés. Ne passe pas la campagne à tuner une baseline classique manifestement limitée. Regroupe les changements et fais évaluer plusieurs variantes comparables par un même runner checkpointé lorsque c'est sûr.
-Le dépôt Git privé avec son remote origin est déjà provisionné comme workspace actif. Travaille directement dedans. Teste, commit et push chaque changement cohérent; ne commit jamais données, checkpoints, modèles, artefacts médicaux, secrets ou résultats individuels.
-Crée et maintiens toi-même le code Python, le lanceur autonomous_run.ps1, les checkpoints reprenables, les métriques agrégées, les visualisations pertinentes et les fichiers finaux au format du challenge. Tu peux consulter le leaderboard mais ne dois jamais soumettre automatiquement.`,
-        research_refresh_interval: 0,
-        command: ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "autonomous_run.ps1"],
-        working_directory: ".",
-        metrics_path: "artifacts/metrics.json",
-        metric_name: "log_loss",
-        metric_direction: "min",
+        objective,
+        campaign_context: $("autonomous-context").value.trim(),
+        command: command.split(/\s+/),
+        metrics_path: $("autonomous-metrics-path").value.trim(),
+        metric_name: metric,
+        metric_direction: $("autonomous-metric-direction").value,
         timeout_seconds: 480,
         max_iterations: 20,
         max_duration_seconds: Number($("autonomous-budget-minutes").value) * 60,
-        restricted_data: true,
         token_budget: {
           max_tokens: $("autonomous-token-budget").value === ""
             ? null : Number($("autonomous-token-budget").value),
@@ -375,15 +374,13 @@ Crée et maintiens toi-même le code Python, le lanceur autonomous_run.ps1, les 
           notes: $("autonomous-resource-notes").value.trim()
         },
         schedule: {
-          timezone: "Europe/Paris",
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
           windows: scheduled ? [{
             days,
             start: $("autonomous-window-start").value,
             end: $("autonomous-window-end").value
           }] : []
         },
-        checkpoint_path: "checkpoints/latest",
-        resume_command: ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "autonomous_run.ps1", "-Resume"],
         stop_signal_path: "artifacts/STOP_REQUESTED",
         stop_grace_seconds: 30,
         mode: $("autonomous-mode").value,
@@ -480,5 +477,5 @@ Crée et maintiens toi-même le code Python, le lanceur autonomous_run.ps1, les 
     await load();
   }
 
-  return { load, open, render, save, setView, syncAutonomousSchedule, syncStartFields, startParkinsons };
+  return { load, open, render, save, setView, syncAutonomousSchedule, syncStartFields, startCampaign };
 };

@@ -6,11 +6,10 @@ __pycache__/
 *.egg-info/
 *.py[cod]
 .venv/
-.uv-cache/
 artifacts/
 checkpoints/
-private_state/
-.matplotlib-cache/
+# Synthèse écrite par une campagne autonome dans le projet qu'elle travaille.
+AUTONOMOUS_RESEARCH.md
 dist/
 build/
 vscode-extension/node_modules/
