@@ -29,6 +29,7 @@ from .files import FileLibrary
 from .git_review import GitSnapshot, build_report, reject, snapshot
 from .models import Intent, Mode, Route
 from .orchestrator import OrchestrationError, Orchestrator
+from .orchestrator_workflows import QUESTION_RULES
 from .providers import _access_level
 from .router import _routing_text
 from .routing import resolve_route
@@ -843,7 +844,10 @@ class RunManager:
                 "skills whose repository scope matches this workspace. Never apply "
                 "a skill belonging to another project."
                 + _permission_context(execution_mode)
-                + _QUESTION_CONTEXT
+                # Un run rapide est à lui seul la réponse : il peut donc
+                # conclure sur une question. En relecture et en consensus,
+                # seule l'étape finale la reçoit, depuis le workflow.
+                + (QUESTION_RULES if decision.route.mode is Mode.FAST else "")
                 + (_PLAN_CONTEXT if decision.plan_stage == "propose" else "")
                 + self._attachment_context(attachments)
             )
@@ -2950,24 +2954,9 @@ def _task_pipeline(task: dict[str, Any]) -> list[dict[str, str]]:
     ]
 
 
-# Convention de question : le modèle n'a aucun canal interactif, mais il peut
-# terminer son tour sur une question fermée que Joe rend cliquable. La réponse
-# repart comme message utilisateur, donc sans blocage ni protocole.
-_QUESTION_CONTEXT = """
-
-# Demander un avis à l'utilisateur
-Si un choix t'appartient mal — arbitrage produit, priorité, option ambiguë —
-termine ta réponse par un bloc de code balisé `joe:question`, exactement sous
-cette forme (2 à 4 options courtes) :
-
-```joe:question
-{"question": "Par quoi commencer ?", "options": ["Option courte", "Autre option"]}
-```
-
-Joe l'affichera comme des boutons ; le clic renverra l'option choisie comme
-message suivant. N'utilise ce bloc que lorsque la réponse change réellement la
-suite du travail, jamais pour demander une permission d'exécution.
-"""
+# La convention de question vit auprès des autres règles de rédaction, dans
+# `orchestrator_workflows` : seule l'étape qui s'adresse vraiment à
+# l'utilisateur doit la recevoir.
 
 
 # Consigne de rédaction d'un plan. Le run est en lecture seule : le modèle

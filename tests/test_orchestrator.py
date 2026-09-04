@@ -609,3 +609,26 @@ def test_clean_report_removes_leaked_provider_tool_protocol():
     cleaned = clean_report(report)
     assert cleaned == "## Résultat\nSynthèse propre."
     assert "tool_call" not in cleaned
+
+
+def test_only_the_step_that_answers_the_user_may_ask_a_question():
+    """La question fermée n'a de sens que pour l'étape qui parle à l'utilisateur.
+
+    Portée par le contexte commun, la consigne atteignait aussi les propositions
+    et les relectures d'un consensus : chacune finissait sur une question que
+    personne ne pouvait cliquer, et qui polluait le matériau de la synthèse.
+    """
+    from joe.orchestrator_workflows import (
+        QUESTION_RULES,
+        correction_prompt,
+        review_prompt,
+    )
+
+    marker = "joe:question"
+
+    # Étapes internes : jamais de question.
+    assert marker not in review_prompt("contexte", "candidat")
+
+    # Étapes qui rendent la réponse : la consigne est présente.
+    assert marker in correction_prompt("contexte", "implémentation", "revue")
+    assert marker in QUESTION_RULES

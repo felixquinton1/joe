@@ -22,6 +22,30 @@ REPORT_RULES = (
 )
 
 
+# Le modèle n'a aucun canal interactif : il peut terminer son tour sur une
+# question fermée que Joe rend cliquable, et le clic repart comme message
+# suivant. Cette consigne n'a de sens que pour l'étape qui parle réellement à
+# l'utilisateur. Portée par le contexte commun, elle atteignait aussi les
+# propositions et relectures d'un consensus : chacune finissait sur une
+# question que personne ne pouvait cliquer, et qui polluait le matériau
+# transmis à la synthèse.
+QUESTION_RULES = """
+
+# Demander un avis à l'utilisateur
+Si un choix t'appartient mal — arbitrage produit, priorité, option ambiguë —
+termine ta réponse par un bloc de code balisé `joe:question`, exactement sous
+cette forme (2 à 4 options courtes) :
+
+```joe:question
+{"question": "Par quoi commencer ?", "options": ["Option courte", "Autre option"]}
+```
+
+Joe l'affichera comme des boutons ; le clic renverra l'option choisie comme
+message suivant. N'utilise ce bloc que lorsque la réponse change réellement la
+suite du travail, jamais pour demander une permission d'exécution.
+"""
+
+
 def clean_report(text: str) -> str:
     """Remove only generic internal-validation refusal sections from agent prose."""
     if not text:
@@ -115,6 +139,7 @@ def run_review_workflow(
         "another AI provider or perform an independent review yourself: Joe "
         "owns the review stage after this implementation finishes."
         + REPORT_RULES
+        + QUESTION_RULES
     )
     workflow_event(
         on_event,
@@ -387,6 +412,7 @@ def run_consensus_workflow(
         "never use an ambiguous first-person singular. Clearly separate agreements, "
         "material disagreements, arbitration, and the final recommendation.\n\n"
         + REPORT_RULES
+        + QUESTION_RULES
         + "\n\nActual execution ledger (authoritative; do not invent providers): "
         + json.dumps(
             {
@@ -516,6 +542,7 @@ def correction_prompt(context: str, implementation: str, review: str) -> str:
         + review
         + "\n</REVIEW>"
         + REPORT_RULES
+        + QUESTION_RULES
     )
 
 
