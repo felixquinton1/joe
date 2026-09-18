@@ -35,9 +35,10 @@ have. It is not an AI provider, proxy, or billing service.
 
 ## Status
 
-Joe is an alpha project intended for local, single-user workflows. Linux,
-macOS, and Windows are covered by CI on Python 3.10–3.13. Provider behavior can
-still change when third-party CLIs update.
+Joe is an alpha project intended for local, single-user workflows. CI runs the
+test suite on Python 3.10 and 3.12, plus installation checks on Linux, macOS,
+and Windows with Python 3.12. Provider behavior can still change when
+third-party CLIs update.
 
 ## Requirements
 
