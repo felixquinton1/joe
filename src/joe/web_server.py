@@ -131,23 +131,33 @@ class Handler(BaseHTTPRequestHandler):
     # --- Lecture ---------------------------------------------------------
 
     def _get_status(self) -> None:
-        self._json(
-            {
-                "version": __version__,
-                "api_version": API_VERSION,
-                "project": str(self.server.manager.project),
-                "conversation_store": str(self.server.manager.conversations.path),
-                "conversation_backup": str(
-                    self.server.manager.conversations.backup_path
-                ),
-                "providers": get_provider_names(),
-                "provider_catalog": get_provider_catalog(),
-                "modes": [item.value for item in Mode],
-                "auth_required": self.server.auth.enabled,
-                "profile": self.server.auth.role,
-                "network_control_providers": list(NETWORK_CONTROLLED_PROVIDERS),
-            }
-        )
+        # Cette route reste ouverte : l'interface doit pouvoir se rendre et
+        # annoncer une version de serveur périmée avant tout appairage. Elle
+        # publiait aussi les chemins absolus du projet et des sauvegardes, donc
+        # le nom du compte, à qui pouvait simplement atteindre le port.
+        status = {
+            "version": __version__,
+            "api_version": API_VERSION,
+            "providers": get_provider_names(),
+            "provider_catalog": get_provider_catalog(),
+            "modes": [item.value for item in Mode],
+            "auth_required": self.server.auth.enabled,
+            "network_control_providers": list(NETWORK_CONTROLLED_PROVIDERS),
+        }
+        if self._is_authenticated():
+            status.update(
+                {
+                    "project": str(self.server.manager.project),
+                    "conversation_store": str(
+                        self.server.manager.conversations.path
+                    ),
+                    "conversation_backup": str(
+                        self.server.manager.conversations.backup_path
+                    ),
+                    "profile": self.server.auth.role,
+                }
+            )
+        self._json(status)
 
     def _get_capabilities(self) -> None:
         self._json(_web_facade().provider_capabilities())
@@ -871,19 +881,33 @@ class Handler(BaseHTTPRequestHandler):
             },
         )
 
-    def _authorize(self, required: str) -> bool:
-        if not self.server.auth.enabled:
-            return True
-        token = None
+    def _request_token(self) -> str | None:
+        """Read the bearer token, falling back to the paired cookie."""
         authorization = self.headers.get("Authorization", "")
         if authorization.startswith("Bearer "):
             token = authorization[7:].strip()
-        if not token:
-            for item in self.headers.get("Cookie", "").split(";"):
-                key, separator, value = item.strip().partition("=")
-                if separator and key == "joe_token":
-                    token = value
-                    break
+            if token:
+                return token
+        for item in self.headers.get("Cookie", "").split(";"):
+            key, separator, value = item.strip().partition("=")
+            if separator and key == "joe_token":
+                return value
+        return None
+
+    def _is_authenticated(self) -> bool:
+        """Tell whether the caller proved its identity, without answering 401.
+
+        Sert aux réponses publiques qui doivent rester lisibles sans jeton tout
+        en gardant leurs champs sensibles pour un appelant identifié.
+        """
+        if not self.server.auth.enabled:
+            return True
+        return self.server.auth.accepts(self._request_token())
+
+    def _authorize(self, required: str) -> bool:
+        if not self.server.auth.enabled:
+            return True
+        token = self._request_token()
         if not self.server.auth.accepts(token):
             self._json({"error": "Authentification Joe requise."}, HTTPStatus.UNAUTHORIZED)
             return False

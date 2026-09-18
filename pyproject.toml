@@ -46,3 +46,12 @@ joe = ["web_assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint.per-file-ignores]
+# `usage.py` agrège l'API des trois lecteurs de quota et réexporte leurs
+# symboles sous un nom stable. Ces imports ne sont pas inutilisés : ils sont
+# la surface publique du module, et les retirer casse ses appelants.
+"src/joe/usage.py" = ["F401"]

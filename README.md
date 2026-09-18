@@ -1,62 +1,161 @@
 # Joe
 
+**A local control room for your AI coding CLIs.**
+
+Joe routes plain-language requests across Codex, Claude Code, Gemini CLI,
+GitHub Copilot CLI, and Cursor CLI. It keeps project context portable between
+providers, supports independent review and consensus workflows, and gives you
+one persistent interface for conversations, tasks, permissions, diffs, and
+provider activity.
+
+Joe runs on your machine and uses the provider accounts and CLIs you already
+have. It is not an AI provider, proxy, or billing service.
+
 > [!IMPORTANT]
-> Joe is an orchestrator, not an AI provider or a billing intermediary. It calls
-> the third-party CLIs, accounts and APIs configured by the user. The user is
-> responsible for provider charges, quotas, granted permissions and stopping
-> active work. Closing Joe Web or VS Code does not necessarily stop a server-side
-> run. Autonomous features are experimental and can chain model calls, commands
-> and experiments without further intervention; always configure limits and
-> monitor active campaigns.
+> Joe can launch commands and edit files through the selected provider. Review
+> project roots, permissions, autonomous limits, and Git changes before relying
+> on unattended execution. Closing the browser does not stop server-side work.
 
-Joe is a lightweight local orchestrator for Codex, Claude Code, Gemini CLI,
-GitHub Copilot CLI, and Cursor CLI. It routes a natural-language request without requiring
-workflow verbs, carries compact project context between providers, and stores
-full run logs outside the active prompt.
+## Why Joe?
 
-Joe is open source under the [Mozilla Public License 2.0](LICENSE). Copyright
-© 2026 Félix Quinton. The license covers the code, not the Joe name, logo or
-identity of the official project; see [TRADEMARKS.md](TRADEMARKS.md). External
-code contributions are governed by [CONTRIBUTING.md](CONTRIBUTING.md).
+- **One natural-language entry point.** Ask a question or request a change;
+  workflow verbs are optional.
+- **Provider-aware routing.** Joe considers task type, model capabilities,
+  availability, recent failures, and known personal quota windows.
+- **Shared project context.** Move between providers without rebuilding the
+  conversation by hand.
+- **Controlled collaboration.** Use one agent, an implementation with an
+  independent review, or a multi-agent consensus.
+- **Persistent work.** Conversations, tasks, queued prompts, approvals, and run
+  logs survive browser and server restarts.
+- **Safe parallel changes.** Optional Git worktrees isolate modifying tasks and
+  keep integration explicit.
+- **Local-first operation.** The Web UI, history, memory, and control plane stay
+  on the machine running Joe.
 
-## Install
+## Status
 
-Joe supports Python 3.10+ on Linux, macOS, and Windows. The repository package
-can be installed in an isolated environment with:
+Joe is an alpha project intended for local, single-user workflows. Linux,
+macOS, and Windows are covered by CI on Python 3.10–3.13. Provider behavior can
+still change when third-party CLIs update.
+
+## Requirements
+
+- Python 3.10 or newer
+- One or more supported provider CLIs, installed and authenticated separately
+- Git for repository-aware features
+- `tmux` on Linux/macOS if you want the Web server to remain detached
+
+| Provider | Expected command |
+| --- | --- |
+| OpenAI Codex | `codex` |
+| Claude Code | `claude` |
+| Gemini CLI | `gemini` |
+| GitHub Copilot CLI | `copilot` |
+| Cursor CLI | `cursor-agent` |
+
+Joe never stores provider passwords. Availability, models, quotas, and network
+controls depend on what each installed CLI exposes.
+
+## Installation
+
+Install the current repository build in an isolated environment:
 
 ```bash
 pipx install git+https://github.com/felixquinton1/joe.git
 joe doctor
 ```
 
-The provider CLIs remain separate prerequisites and must already be
-authenticated. See the [short user guide](docs/user-guide.md) for installation,
-VS Code/Remote-SSH, safe defaults, zoom, and troubleshooting.
-
-Full-access runs require a one-time confirmation in Joe Web or VS Code before
-the provider process starts.
-
-## Usage
+For development:
 
 ```bash
-joe "Ajoute une option pour désactiver la loss Gamma"
-joe
-joe cli
-joe chat
-joe --agent claude "Qu'en pense l'autre ?"
-joe --mode review "Vérifie puis corrige ce changement"
-joe --dry-run "Propose une architecture de cache"
-joe web -C /path/to/project
+git clone https://github.com/felixquinton1/joe.git
+cd joe
+python -m pip install -e .
+pytest -q
 ```
 
-Run `joe --help` for all options. Joe creates `.agentflow/` in the target
-project for compatibility with the original memory layout. The product and
-executable are named Joe.
+`joe doctor` checks local configuration without sending prompts. Use
+`joe doctor --live` only when you deliberately want a short real request sent
+to every installed provider.
 
-## VS Code extension
+## Quick start
 
-The extension lives in `vscode-extension/`. It runs in the workspace extension
-host, including Remote-SSH, and connects to Joe on the same host.
+Open a terminal in the project Joe should work on and run:
+
+```bash
+joe
+```
+
+Joe starts the local Web interface on `127.0.0.1:8765`. When `tmux` is
+available, the server runs in a detached `joe-8765` session.
+
+You can also send a one-shot request or use the full terminal interface:
+
+```bash
+joe "Explain the current architecture"
+joe "Add an option to disable Gamma loss"
+joe --agent claude "Review the proposed API"
+joe --mode consensus "Choose between these two architectures"
+joe cli
+```
+
+Useful lifecycle commands:
+
+```bash
+joe url          # reopen an authenticated Web session
+joe restart      # restart the current Joe Web server
+joe stop         # stop the current instance
+joe kill         # stop all Joe tmux instances
+joe auth rotate  # revoke browser sessions and rotate the local secret
+```
+
+Run `joe --help` and `joe web --help` for the complete command reference.
+
+## Workflows
+
+Joe selects a workflow automatically unless you override it.
+
+| Workflow | Behavior | Typical use |
+| --- | --- | --- |
+| **FAST** | One provider call | Questions and small, focused changes |
+| **REVIEW** | Primary execution, independent read-only review, at most one correction pass | Meaningful implementations |
+| **CONSENSUS** | Two independent proposals, two cross-reviews, one final synthesis | Important or difficult-to-reverse decisions |
+
+Independent consensus stages run in parallel where possible. A provider failure
+is surfaced explicitly; incomplete synthesis output is rejected and routed to
+an available fallback instead of being published as a final answer.
+
+Routing starts with deterministic local rules. For ambiguous requests, Joe may
+use one fast, bounded classifier call to select the intent, workflow, provider,
+model tier, and reasoning effort. Explicit user choices always take precedence,
+and the classifier cannot grant broader permissions.
+
+## Web interface
+
+Joe Web is the main control room. It provides:
+
+- persistent projects, subprojects, and conversations;
+- per-conversation provider, workflow, model, effort, and permission choices;
+- streaming provider activity without exposing private chain-of-thought;
+- active and completed task states, queued prompts, and cancellation;
+- structured approvals for operations that need broader access;
+- Markdown and mathematical formula rendering;
+- Git change summaries, file-level diffs, and explicit integration controls;
+- project files, shared skills, search, quotas, and provider diagnostics;
+- autonomous plans with bounded steps, retries, schedules, and resource limits.
+
+Several conversations can run concurrently. One conversation owns at most one
+active run, while additional prompts can wait in its queue.
+
+### VS Code
+
+The extension in [`vscode-extension/`](vscode-extension/) is intentionally a
+small launcher for Joe Web. It can start, open, refresh, restart, and stop the
+server in the current VS Code or Remote-SSH host. Conversations and model
+controls remain in the Web UI so Joe has only one rich interface to maintain.
+
+Build the extension locally with:
 
 ```bash
 cd vscode-extension
@@ -65,303 +164,160 @@ npm test
 npm run package
 ```
 
-Install the generated `.vsix` in the VS Code window connected to the target
-host, then open the Joe activity-bar view. The extension deliberately remains
-a small launcher: start, open, refresh, restart or stop Joe Web. Conversations,
-prompts, models and results stay in the Web interface so there is only one chat
-experience to maintain.
+## Permissions and security
 
-## Safety model
+Joe binds to localhost by default and authenticates browser and API clients
+with a local secret stored outside the project. Opening Joe through the CLI or
+VS Code pairs the browser without placing the secret in server logs.
 
-- Analysis and review calls are read-only.
-- Implementation calls may edit only the selected working directory.
-- Explicit permissions survive every fallback. Joe normalizes provider-specific
-  names such as `plan`, `read-only`, and `dontAsk`, then translates the same or
-  a stricter access level for the fallback provider.
-- FAST makes one provider call unless that provider fails.
-- REVIEW makes one primary call and one read-only review call, followed by at
-  most one justified correction pass.
-- CONSENSUS runs two independent read-only proposals in parallel, then the two
-  cross-reviews in parallel, and finally one synthesis. It never edits the
-  repository. Codex and Claude are preferred; Gemini can replace a provider
-  whose known quota is too low. Process failures still abort explicitly.
-- Full stdout/stderr live under `.agentflow/runs/`; active memory is rewritten
-  with bounded content.
-
-`config.yaml` is JSON-compatible YAML so Joe can stay dependency-free.
-
-## Storage boundaries
-
-Joe keeps product code and user data separate:
-
-- the Joe repository contains only source code, tests, and documentation;
-- `<project>/.agentflow/project.md` and `config.yaml` are stable, shareable
-  project context that may be committed deliberately;
-- conversations, run logs, `session.md`, `handoff.md`, rejection patches, and
-  local backups are ignored by the target project's Git repository;
-- every conversation write is also mirrored outside all repositories under
-  `$XDG_DATA_HOME/joe/backups/<project-id>/conversations.json` (default:
-  `~/.local/share/joe/backups/...`).
-- one dated conversation snapshot is retained per day, and schema migrations
-  preserve the complete pre-migration payload before changing it;
-- finalized run logs are retained for 30 days by default, with additional
-  limits of 500 runs and 500 MB configurable under `run_retention`.
-
-Each generated `.agentflow/` contains its own `.gitignore`, so this separation
-also applies to projects that do not yet have a root `.gitignore`.
-
-## Local web interface
-
-Start the control room from the project you want the agents to work on:
+The server supports three capability ceilings:
 
 ```bash
-cd /path/to/project
-joe
+joe web --profile viewer
+joe web --profile operator
+joe web --profile maintainer
 ```
 
-When `tmux` is installed, Joe starts the web server in the detached
-`joe-8765` session and opens `http://127.0.0.1:8765`. Closing the laptop or
-terminal does not stop the server. Use `tmux attach -t joe-8765` to inspect it,
-`joe kill` to stop every numbered Joe tmux session, or
-`joe web --foreground` for the previous foreground behavior. `joe kill` never
-touches non-Joe sessions.
-The interface streams provider stdout and
-stderr, shows provider status and personal quota resets in a compact top-right
-popover when the provider CLI exposes them, provides stable
-agent/workflow/model/effort/permission controls,
-and loads the latest 100 run logs from the project's `.agentflow/runs/` folder.
-Conversation history is loaded independently from optional quota and model
-catalog probes, so a slow provider CLI cannot block the whole interface.
-Joe never estimates missing quotas: unsupported providers are marked clearly.
-Gemini headless runs expose per-model token and request statistics but no
-single global token allowance: quotas depend on the model, authentication, and
-subscription, and are generally expressed as request limits. Joe records its
-local statistics under
-`$XDG_DATA_HOME/joe/gemini_usage.json` and displays today's Joe consumption,
-last call, models used, and the detected authentication category. The detailed
-quota snapshot remains available through `/stats model` in an interactive
-Gemini CLI session.
-Automatic routing remains task-first, then balances Codex and Claude when
-the preferred provider has 20% or less remaining and its reset is at least 24
-hours away. Short five-hour windows therefore remain useful instead of being
-prematurely preserved. At 5% or less it switches regardless of reset distance.
-A manually selected provider always wins. Before REVIEW or CONSENSUS, Joe checks
-the latest cached personal quota data. The minimum reserve is 3% for a simple
-answer, 8% for normal FAST work, 12% for REVIEW, and 20% for CONSENSUS. A reset
-within two hours relaxes the threshold down to 5%. If one participant is
-constrained, Joe selects another available provider, including Gemini. If only
-one provider can afford a normal FAST call, Joe runs it alone and explains the
-downgrade. If none can, Joe stops before calling a model; explicitly choosing a
-workflow allows a deliberate attempt. Unknown quotas are never treated as
-exhausted.
-Routing itself is deterministic and does not call a model. It never waits for
-fresh quota or model-catalog probes: the latest background cache is used, and
-the interface reports the local routing duration separately from provider
-processing. Naming exactly one provider in a request (for example, "teste
-Gemini") routes directly to that provider unless the menu explicitly overrides
-it.
-Provider health checks such as "fais un petit test de Gemini" are deliberately
-minimal: Joe omits project and conversation context, selects Gemini Flash,
-forbids tools, and stops after 30 seconds. A Gemini `429 RESOURCE_EXHAUSTED`
-stops immediately instead of waiting through CLI backoff retries, and the test
-does not silently fall back to another provider.
-Claude routing uses the official local cache refreshed by `/usage`. Clicking
-the quota refresh button opens a short-lived Claude terminal session and runs
-`/usage` automatically. Joe reconstructs the interactive screen through tmux,
-including values rendered with cursor updates; normal page loading continues
-to use the cache.
-For requests that are moderately complex, Joe dynamically selects the first
-current Codex/Claude model exposed by the installed CLI and uses `high`
-reasoning effort. Explicit model and effort choices always take precedence.
-Capability questions and other simple FAST answers use `low` effort, even when
-the question is long. Question wording such as "est-ce que tu peux..." is not
-treated as an implementation order merely because it mentions modifying code.
-Explicit negations such as "ne modifie rien", "sans changer les fichiers", and
-"do not modify files" take precedence over the negated modification words.
-Scoped negations still allow the rest of an explicit task: "corrige le bug mais
-ne commit pas" remains an implementation request.
-Large implementation requests are routed to REVIEW automatically: the primary
-agent implements, the other agent audits without editing, and the primary gets
-at most one correction pass when the reviewer explicitly reports justified
-issues. During CONSENSUS, Joe shows the two proposals and then the two
-cross-reviews progressing concurrently in a structured panel; only the final
-synthesis is posted as Joe's global answer.
-If a provider reaches a limit during a run, Joe adds a visible notice with the
-known reset windows (including model-specific Claude windows when exposed) and
-the installed fallback providers/models it will try automatically. A model
-switch within the same provider is not presented as a way around a shared
-quota.
-Native JSON streams expose observable progress such as commands, tools, and
-files read or changed; Joe does not expose private chain-of-thought.
-Repository change cards are generated only for modifying requests or an
-explicitly write-enabled execution. Read-only answers and analyses ignore
-unrelated edits made concurrently by another terminal or agent.
-Final answers are rendered locally as safe Markdown, including headings,
-tables, lists, links, inline code, and fenced code blocks.
-Markdown rendering lives in a separate browser module. The composer grows with
-the prompt up to 42% of the viewport and uses the same font, size, line height,
-case, and letter spacing as response text.
+- **viewer** reads projects, conversations, and results;
+- **operator** can run allowed tasks;
+- **maintainer** can manage projects and approve full-access operations.
 
-Each logical project can define one primary workspace, explicit additional
-roots, and optional remote-command access. Joe starts every provider in that
-workspace and forwards only the declared extra roots through the provider's
-native allow-list option. Missing configured roots stop the run instead of
-silently falling back to another directory. AI4Trading may therefore enable
-SSH/Jean Zay without granting another project access to unrelated local files.
-Projects can also define a default permission for explicit operational
-validation requests such as audits, test-suite execution, smoke tests, or
-`git fetch`. Ordinary questions remain read-only. An operational audit routes
-to REVIEW: the primary agent performs the checks with the configured permission,
-then the reviewer evaluates its recorded evidence without rerunning commands
-that need write or network access.
+Analysis and consensus are read-only by default. Modifying requests inherit the
+selected project policy. Provider fallbacks preserve the same or a stricter
+permission level; switching providers never silently grants more access.
 
-The evidence journal separates local routing inferences, successful provider
-executions, and refused/failed executions. Providers also receive an explicit
-reporting contract: a blocked file or command must be reported as `Refusé`,
-never as verified. This journal records observable evidence, not private model
-reasoning.
+Joe restricts providers to the configured project root and explicit additional
+roots. Network access can only be controlled when the provider exposes a native
+switch—currently Codex. Joe reports this limitation instead of claiming to
+sandbox providers that cannot be sandboxed through their CLI.
 
-Gemini has an inactivity watchdog. After 90 seconds without any output, Joe
-terminates the hung process and lets the normal fallback chain select another
-provider. Active runs are recorded in `.agentflow/pending_runs.json`; after a
-server crash they are restarted from their saved request and conversation
-context. A dead subprocess cannot resume at an instruction boundary, so Joe
-truthfully relaunches the task from the beginning with the same run identifier.
-After a browser refresh, the interface reattaches to active server-side event
-streams instead of losing their run identifiers. If the server restarts while
-the page stays open, Joe reconciles the browser state with the active server
-runs: recovered tasks reconnect, while missing runs stop instead of leaving an
-infinite spinner. Each server-sent event has a monotonic identifier, so a
-transient stream reconnection resumes after the last received event without
-replaying earlier progress. Open pages also reload when the backend version
-changes.
-
-Conversations are persistent per project. Each conversation keeps its full
-message history and independent agent, workflow, model, effort, and permission
-settings. Provider processes remain ephemeral: when a conversation switches
-from Codex to Claude or Gemini, Joe rebuilds a bounded shared context containing
-the stable project context, the latest project session/handoff, project
-instructions, and recent conversation turns. Stable project context has a
-reserved budget and is not displaced by a long history.
-When unsummarized older messages exceed 30,000 characters, Joe starts a
-tool-free Gemini Flash compaction after returning the visible answer. The full
-history is retained; only the prompt representation is summarized. This policy
-is configurable under `semantic_compaction` in `.agentflow/config.yaml`.
-Conversations can be pinned and several can run concurrently. A conversation
-owns at most one active run: concurrent submissions race through one atomic
-reservation, and the rejected request receives HTTP 409 before its user message
-is persisted. Avoid launching concurrent write tasks from different
-conversations against the same files.
-Completed live runs remain reconnectable for five minutes, with at most 50
-completed runs retained in process memory. Project session/handoff updates,
-run-log pruning, and Gemini usage accumulation are serialized and written
-atomically so concurrent runs cannot lose an update or mix the two active
-memory files.
-Provider names and labels come from one static registry shared by the CLI,
-router, execution engine, HTTP API, capability response, and Web selector.
-Adding a provider remains an explicit source-code change; the registry is not a
-dynamic plugin loader.
-Projects and conversations can be reordered by drag and drop. Favorites remain
-above non-favorites, each conversation shows its last-call date, and project
-groups can be collapsed. The left and right panels have resize handles; their
-widths intentionally reset to the ergonomic defaults after a page refresh.
-On mobile, Conversations and Activity open from dedicated top-bar buttons
-instead of disappearing.
-While a conversation is running, additional prompts can be queued with their
-current agent/model settings. They start in order after the active response and
-can be copied or removed before execution. Copy controls are also available on
-user prompts, final answers, proposals, reviews, and implementation plans.
-
-An active run can be interrupted from its conversation. Joe terminates the
-provider process tree, removes the unfinished turn, restores the original
-prompt in the composer, and lets it be edited and relaunched. Scrollable panels
-follow new content only while the user remains near the bottom.
-
-After every run, Joe independently records the branch, the local HEAD and
-`origin/dev` before and after execution. It displays the resulting file list
-with insertion/deletion counts, so a provider cannot merely claim that a fetch
-or merge happened. File changes are kept by default. They can be rejected when
-the repository was clean at task start, HEAD did not change, and no concurrent
-run makes an exact restoration unsafe. Commits and merges are reported but are
-never automatically rewritten. Codex's explicit full-access permission is
-available for Git metadata writes such as fetch, pull, and merge.
-
-Within one repository, conversations can be grouped into logical sub-projects.
-The repository-level `project.md` remains global, while each sub-project adds a
-shared context automatically injected into all its conversations. Conversation
-and sub-project names can be edited from the sidebar.
-Use `joe chat` for the original terminal conversation and `joe web` when you
-need explicit web-server options.
-
-## Diagnostics
-
-Check storage, installed provider versions, and cached quota visibility without
-sending a prompt:
+Remote binds require `--allow-remote` and remain authenticated. Prefer a local
+bind with SSH or VS Code port forwarding:
 
 ```bash
-joe doctor -C /path/to/project
-```
-
-Use `joe doctor --live` to send exactly one short, read-only prompt to each
-installed provider and report its duration and classified failure reason.
-
-Use `joe web --no-browser` on a remote server when automatic browser opening is
-not useful, then forward the port:
-
-```bash
+joe web --no-browser
 ssh -L 8765:127.0.0.1:8765 user@server
 ```
 
-Open `http://127.0.0.1:8765` on your computer. The server binds only to
-localhost by default. Every JSON endpoint uses the same parser and rejects
-invalid lengths, malformed objects, and bodies over 1 MiB. A non-local bind is
-refused unless the risk is acknowledged explicitly:
+See [SECURITY.md](SECURITY.md) for vulnerability reporting and the supported
+security model.
 
-```bash
-joe web --host 0.0.0.0 --allow-remote
+## Tasks, worktrees, and Git
+
+Every request creates a durable task linked to its conversation. Tasks record
+their state, provider, model, run, and delivery result without replacing the
+chat history.
+
+Projects may isolate modifying tasks in Git worktrees. Joe then creates a
+`joe/<task-id>` branch, keeps the main checkout untouched, and offers three
+explicit actions when work finishes:
+
+- inspect the diff;
+- integrate the branch;
+- discard the isolated worktree.
+
+If the base branch advanced, Joe rebases before integration. Conflict
+resolution is bounded to three agent passes. Failed resolution is reported to
+the user and the worktree is preserved—Joe never applies a silent
+"last writer wins" policy.
+
+Automatic commit and push behavior is configured per project. Keep it disabled
+when you want file-level rejection to remain available.
+
+## Context and storage
+
+Joe creates a small `.agentflow/` directory in each project:
+
+```text
+.agentflow/
+├── project.md       # stable project context
+├── session.md       # current objective and decisions
+├── handoff.md       # compact provider handoff
+├── config.yaml      # project settings
+└── runs/            # full execution records
 ```
 
-The HTTP API has no authentication; prefer SSH port forwarding even when
-`--allow-remote` is available.
+Active context is bounded and rewritten rather than allowed to grow forever.
+Long conversations can be compacted in the background while their complete
+history remains available.
 
-## Validation and CI
+Local conversation data, pending tasks, approvals, and backups are excluded
+from project Git by default. Conversation writes are mirrored under
+`$XDG_DATA_HOME/joe/backups/` (normally `~/.local/share/joe/backups/`). Run-log
+retention is bounded by age, count, and total size.
 
-The GitHub Actions workflow runs the complete Python suite on Python 3.10 and
-3.12, checks the JavaScript assets with Node.js, and exercises the installed
-`joe` entry point with a read-only dry run. Run the same checks locally with:
+## Skills and project instructions
+
+Project skills live under `.agentflow/skills/` and are shared with every
+provider through Joe's context layer. Global skills can be reused across
+projects. Existing provider skills can be imported from the UI or CLI:
+
+```bash
+joe skills list -C /path/to/project
+joe skills import /path/to/SKILL.md -C /path/to/project
+```
+
+Joe also supports creating a skill from a natural-language request in the Web
+interface.
+
+## Autonomous work
+
+Joe can schedule a bounded sequence of steps, wait for provider quota resets,
+run tests, inspect results, and continue later. Autonomous execution is
+experimental. Configure a preferred provider, time window, maximum model calls,
+maximum steps, retry policy, and stop conditions before leaving it unattended.
+
+Unknown quota is never treated as guaranteed capacity. If a required provider
+cannot continue and no suitable fallback exists, the task waits or stops rather
+than fabricating progress.
+
+## Data and privacy
+
+Joe sends prompts and selected context to the provider CLI chosen for each
+stage. Provider terms, retention policies, quotas, and charges still apply.
+Full stdout and stderr are stored locally in run logs and redacted for known
+secret patterns before display. Do not place credentials in prompts, project
+instructions, or committed `.agentflow` files.
+
+## Development
+
+Run the local validation suite with:
 
 ```bash
 pytest -q
-node --check src/joe/web_assets/app_usage.js
-node --check src/joe/web_assets/app_conversations.js
 node --check src/joe/web_assets/app.js
+node --check src/joe/web_assets/app_auth.js
+node --check src/joe/web_assets/app_automation.js
+node --check src/joe/web_assets/app_conversations.js
+node --check src/joe/web_assets/app_usage.js
+node --check src/joe/web_assets/i18n.js
 node --check src/joe/web_assets/markdown.js
-joe --dry-run -C . "Ne modifie rien, analyse seulement Joe"
+
+cd vscode-extension
+npm ci
+npm run check
+npm test
 ```
 
-An opt-in `live_smokes` workflow-dispatch job targets an authenticated
-self-hosted runner and contacts all four provider CLIs through
-`joe doctor --live`. The equivalent local command is:
+The normal test suite uses doubles and does not consume provider quota. Live CLI
+smokes are opt-in:
 
 ```bash
 JOE_LIVE_SMOKE=1 pytest -q tests/test_live_cli_smoke.py
 ```
 
-## Provider updates
+Architecture and behavior references:
 
-Joe can detect installed CLI version changes without consuming AI quota:
+- [User guide](docs/user-guide.md)
+- [HTTP and SSE API contract](docs/api-contract.md)
+- [VS Code integration plan](docs/vscode-extension-action-plan.md)
+- [Contributing guide](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
 
-```bash
-joe sync
-```
+## License
 
-To let Codex inspect and implement relevant provider features, followed by a
-read-only Claude review:
+Joe is licensed under the [Mozilla Public License 2.0](LICENSE).
+Copyright © 2026 Félix Quinton.
 
-```bash
-joe sync --apply
-```
-
-Use `joe sync --apply --force` for a full audit when versions have not changed.
-The implementation mode does not commit automatically, so its diff remains
-available for inspection and testing.
+The license covers the source code, not the Joe name, logo, or identity of the
+official project. See [TRADEMARKS.md](TRADEMARKS.md).

@@ -5,7 +5,6 @@ import stat
 from conftest import build_test_server
 
 from joe.auth import load_or_create_token, required_role, rotate_token
-from joe.web import RunManager
 
 
 def start_server(tmp_path, role):
@@ -62,7 +61,20 @@ def test_status_is_public_but_api_requires_a_token(tmp_path):
         status, payload, _ = request(server, "GET", "/api/status")
         assert status == 200
         assert payload["auth_required"] is True
+        # Assez pour que l'interface se rende et signale un serveur périmé,
+        # mais rien qui décrive la machine : les chemins absolus portent le
+        # nom du compte, et cette route est ouverte à qui atteint le port.
+        assert payload["version"]
+        assert payload["providers"]
+        for secret in ("project", "conversation_store", "conversation_backup",
+                       "profile"):
+            assert secret not in payload, secret
+
+        # Avec un jeton, la même route décrit l'installation.
+        status, payload, _ = request(server, "GET", "/api/status", token="test-token")
+        assert status == 200
         assert payload["profile"] == "maintainer"
+        assert payload["project"]
 
         status, payload, _ = request(server, "GET", "/api/conversations")
         assert status == 401

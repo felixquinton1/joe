@@ -7,6 +7,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
+from .text_encoding import read_utf8_compatible
 
 
 class TaskStore:
@@ -162,4 +163,3 @@ class TaskStore:
 def _title(request: str) -> str:
     compact = " ".join(request.split())
     return compact[:77] + ("…" if len(compact) > 77 else "")
-from .text_encoding import read_utf8_compatible

@@ -8,7 +8,6 @@ import time
 from types import SimpleNamespace
 
 from joe import __version__
-from joe.auth import LocalAuth
 from joe.http_utils import MAX_JSON_BODY_BYTES
 from joe.web import LiveRun, RunManager
 from joe.web_server import API_VERSION

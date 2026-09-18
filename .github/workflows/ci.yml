@@ -42,13 +42,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: python -m pip install -e . pytest
+      - run: python -m pip install -e . pytest ruff
+      - run: ruff check src tests
       - run: pytest -q
-      - run: node --check src/joe/web_assets/app_usage.js
-      - run: node --check src/joe/web_assets/app_auth.js
-      - run: node --check src/joe/web_assets/app_conversations.js
-      - run: node --check src/joe/web_assets/app.js
-      - run: node --check src/joe/web_assets/markdown.js
+      # Tout script livré est vérifié : en nommer cinq sur sept laissait
+      # passer une erreur de syntaxe dans les deux autres.
+      - run: |
+          for script in src/joe/web_assets/*.js; do
+            node --check "$script"
+          done
       - run: node --test tests/test_web_assets.mjs
       - run: npm ci
         working-directory: vscode-extension

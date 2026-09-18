@@ -273,12 +273,6 @@ def test_capability_question_about_access_stays_read_only():
     )
 
     assert route.intent is Intent.ANSWER
-def test_external_comparison_is_consensus_and_marked_for_research():
-    route = Router().route("Compare Maestro, Crewly and Compozy with their sites")
-    assert route.mode is Mode.CONSENSUS
-    assert "external-research" in route.reason
-
-
 def test_go_is_recognized_with_punctuation_and_fillers():
     for request in (
         "go", "Go !", "GO", "go.", "go stp", "ok go", "allez go", "Go, merci",

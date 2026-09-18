@@ -7,6 +7,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any
+from .text_encoding import read_utf8_compatible
 
 
 class ApprovalStore:
@@ -152,4 +153,3 @@ class ApprovalStore:
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         os.replace(temporary, self.path)
-from .text_encoding import read_utf8_compatible

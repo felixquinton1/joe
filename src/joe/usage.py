@@ -559,10 +559,9 @@ def _claude_status(path: Path | None = None) -> dict[str, Any]:
 
 def _refresh_claude_status(timeout: int = 18) -> dict[str, Any]:
     plan = _local_claude_plan() or _claude_account_plan()
-    parse_screen = lambda output: _parse_claude_usage_screen(
-        output,
-        plan=plan,
-    )
+    def parse_screen(output: str) -> Any:
+        return _parse_claude_usage_screen(output, plan=plan)
+
     return _refresh_claude_status_impl(
         timeout,
         refresh_via_tmux=_refresh_claude_via_tmux,

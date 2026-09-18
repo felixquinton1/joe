@@ -7,7 +7,6 @@ import time
 from types import SimpleNamespace
 
 from joe import __version__, provider_registry
-from joe.auth import LocalAuth
 from joe.models import Intent, Mode, Route
 from joe.provider_registry import ProviderSpec
 from joe.web import (
@@ -36,7 +35,6 @@ def test_the_server_listens_on_the_ipv6_loopback_too():
     import socket
 
     from joe.http_utils import validate_bind
-    from joe.web import Handler, JoeServer
 
     for host, family in (("::1", socket.AF_INET6), ("127.0.0.1", socket.AF_INET)):
         validate_bind(host)

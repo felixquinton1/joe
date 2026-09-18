@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from . import __version__
 from .capabilities import cached_provider_capabilities, provider_capabilities, select_model
 from .git_review import GitSnapshot, build_report, deliver, reject, snapshot
 from .usage import cached_usage_status, usage_status

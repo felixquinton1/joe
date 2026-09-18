@@ -4,7 +4,6 @@ import json
 import re
 import subprocess
 import threading
-import urllib.request  # kept as a patch point for existing integrations/tests
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable

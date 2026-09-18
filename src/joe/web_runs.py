@@ -26,7 +26,7 @@ from .experiment_runner import run_experiment, validate_experiment_command
 from .conversations import ConversationStore, FREE_PROJECT_ID, _ai_access
 from .documents import extract_document_text
 from .files import FileLibrary
-from .git_review import GitSnapshot, build_report, reject, snapshot
+from .git_review import GitSnapshot, reject, snapshot
 from .models import Intent, Mode, Route
 from .orchestrator import OrchestrationError, Orchestrator
 from .orchestrator_workflows import QUESTION_RULES
@@ -118,7 +118,7 @@ def _normalize_token_budget(
     value: Any, iterations: int, mode: str, duration_seconds: int = 3600
 ) -> dict[str, int | None]:
     raw = value if isinstance(value, dict) else {}
-    multiplier = {"fast": 1, "review": 2, "consensus": 3}.get(mode, 2)
+    # Le facteur par mode vit dans `default_model_calls`, qui l'applique déjà.
     default_calls = default_model_calls(iterations, mode, duration_seconds)
 
     def optional_positive(item: Any) -> int | None:
@@ -1837,9 +1837,6 @@ class RunManager:
     def _finish_autonomous_iteration(self, campaign: dict[str, Any]) -> None:
         history = campaign.get("history") or []
         result = next((item for item in reversed(history) if item.get("kind") == "experiment"), {})
-        metric = _autonomous_metric_value(
-            result.get("metrics") or {}, str(campaign.get("metric_name") or "score")
-        )
         scientific = analyze_campaign(campaign)
         best = scientific["summary"]["best_metric"]
         message = iteration_report(campaign, result, scientific)

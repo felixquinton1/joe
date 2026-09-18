@@ -10,6 +10,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any
+from .text_encoding import read_utf8_compatible
 
 MAX_FILE_BYTES = 8 * 1024 * 1024
 
@@ -150,4 +151,3 @@ class FileLibrary:
 
 def _safe(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9_-]+", "_", value)[:80] or "free"
-from .text_encoding import read_utf8_compatible
