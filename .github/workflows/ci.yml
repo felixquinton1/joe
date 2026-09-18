@@ -24,10 +24,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install .
+      - run: python -m pip install . pytest
       - run: joe --version
       - run: joe --help
       - run: joe cli --help
+      # La suite ne tournait que sur Linux : rien ne vérifiait le serveur, le
+      # routage ni les quotas ailleurs, alors que ces chemins dépendent de la
+      # plateforme (tmux et pexpect n'existent pas partout).
+      - run: pytest -q
 
   checks:
     runs-on: ubuntu-latest

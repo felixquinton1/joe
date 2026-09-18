@@ -1,0 +1,22 @@
+version: 2
+
+updates:
+  # Joe ne dépend que de pexpect et tzdata : le vrai risque de chaîne
+  # d'approvisionnement vient des actions et de l'extension, pas du paquet.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /vscode-extension
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
