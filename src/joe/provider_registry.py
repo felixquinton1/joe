@@ -75,7 +75,9 @@ PROVIDERS = (
         streams_json=True,
         reviewer_peers=("claude", "cursor-agent"),
         fallbacks=("gemini", "claude", "copilot", "cursor-agent"),
-        minimum_version="0.145.0",
+        # 0.147.0 rejetait `--search`, que Joe passe en accès distant : la
+        # borne annoncée décrivait donc une version où les runs échouaient.
+        minimum_version="0.155.0",
         exposes_usage=True,
     ),
     ProviderSpec(
