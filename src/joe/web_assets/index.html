@@ -60,12 +60,12 @@
             <details class="tool-popover">
               <summary data-i18n="tools">Outils</summary>
               <div class="tool-panel">
-                <label class="check-label"><input id="tool-plan-first" type="checkbox"> Proposer un plan d'abord</label>
-                <small>L'IA rédige un plan sans rien exécuter. Tu le valides, l'ajustes ou le refuses ; l'exécution est ensuite confiée à l'agent le mieux placé.</small>
-                <label class="check-label"><input id="tool-web-access" type="checkbox" checked> Recherche Web</label>
-                <small id="tool-web-access-help">Disponible par défaut. Pour l’instant, ce contrôle est effectif uniquement sur Codex.</small>
-                <div class="tool-panel-head"><strong>Fichiers du projet</strong><button id="refresh-files" type="button">Actualiser</button></div>
-                <div id="file-library" class="file-library"><small>Aucun fichier joint.</small></div>
+                <label class="check-label"><input id="tool-plan-first" type="checkbox"> <span data-i18n="plan_first">Proposer un plan d'abord</span></label>
+                <small data-i18n="plan_first_help">L'IA rédige un plan sans rien exécuter. Tu le valides, l'ajustes ou le refuses ; l'exécution est ensuite confiée à l'agent le mieux placé.</small>
+                <label class="check-label"><input id="tool-web-access" type="checkbox" checked> <span data-i18n="web_search">Recherche Web</span></label>
+                <small id="tool-web-access-help" data-i18n="web_search_codex_help">Disponible par défaut. Pour l’instant, ce contrôle est effectif uniquement sur Codex.</small>
+                <div class="tool-panel-head"><strong data-i18n="project_files">Fichiers du projet</strong><button id="refresh-files" type="button" data-i18n="refresh">Actualiser</button></div>
+                <div id="file-library" class="file-library"><small data-i18n="no_attached_files">Aucun fichier joint.</small></div>
               </div>
             </details>
             <span data-i18n="composer_hint">Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne</span>
@@ -87,10 +87,10 @@
           <summary title="Consommation personnelle" data-i18n-title="personal_usage"><span class="quota-dot"></span><span data-i18n="quotas">Quotas</span></summary>
           <div class="usage-panel">
             <div class="usage-heading">
-              <div><span class="eyebrow">Consommation personnelle</span><strong>Quotas IA</strong></div>
-              <button id="refresh-usage" class="icon-button" title="Actualiser les quotas, dont /usage Claude">↻</button>
+              <div><span class="eyebrow" data-i18n="personal_usage">Consommation personnelle</span><strong data-i18n="ai_quotas">Quotas IA</strong></div>
+              <button id="refresh-usage" class="icon-button" title="Actualiser les quotas, dont /usage Claude" data-i18n-title="refresh_quotas">↻</button>
             </div>
-            <div id="usage" class="usage-grid"><span class="usage-loading">Chargement…</span></div>
+            <div id="usage" class="usage-grid"><span class="usage-loading" data-i18n="loading">Chargement…</span></div>
           </div>
         </details>
       </div>
@@ -115,68 +115,68 @@
   </main>
   <dialog id="project-dialog" class="project-dialog">
     <form method="dialog">
-      <span class="eyebrow">Contexte partagé</span>
-      <h2 id="project-dialog-title">Projet</h2>
+      <span class="eyebrow" data-i18n="shared_context">Contexte partagé</span>
+      <h2 id="project-dialog-title" data-i18n="project">Projet</h2>
       <fieldset class="dialog-section">
-        <legend>Général</legend>
-        <label>Nom<input id="project-name" maxlength="64" required placeholder="Ex. Phase D, Ablations, Documentation…"></label>
-        <label>Racine de travail<input id="project-root" placeholder="/chemin/du/projet"></label>
-        <label>Autres racines autorisées<textarea id="project-extra-roots" rows="3" placeholder="Un chemin explicite par ligne"></textarea></label>
+        <legend data-i18n="general">Général</legend>
+        <label><span data-i18n="name">Nom</span><input id="project-name" maxlength="64" required placeholder="Ex. Phase D, Ablations, Documentation…" data-i18n-placeholder="project_name_placeholder"></label>
+        <label><span data-i18n="working_root">Racine de travail</span><input id="project-root" placeholder="/chemin/du/projet" data-i18n-placeholder="project_root_placeholder"></label>
+        <label><span data-i18n="additional_roots">Autres racines autorisées</span><textarea id="project-extra-roots" rows="3" placeholder="Un chemin explicite par ligne" data-i18n-placeholder="additional_roots_placeholder"></textarea></label>
       </fieldset>
       <fieldset class="dialog-section">
-        <legend>Exécution &amp; livraison</legend>
-        <label>Accès de l'IA<select id="project-ai-access"><option value="read_only">Lecture seule — aucune commande</option><option value="manual">Validation manuelle — j'autorise chaque demande</option><option value="auto">Automatique — aucune confirmation</option></select></label>
-        <small id="project-ai-access-help" class="setting-help">S'applique à tous les fournisseurs et à toutes les demandes du projet. La zone autorisée reste la racine du projet et ses racines additionnelles.</small>
-        <label class="check-label"><input id="project-auto-delivery" type="checkbox"> Commit et push automatiques après une modification validée</label>
-        <small id="project-auto-delivery-help" class="setting-help">Désactivé : tu peux examiner les changements et utiliser « Rejeter la sélection ».</small>
-        <label class="check-label"><input id="project-isolated-worktrees" type="checkbox"> Isoler les modifications dans un worktree Git</label>
-        <small class="setting-help">Recommandé pour exécuter plusieurs tâches sans mélanger leurs fichiers.</small>
-        <label class="check-label"><input id="project-quota-automation" type="checkbox" checked> Reprendre automatiquement après un reset de quota</label>
-        <small class="setting-help">Joe conserve la tâche et la relance à la prochaine fenêtre disponible.</small>
-        <div class="risk-note"><strong>Coûts et actions externes</strong><p>Joe transmet tes demandes aux outils IA configurés et peut exécuter leurs commandes selon ce niveau d’accès. Tu restes responsable des crédits consommés, des permissions accordées et de l’arrêt des runs.</p></div>
+        <legend data-i18n="execution_delivery">Exécution &amp; livraison</legend>
+        <label><span data-i18n="ai_access">Accès de l'IA</span><select id="project-ai-access"><option value="read_only" data-i18n="ai_access_read_only">Lecture seule — aucune commande</option><option value="manual" data-i18n="ai_access_manual">Validation manuelle — j'autorise chaque demande</option><option value="auto" data-i18n="ai_access_auto">Automatique — aucune confirmation</option></select></label>
+        <small id="project-ai-access-help" class="setting-help" data-i18n="ai_access_help">S'applique à tous les fournisseurs et à toutes les demandes du projet. La zone autorisée reste la racine du projet et ses racines additionnelles.</small>
+        <label class="check-label"><input id="project-auto-delivery" type="checkbox"> <span data-i18n="auto_commit_push">Commit et push automatiques après une modification validée</span></label>
+        <small id="project-auto-delivery-help" class="setting-help" data-i18n="auto_delivery_off">Désactivé : tu peux examiner les changements et utiliser « Rejeter la sélection ».</small>
+        <label class="check-label"><input id="project-isolated-worktrees" type="checkbox"> <span data-i18n="isolated_worktrees_option">Isoler les modifications dans un worktree Git</span></label>
+        <small class="setting-help" data-i18n="isolated_worktrees_help">Recommandé pour exécuter plusieurs tâches sans mélanger leurs fichiers.</small>
+        <label class="check-label"><input id="project-quota-automation" type="checkbox" checked> <span data-i18n="resume_after_quota">Reprendre automatiquement après un reset de quota</span></label>
+        <small class="setting-help" data-i18n="resume_after_quota_help">Joe conserve la tâche et la relance à la prochaine fenêtre disponible.</small>
+        <div class="risk-note"><strong data-i18n="costs_external_actions">Coûts et actions externes</strong><p data-i18n="costs_external_actions_help">Joe transmet tes demandes aux outils IA configurés et peut exécuter leurs commandes selon ce niveau d’accès. Tu restes responsable des crédits consommés, des permissions accordées et de l’arrêt des runs.</p></div>
       </fieldset>
       <fieldset class="dialog-section">
-        <legend>Contexte</legend>
-        <label>Contexte transmis à toutes ses conversations<textarea id="project-context" rows="8" placeholder="Objectif, conventions, décisions stables… (ex. accès SSH d’un cluster de calcul)"></textarea></label>
+        <legend data-i18n="context">Contexte</legend>
+        <label><span data-i18n="shared_project_context">Contexte transmis à toutes ses conversations</span><textarea id="project-context" rows="8" placeholder="Objectif, conventions, décisions stables… (ex. accès SSH d’un cluster de calcul)" data-i18n-placeholder="project_context_placeholder"></textarea></label>
       </fieldset>
       <section class="skill-manager" aria-label="Skills">
-        <div class="skill-manager-head"><span>Skills du projet</span><small>Utilisés par Claude, Codex, Gemini et Copilot</small></div>
-        <div id="project-skills" class="skill-list"><small>Enregistre le projet pour ajouter un skill.</small></div>
+        <div class="skill-manager-head"><span data-i18n="project_skills">Skills du projet</span><small data-i18n="skills_providers_help">Utilisés par Claude, Codex, Gemini et Copilot</small></div>
+        <div id="project-skills" class="skill-list"><small data-i18n="save_project_for_skills">Enregistre le projet pour ajouter un skill.</small></div>
         <div class="skill-global">
-          <div class="skill-manager-head"><span>Skills communs</span><small>Appliqués à tous les projets</small></div>
-          <div id="global-skills" class="skill-list"><small>Aucun skill commun pour l’instant.</small></div>
+          <div class="skill-manager-head"><span data-i18n="shared_skills">Skills communs</span><small data-i18n="shared_skills_help">Appliqués à tous les projets</small></div>
+          <div id="global-skills" class="skill-list"><small data-i18n="no_shared_skills">Aucun skill commun pour l’instant.</small></div>
         </div>
         <div class="skill-editor">
-          <div class="skill-manager-head"><span>Créer un skill</span><small>Écris directement les règles à transmettre aux agents</small></div>
-          <input id="skill-name" maxlength="64" placeholder="Nom du skill · ex. conventions-python">
-          <textarea id="skill-instructions" rows="4" placeholder="Instructions du skill…"></textarea>
+          <div class="skill-manager-head"><span data-i18n="create_skill">Créer un skill</span><small data-i18n="create_skill_help">Écris directement les règles à transmettre aux agents</small></div>
+          <input id="skill-name" maxlength="64" placeholder="Nom du skill · ex. conventions-python" data-i18n-placeholder="skill_name_placeholder">
+          <textarea id="skill-instructions" rows="4" placeholder="Instructions du skill…" data-i18n-placeholder="skill_instructions_placeholder"></textarea>
           <div class="skill-action-row">
-            <div class="scope-switch" role="group" aria-label="Portée du nouveau skill">
-              <label><input type="radio" name="skill-create-scope" value="project" checked><span>Projet</span></label>
-              <label><input type="radio" name="skill-create-scope" value="global"><span>Commun</span></label>
+            <div class="scope-switch" role="group" aria-label="Portée du nouveau skill" data-i18n-aria-label="new_skill_scope">
+              <label><input type="radio" name="skill-create-scope" value="project" checked><span data-i18n="project">Projet</span></label>
+              <label><input type="radio" name="skill-create-scope" value="global"><span data-i18n="shared">Commun</span></label>
             </div>
-            <button id="create-skill" class="skill-action" type="button">Créer</button>
+            <button id="create-skill" class="skill-action" type="button" data-i18n="create">Créer</button>
           </div>
         </div>
         <details class="skill-import">
-          <summary>Importer un SKILL.md existant</summary>
+          <summary data-i18n="import_existing_skill">Importer un SKILL.md existant</summary>
           <div class="skill-import-content">
-            <input id="skill-source" placeholder="Chemin vers SKILL.md ou son dossier">
+            <input id="skill-source" placeholder="Chemin vers SKILL.md ou son dossier" data-i18n-placeholder="skill_source_placeholder">
             <div class="skill-action-row">
-              <div class="scope-switch" role="group" aria-label="Portée du skill importé">
-                <label><input type="radio" name="skill-import-scope" value="project" checked><span>Projet</span></label>
-                <label><input type="radio" name="skill-import-scope" value="global"><span>Commun</span></label>
+              <div class="scope-switch" role="group" aria-label="Portée du skill importé" data-i18n-aria-label="import_skill_scope">
+                <label><input type="radio" name="skill-import-scope" value="project" checked><span data-i18n="project">Projet</span></label>
+                <label><input type="radio" name="skill-import-scope" value="global"><span data-i18n="shared">Commun</span></label>
               </div>
-              <button id="import-skill" class="skill-action" type="button">Importer</button>
+              <button id="import-skill" class="skill-action" type="button" data-i18n="import">Importer</button>
             </div>
           </div>
         </details>
       </section>
       <details class="dialog-advanced">
-        <summary><span>Options avancées</span><small>Accès réseau et intégrations distantes</small></summary>
+        <summary><span data-i18n="advanced_options_title">Options avancées</span><small data-i18n="advanced_options_help">Accès réseau et intégrations distantes</small></summary>
         <div class="dialog-advanced-content">
-          <label class="check-label"><input id="project-remote-access" type="checkbox" checked> Autoriser la recherche Web et l’accès réseau</label>
-          <small class="setting-help" id="project-remote-access-help">Activé par défaut. Pour l’instant, ce contrôle est effectif uniquement sur Codex.</small>
+          <label class="check-label"><input id="project-remote-access" type="checkbox" checked> <span data-i18n="allow_web_network">Autoriser la recherche Web et l’accès réseau</span></label>
+          <small class="setting-help" id="project-remote-access-help" data-i18n="web_search_codex_help">Activé par défaut. Pour l’instant, ce contrôle est effectif uniquement sur Codex.</small>
         </div>
       </details>
       <div class="dialog-actions"><button id="trash-project" class="danger-button" type="button" data-i18n="move_to_trash">Mettre à la corbeille</button><span></span><button id="cancel-project" type="button" data-i18n="cancel">Annuler</button><button id="save-project" value="default" data-i18n="save">Enregistrer</button></div>
@@ -202,19 +202,19 @@
   </dialog>
   <dialog id="delete-conversation-dialog" class="project-dialog confirm-dialog">
     <form method="dialog">
-      <span class="eyebrow">Suppression définitive</span>
-      <h2>Supprimer cette conversation ?</h2>
-      <p>La conversation « <strong id="delete-conversation-name"></strong> » et son historique ne seront plus accessibles dans Joe.</p>
-      <div class="dialog-actions"><button value="cancel">Annuler</button><button id="confirm-delete-conversation" class="danger-button" value="default">Supprimer</button></div>
+      <span class="eyebrow" data-i18n="permanent_deletion">Suppression définitive</span>
+      <h2 data-i18n="delete_conversation_question">Supprimer cette conversation ?</h2>
+      <p><span data-i18n="conversation_prefix">La conversation</span> « <strong id="delete-conversation-name"></strong> » <span data-i18n="conversation_delete_explanation">et son historique ne seront plus accessibles dans Joe.</span></p>
+      <div class="dialog-actions"><button value="cancel" data-i18n="cancel">Annuler</button><button id="confirm-delete-conversation" class="danger-button" value="default" data-i18n="delete">Supprimer</button></div>
     </form>
   </dialog>
   <dialog id="permission-dialog" class="project-dialog confirm-dialog">
     <form method="dialog">
-      <span class="eyebrow">Autorisation</span>
-      <h2>Autoriser l’accès complet ?</h2>
-      <p>Cette tâche pourra modifier le projet, lancer ses tests et utiliser le réseau, dans la racine du projet et ses racines additionnelles.</p>
-      <p class="setting-help">« Toujours » passe le projet en accès automatique : plus aucune confirmation ne sera demandée. Réversible dans les réglages du projet, à la ligne « Accès de l’IA ».</p>
-      <div class="dialog-actions"><button value="cancel">Annuler</button><button id="always-full-access" value="always">Toujours autoriser</button><button id="confirm-full-access" value="default">Autoriser une fois</button></div>
+      <span class="eyebrow" data-i18n="authorization">Autorisation</span>
+      <h2 data-i18n="allow_full_access_question">Autoriser l’accès complet ?</h2>
+      <p data-i18n="full_access_explanation">Cette tâche pourra modifier le projet, lancer ses tests et utiliser le réseau, dans la racine du projet et ses racines additionnelles.</p>
+      <p class="setting-help" data-i18n="always_allow_help">« Toujours » passe le projet en accès automatique : plus aucune confirmation ne sera demandée. Réversible dans les réglages du projet, à la ligne « Accès de l’IA ».</p>
+      <div class="dialog-actions"><button value="cancel" data-i18n="cancel">Annuler</button><button id="always-full-access" value="always" data-i18n="always_allow">Toujours autoriser</button><button id="confirm-full-access" value="default" data-i18n="allow_once">Autoriser une fois</button></div>
     </form>
   </dialog>
   <dialog id="task-diff-dialog" class="project-dialog task-diff-dialog">
@@ -248,7 +248,7 @@
         </select>
         <small data-i18n="default_workflow_help">En automatique, Joe adapte le nombre d’agents à la demande.</small>
       </label>
-      <button id="open-project-skills" class="subtle-action" type="button">Gérer les skills du projet actif</button>
+      <button id="open-project-skills" class="subtle-action" type="button" data-i18n="manage_active_project_skills">Gérer les skills du projet actif</button>
       <div class="dialog-actions">
         <button value="cancel" data-i18n="cancel">Annuler</button>
         <button id="save-preferences" value="default" data-i18n="save">Enregistrer</button>
@@ -336,12 +336,12 @@
   </dialog>
   <dialog id="onboarding-dialog" class="project-dialog onboarding-dialog">
     <form method="dialog">
-      <span class="eyebrow">Bienvenue dans Joe</span>
-      <h2>Tout est prêt ?</h2>
-      <p>Joe vérifie localement les fournisseurs et le stockage. Aucun prompt de test n’est envoyé.</p>
-      <div class="risk-note"><strong>Avant de commencer</strong><p>Joe n’est pas un fournisseur d’IA : il orchestre les comptes, CLI et API que tu configures. Leur facturation et leurs quotas restent sous ta responsabilité. Un run peut continuer après la fermeture du navigateur.</p></div>
-      <div id="doctor-status" class="doctor-status"><small>Diagnostic en cours…</small></div>
-      <div class="dialog-actions"><button id="close-onboarding" value="default">Commencer</button></div>
+      <span class="eyebrow" data-i18n="welcome_to_joe">Bienvenue dans Joe</span>
+      <h2 data-i18n="everything_ready">Tout est prêt ?</h2>
+      <p data-i18n="doctor_intro">Joe vérifie localement les fournisseurs et le stockage. Aucun prompt de test n’est envoyé.</p>
+      <div class="risk-note"><strong data-i18n="before_starting">Avant de commencer</strong><p data-i18n="orchestrator_responsibility">Joe n’est pas un fournisseur d’IA : il orchestre les comptes, CLI et API que tu configures. Leur facturation et leurs quotas restent sous ta responsabilité. Un run peut continuer après la fermeture du navigateur.</p></div>
+      <div id="doctor-status" class="doctor-status"><small data-i18n="diagnostic_running">Diagnostic en cours…</small></div>
+      <div class="dialog-actions"><button id="close-onboarding" value="default" data-i18n="start_using_joe">Commencer</button></div>
     </form>
   </dialog>
   <script src="/i18n.js"></script>

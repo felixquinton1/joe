@@ -4,7 +4,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
   // Rappel de celui qui a ouvert le formulaire : un plan confié au
   // planificateur ne doit plus rester affiché comme « à valider ».
   let onScheduled = null;
-  const tr = key => window.JoeI18n.translate(document.documentElement.lang, key);
+  const tr = (key, params) => window.JoeI18n.translate(document.documentElement.lang, key, params);
   const statusLabel = value => ({
     scheduled: "scheduled", completed: "done", cancelled: "cancelled", blocked: "blocked",
     paused: "paused", planning: "planning", research: "research", researching: "research",
@@ -58,7 +58,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
       const label = document.createElement("b");
       label.textContent = `#${node.iteration} · ${formatMetric(node.metric)} · ${statusLabel(node.status)} · ${statusLabel(node.validation_status)}`;
       const detail = document.createElement("small");
-      detail.textContent = [node.variant, node.hypothesis || node.reason || "Expérience sans hypothèse structurée"].filter(Boolean).join(" · ");
+      detail.textContent = [node.variant, node.hypothesis || node.reason || tr("experiment_without_hypothesis")].filter(Boolean).join(" · ");
       if (node.reason && node.hypothesis) detail.title = node.reason;
       item.append(label, detail);
       tree.appendChild(item);

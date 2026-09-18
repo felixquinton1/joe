@@ -1,6 +1,7 @@
 window.createJoeUsage = function createJoeUsage({
-  state, $, escapeHtml, capitalize, addMessage, fetcher
+  state, $, escapeHtml, capitalize, addMessage, translate, fetcher
 }) {
+  const tr = (key, params) => translate ? translate(key, params) : key;
   async function loadUsage(force = false) {
     const button = $("refresh-usage");
     if (force) {
@@ -9,7 +10,7 @@ window.createJoeUsage = function createJoeUsage({
     }
     try {
       const response = await fetcher(`/api/usage${force ? "?force=1" : ""}`);
-      if (!response.ok) throw new Error("Quotas indisponibles");
+      if (!response.ok) throw new Error(tr("quotas_unavailable"));
       state.usage = await response.json();
       renderUsage();
     } finally {
@@ -56,7 +57,7 @@ window.createJoeUsage = function createJoeUsage({
     row.className = "usage-window";
     const remaining = Number(window.remaining_percent);
     row.innerHTML = `
-      <div class="usage-line"><span>${escapeHtml(window.name)}</span><strong>${formatPercent(remaining)} restant</strong></div>
+      <div class="usage-line"><span>${escapeHtml(window.name)}</span><strong>${formatPercent(remaining)} ${tr("remaining")}</strong></div>
       <div class="usage-bar"><i style="width:${Math.max(0, Math.min(100, remaining))}%"></i></div>
       <small class="countdown" data-reset="${window.resets_at || ""}"></small>`;
     return row;
@@ -70,7 +71,7 @@ window.createJoeUsage = function createJoeUsage({
     for (const node of document.querySelectorAll(".countdown")) {
       const reset = Number(node.dataset.reset);
       if (!reset) {
-        node.textContent = "Réinitialisation non communiquée";
+        node.textContent = tr("reset_unknown");
         continue;
       }
       const seconds = Math.max(0, reset - Date.now() / 1000);
@@ -78,22 +79,22 @@ window.createJoeUsage = function createJoeUsage({
       const hours = Math.floor((seconds % 86400) / 3600);
       const minutes = Math.floor((seconds % 3600) / 60);
       node.textContent = seconds <= 0
-        ? "Réinitialisation imminente"
-        : `Reset dans ${days ? `${days} j ` : ""}${hours ? `${hours} h ` : ""}${minutes} min`;
+        ? tr("reset_imminent")
+        : tr("reset_in", { duration: `${days ? `${days} ${tr("day_short")} ` : ""}${hours ? `${hours} h ` : ""}${minutes} min` });
     }
   }
 
   function resetDescription(timestamp) {
     const reset = Number(timestamp);
-    if (!reset) return "heure de retour non exposée";
+    if (!reset) return tr("return_time_unknown");
     const seconds = Math.max(0, reset - Date.now() / 1000);
     const days = Math.floor(seconds / 86400);
     const hours = Math.floor((seconds % 86400) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const remaining = seconds <= 0
-      ? "réinitialisation imminente"
-      : `dans ${days ? `${days} j ` : ""}${hours ? `${hours} h ` : ""}${minutes} min`;
-    const date = new Date(reset * 1000).toLocaleString("fr-FR", {
+      ? tr("reset_imminent").toLocaleLowerCase()
+      : tr("in_duration", { duration: `${days ? `${days} ${tr("day_short")} ` : ""}${hours ? `${hours} h ` : ""}${minutes} min` });
+    const date = new Date(reset * 1000).toLocaleString(document.documentElement.lang, {
       dateStyle: "short",
       timeStyle: "short"
     });
@@ -102,24 +103,24 @@ window.createJoeUsage = function createJoeUsage({
 
   function showQuotaNotice(event) {
     const bubble = addMessage("Joe · limite atteinte", "", "notice");
-    const lines = [`${capitalize(event.provider)} a atteint une limite d’utilisation.`];
+    const lines = [tr("usage_limit_reached", { provider: capitalize(event.provider) })];
     if (event.windows?.length) {
       for (const window of event.windows) {
         lines.push(`• ${window.name} : ${resetDescription(window.resets_at)}`);
       }
     } else {
-      lines.push(`• ${event.usage_message || "Heure de retour non exposée par la CLI."}`);
+      lines.push(`• ${event.usage_message || tr("cli_reset_unknown")}`);
     }
     if (event.alternatives?.length) {
       const choices = event.alternatives.map(item => {
         const models = item.models?.length ? ` (${item.models.join(", ")})` : "";
         return `${capitalize(item.provider)}${models}`;
       });
-      lines.push(`Joe essaie automatiquement : ${choices.join(" → ")}.`);
+      lines.push(tr("automatic_fallbacks", { choices: choices.join(" → ") }));
     } else {
-      lines.push("Aucun autre fournisseur configuré n’est actuellement disponible.");
+      lines.push(tr("no_fallback_available"));
     }
-    lines.push("Changer de modèle chez le même fournisseur ne contourne généralement pas une limite partagée.");
+    lines.push(tr("shared_limit_warning"));
     bubble.textContent = lines.join("\n");
   }
 

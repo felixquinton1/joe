@@ -5,6 +5,16 @@
 }(typeof window === "undefined" ? null : window, function () {
   "use strict";
 
+  function tr(key, fallback) {
+    const i18n = globalThis.JoeI18n;
+    if (!i18n) return fallback;
+    const language = i18n.initialLanguage(
+      globalThis.localStorage,
+      globalThis.navigator?.language
+    );
+    return i18n.translate(language, key);
+  }
+
   async function pairBrowser({
     location = window.location,
     history = window.history,
@@ -18,7 +28,7 @@
       headers: { Authorization: `Bearer ${token}` }
     });
     history.replaceState(null, "", `${location.pathname}${location.search}`);
-    if (!response.ok) throw new Error("Appairage local Joe refusé");
+    if (!response.ok) throw new Error(tr("pairing_refused", "Appairage local Joe refusé"));
     return true;
   }
 
@@ -26,15 +36,17 @@
     const response = await fetcher(input, init);
     if (response.status === 401) {
       throw new Error(
-        "Session Joe non appairée. Lance `joe url` pour rouvrir l’interface."
+        tr("session_unpaired", "Session Joe non appairée. Lance `joe url` pour rouvrir l’interface.")
       );
     }
     if (response.status === 403) {
       // Sans cela, le corps d'erreur JSON est consommé comme une donnée
       // valide par les appelants et casse le rendu bien plus loin.
       throw new Error(
-        "Le profil de ce serveur Joe n’autorise pas cette action. "
-        + "Relance Joe avec --profile maintainer si nécessaire."
+        tr(
+          "profile_forbidden",
+          "Le profil de ce serveur Joe n’autorise pas cette action. Relance Joe avec --profile maintainer si nécessaire."
+        )
       );
     }
     return response;

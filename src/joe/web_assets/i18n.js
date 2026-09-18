@@ -109,7 +109,70 @@
       confirm_trash: "Confirmer la mise à la corbeille", reversible_deletion: "Suppression réversible",
       project_trash_help: "Restaurer un projet remet également ses conversations dans Joe. Les fichiers sur le disque ne sont jamais supprimés.",
       restore: "Restaurer", delete_permanently: "Supprimer définitivement", empty_trash: "La corbeille est vide.", conversations_count: "conversation(s)",
-      permanent_delete_confirm: "Supprimer définitivement ce projet et ses conversations de Joe ? Les fichiers sur le disque resteront intacts."
+      permanent_delete_confirm: "Supprimer définitivement ce projet et ses conversations de Joe ? Les fichiers sur le disque resteront intacts.",
+      rename: "Renommer", create: "Créer", edit_project: "Modifier le projet",
+      edit_project_context: "Modifier le contexte du projet", rename_conversation_prompt: "Nouveau nom de la conversation :",
+      conversation_delete_failed: "La conversation n’a pas pu être supprimée.", project_trash_failed: "Impossible de mettre ce projet à la corbeille.",
+      save_project_for_skills: "Enregistre le projet pour ajouter des skills.", project_scope: "projet", configured_scope: "configuré", shared_scope: "commun",
+      active_label: "actif", make_shared: "Rendre commun", make_shared_help: "Proposer ce skill à tous les projets",
+      view: "Voir", view_skill_help: "Afficher le contenu envoyé aux fournisseurs", remove_global_skill: "Retirer ce skill de tous les projets",
+      remove_project_skill: "Retirer ce skill du projet", no_project_skills: "Aucun skill de projet détecté.", no_shared_skills: "Aucun skill commun pour l’instant.",
+      skill_not_found: "Skill introuvable.", delete_skill_confirm: "Supprimer définitivement « {name} » {scope} ?", all_projects_scope: "de tous les projets", this_project_scope: "de ce projet",
+      skill_delete_failed: "Suppression impossible.", skill_promote_failed: "Promotion du skill impossible.", skill_fields_required: "Indique un nom et les instructions du skill.",
+      skill_create_failed: "Création du skill impossible.", skill_import_failed: "Import du skill impossible.",
+      auto_delivery_on: "Activé : Joe committe et pousse automatiquement ; le rejet sélectif n’est plus disponible après la livraison.",
+      auto_delivery_off: "Désactivé : tu peux examiner les changements et utiliser « Rejeter la sélection ».",
+      old_version: "ancienne version", current_version: "actuel", old_backend: "Le serveur Joe {version} utilise encore un ancien backend. Arrête-le avec Ctrl+C, relance joe, puis recharge cette page.",
+      network_control_only: "Pour l’instant, ce contrôle est effectif uniquement sur {providers} : les autres CLI n’exposent pas de réglage réseau.",
+      network_control_none: "Aucune CLI installée n’expose de réglage réseau : ce choix reste indicatif.", available_default: "Disponible par défaut.", enabled_default: "Activé par défaut.",
+      changes_optional: "Modifications à apporter (facultatif)", changes_placeholder: "Ex. commence par les tests, ne touche pas au loader…",
+      diff_unavailable: "Diff indisponible.", no_changes: "Aucune modification.", no_text_diff: "Aucun diff textuel disponible.",
+      integrate_branch_confirm: "Intégrer la branche {branch} dans le dépôt principal ?", integration_impossible: "Intégration impossible.",
+      discard_task_confirm: "Supprimer la tâche et abandonner les modifications de {branch} ?", deletion_impossible: "Suppression impossible.",
+      no_project_files: "Aucun fichier dans ce projet.", delete_file: "Supprimer ce fichier", open_or_download: "Ouvrir ou télécharger", remove_from_request: "Retirer de cette demande",
+      add_file_failed: "Impossible d’ajouter {name}.", diagnostic_unavailable: "Diagnostic indisponible.", unavailable: "indisponible",
+      repository_changes: "Modifications du dépôt", reject_files_help: "Coche les fichiers que tu souhaites rejeter.", preexisting: "préexistant", preexisting_help: "Déjà modifié avant la tâche",
+      view_full_diff: "Voir le diff complet", keep_all: "Conserver tout", all_kept: "Tout est conservé", reject_selection: "Rejeter la sélection",
+      restore_selected: "Restaurer les fichiers sélectionnés à leur état précédent", automatic_restore_unavailable: "Restauration automatique indisponible",
+      choose_rejected_file: "Sélectionne au moins un fichier à rejeter.", reject_files_confirm: "Rejeter {count} fichier(s) sélectionné(s) ?", selection_rejected: "Sélection rejetée",
+      copy: "⧉ Copier", copy_clipboard: "Copier dans le presse-papiers", copied: "✓ Copié", routing_label: "Routage",
+      lexical_route_no_model: "Routage lexical déterministe — aucun modèle de routage appelé.", lexical_route: "Routage lexical · {reason}", internal_rules: "règles internes",
+      create_skill_stage: "Création du skill", waiting: "En attente", unknown: "inconnu", relay_from: "Relais de {provider}",
+      quota_wait: "En attente de quota · reprise automatique {when}", interrupted: "Interrompu", local_routing: "Routage local en cours…",
+      stream_interrupted: "Connexion au flux interrompue · vérification du run côté serveur…", no_active_task: "Aucune tâche active côté serveur.",
+      queue_title: "File d’attente", prompt_count: "{count} prompt(s)", remove_from_queue: "Retirer de la file", select_project_conversation: "Sélectionne d’abord une conversation liée à un projet.",
+      ui_load_failed: "Joe n’a pas pu charger cette interface : {error}", quotas_temporarily_unavailable: "Quotas momentanément indisponibles",
+      quotas_unavailable: "Quotas indisponibles", remaining: "restant", reset_unknown: "Réinitialisation non communiquée", reset_imminent: "Réinitialisation imminente",
+      reset_in: "Reset dans {duration}", return_time_unknown: "heure de retour non exposée", in_duration: "dans {duration}", usage_limit_reached: "{provider} a atteint une limite d’utilisation.",
+      cli_reset_unknown: "Heure de retour non exposée par la CLI.", automatic_fallbacks: "Joe essaie automatiquement : {choices}.", no_fallback_available: "Aucun autre fournisseur configuré n’est actuellement disponible.",
+      shared_limit_warning: "Changer de modèle chez le même fournisseur ne contourne généralement pas une limite partagée.",
+      pairing_refused: "Appairage local Joe refusé", session_unpaired: "Session Joe non appairée. Lance `joe url` pour rouvrir l’interface.",
+      profile_forbidden: "Le profil de ce serveur Joe n’autorise pas cette action. Relance Joe avec --profile maintainer si nécessaire.",
+      consensus_running: "Consensus en cours", consensus_complete: "Consensus terminé", consensus_detail: "Avis et examens croisés",
+      review_running: "Implémentation contrôlée", review_complete: "Implémentation contrôlée terminée", review_detail: "Réalisation, revue et correction",
+      execution_running: "Exécution en cours", execution_complete: "Exécution terminée", execution_detail: "Traitement par un agent",
+      fallback_from_lower: "relais de {provider}", running_lower: "en cours", done_lower: "terminé", failed_lower: "échec",
+      joe_summary: "Joe · synthèse", background_task: "Cette tâche continue en arrière-plan…", experiment_without_hypothesis: "Expérience sans hypothèse structurée",
+      plan_has_no_steps: "Ce plan n’expose aucune étape en liste : ajoute-les à la main dans le formulaire.", validated_plan: "Plan validé", requested_changes: "Modifications demandées",
+      implement_validated_plan: "Implémenter le plan validé ci-dessus.", storage: "Stockage", needs_fix: "À corriger", installed: "Installé", not_detected: "Non détecté",
+      dev_status_unknown: "état de dev inconnu", dev_integrated: "origin/dev est intégré", dev_not_integrated: "origin/dev n’est pas intégré",
+      pushed: "Commit et push effectués", committed: "Commit effectué", kept: "Conservées", branch: "Branche", detached_head: "HEAD détachée",
+      changed: "modifié", unchanged: "inchangé", reference_updated: "référence actualisée", fetch_observed: "fetch observé", no_fetch_observed: "aucun fetch observé",
+      changes_kept_automatically: "Modifications conservées automatiquement.", no_model_called: "aucun modèle appelé", autonomous_creation: "Création d’Autonomous", implementation: "Implémentation",
+      local_action_no_model: "action locale · aucun modèle appelé", final_synthesis_pending: "Synthèse finale en attente…", default_model: "modèle par défaut", default_effort: "défaut",
+      quota_exhausted_fallback: "Quota épuisé · relais {provider}", unavailable_fallback: "Indisponible · relais {provider}", verified: "Vérifié", inferred: "Inféré", refused: "Refusé",
+      exact_model_prompt: "Identifiant exact du modèle :", full_access_denied: "Demande annulée : accès complet refusé.", interrupted_by_restart: "La tâche a été interrompue par le redémarrage de Joe."
+      ,plan_first: "Proposer un plan d'abord", plan_first_help: "L'IA rédige un plan sans rien exécuter. Tu le valides, l'ajustes ou le refuses ; l'exécution est ensuite confiée à l'agent le mieux placé.",
+      web_search: "Recherche Web", web_search_codex_help: "Disponible par défaut. Pour l’instant, ce contrôle est effectif uniquement sur Codex.", project_files: "Fichiers du projet", refresh: "Actualiser", no_attached_files: "Aucun fichier joint.", ai_quotas: "Quotas IA", refresh_quotas: "Actualiser les quotas, dont /usage Claude",
+      shared_context: "Contexte partagé", general: "Général", name: "Nom", project_name_placeholder: "Ex. Phase D, Ablations, Documentation…", working_root: "Racine de travail", project_root_placeholder: "/chemin/du/projet", additional_roots: "Autres racines autorisées", additional_roots_placeholder: "Un chemin explicite par ligne",
+      execution_delivery: "Exécution & livraison", ai_access_help: "S'applique à tous les fournisseurs et à toutes les demandes du projet. La zone autorisée reste la racine du projet et ses racines additionnelles.", auto_commit_push: "Commit et push automatiques après une modification validée", isolated_worktrees_option: "Isoler les modifications dans un worktree Git", isolated_worktrees_help: "Recommandé pour exécuter plusieurs tâches sans mélanger leurs fichiers.", resume_after_quota: "Reprendre automatiquement après un reset de quota", resume_after_quota_help: "Joe conserve la tâche et la relance à la prochaine fenêtre disponible.",
+      costs_external_actions: "Coûts et actions externes", costs_external_actions_help: "Joe transmet tes demandes aux outils IA configurés et peut exécuter leurs commandes selon ce niveau d’accès. Tu restes responsable des crédits consommés, des permissions accordées et de l’arrêt des runs.", context: "Contexte", shared_project_context: "Contexte transmis à toutes ses conversations", project_context_placeholder: "Objectif, conventions, décisions stables… (ex. accès SSH d’un cluster de calcul)",
+      project_skills: "Skills du projet", skills_providers_help: "Utilisés par Claude, Codex, Gemini et Copilot", shared_skills: "Skills communs", shared_skills_help: "Appliqués à tous les projets", create_skill: "Créer un skill", create_skill_help: "Écris directement les règles à transmettre aux agents", shared: "Commun", import_existing_skill: "Importer un SKILL.md existant", import: "Importer", advanced_options_title: "Options avancées", advanced_options_help: "Accès réseau et intégrations distantes", allow_web_network: "Autoriser la recherche Web et l’accès réseau",
+      permanent_deletion: "Suppression définitive", delete_conversation_question: "Supprimer cette conversation ?", conversation_prefix: "La conversation", conversation_delete_explanation: "et son historique ne seront plus accessibles dans Joe.", authorization: "Autorisation", allow_full_access_question: "Autoriser l’accès complet ?", full_access_explanation: "Cette tâche pourra modifier le projet, lancer ses tests et utiliser le réseau, dans la racine du projet et ses racines additionnelles.", always_allow_help: "« Toujours » passe le projet en accès automatique : plus aucune confirmation ne sera demandée. Réversible dans les réglages du projet, à la ligne « Accès de l’IA ».", always_allow: "Toujours autoriser", allow_once: "Autoriser une fois", manage_active_project_skills: "Gérer les skills du projet actif",
+      welcome_to_joe: "Bienvenue dans Joe", everything_ready: "Tout est prêt ?", doctor_intro: "Joe vérifie localement les fournisseurs et le stockage. Aucun prompt de test n’est envoyé.", before_starting: "Avant de commencer", orchestrator_responsibility: "Joe n’est pas un fournisseur d’IA : il orchestre les comptes, CLI et API que tu configures. Leur facturation et leurs quotas restent sous ta responsabilité. Un run peut continuer après la fermeture du navigateur.", diagnostic_running: "Diagnostic en cours…", start_using_joe: "Commencer"
+      ,ai_access: "Accès de l'IA", ai_access_read_only: "Lecture seule — aucune commande", ai_access_manual: "Validation manuelle — j'autorise chaque demande", ai_access_auto: "Automatique — aucune confirmation", skill_name_placeholder: "Nom du skill · ex. conventions-python", skill_instructions_placeholder: "Instructions du skill…", new_skill_scope: "Portée du nouveau skill", skill_source_placeholder: "Chemin vers SKILL.md ou son dossier", import_skill_scope: "Portée du skill importé"
+      ,approval_requested: "Autorisation demandée", refuse: "Refuser", allow: "Autoriser", proposed_plan: "Plan proposé", schedule_ellipsis: "Planifier…", allow_with_changes: "Autoriser avec modifications", joe_local_action: "Action locale Joe"
+      ,day_short: "j"
     },
     en: {
       language: "Language",
@@ -216,7 +279,56 @@
       confirm_trash: "Confirm move to trash", reversible_deletion: "Reversible deletion",
       project_trash_help: "Restoring a project also restores its conversations in Joe. Files on disk are never deleted.",
       restore: "Restore", delete_permanently: "Delete permanently", empty_trash: "Trash is empty.", conversations_count: "conversation(s)",
-      permanent_delete_confirm: "Permanently delete this project and its conversations from Joe? Files on disk will remain untouched."
+      permanent_delete_confirm: "Permanently delete this project and its conversations from Joe? Files on disk will remain untouched.",
+      rename: "Rename", create: "Create", edit_project: "Edit project", edit_project_context: "Edit project context", rename_conversation_prompt: "New conversation name:",
+      conversation_delete_failed: "The conversation could not be deleted.", project_trash_failed: "Unable to move this project to trash.", save_project_for_skills: "Save the project before adding skills.",
+      project_scope: "project", configured_scope: "configured", shared_scope: "shared", active_label: "active", make_shared: "Make shared", make_shared_help: "Offer this skill to all projects",
+      view: "View", view_skill_help: "Show the content sent to providers", remove_global_skill: "Remove this skill from all projects", remove_project_skill: "Remove this skill from the project",
+      no_project_skills: "No project skill detected.", no_shared_skills: "No shared skill yet.", skill_not_found: "Skill not found.", delete_skill_confirm: "Permanently delete “{name}” {scope}?",
+      all_projects_scope: "from all projects", this_project_scope: "from this project", skill_delete_failed: "Unable to delete the skill.", skill_promote_failed: "Unable to promote the skill.",
+      skill_fields_required: "Provide a skill name and instructions.", skill_create_failed: "Unable to create the skill.", skill_import_failed: "Unable to import the skill.",
+      auto_delivery_on: "Enabled: Joe commits and pushes automatically; selective rejection is no longer available after delivery.", auto_delivery_off: "Disabled: you can review changes and use Reject selection.",
+      old_version: "older version", current_version: "current", old_backend: "Joe server {version} is still using an older backend. Stop it with Ctrl+C, restart Joe, then reload this page.",
+      network_control_only: "For now, this control is effective only for {providers}: the other CLIs expose no network setting.", network_control_none: "No installed CLI exposes a network setting: this choice is informational.",
+      available_default: "Available by default.", enabled_default: "Enabled by default.", changes_optional: "Requested changes (optional)", changes_placeholder: "E.g. start with tests, do not change the loader…",
+      diff_unavailable: "Diff unavailable.", no_changes: "No changes.", no_text_diff: "No textual diff available.", integrate_branch_confirm: "Integrate branch {branch} into the main repository?",
+      integration_impossible: "Unable to integrate.", discard_task_confirm: "Delete the task and discard changes from {branch}?", deletion_impossible: "Unable to delete.", no_project_files: "No files in this project.",
+      delete_file: "Delete this file", open_or_download: "Open or download", remove_from_request: "Remove from this request", add_file_failed: "Unable to add {name}.", diagnostic_unavailable: "Diagnostics unavailable.", unavailable: "unavailable",
+      repository_changes: "Repository changes", reject_files_help: "Select the files you want to reject.", preexisting: "pre-existing", preexisting_help: "Already modified before the task", view_full_diff: "View full diff",
+      keep_all: "Keep all", all_kept: "Everything is kept", reject_selection: "Reject selection", restore_selected: "Restore selected files to their previous state", automatic_restore_unavailable: "Automatic restore unavailable",
+      choose_rejected_file: "Select at least one file to reject.", reject_files_confirm: "Reject {count} selected file(s)?", selection_rejected: "Selection rejected", copy: "⧉ Copy", copy_clipboard: "Copy to clipboard", copied: "✓ Copied",
+      routing_label: "Routing", lexical_route_no_model: "Deterministic lexical routing — no routing model called.", lexical_route: "Lexical routing · {reason}", internal_rules: "internal rules", create_skill_stage: "Skill creation",
+      waiting: "Waiting", unknown: "unknown", relay_from: "Fallback for {provider}", quota_wait: "Waiting for quota · automatic resume {when}", interrupted: "Interrupted", local_routing: "Local routing in progress…",
+      stream_interrupted: "Stream disconnected · checking the run on the server…", no_active_task: "No active task on the server.", queue_title: "Queue", prompt_count: "{count} prompt(s)", remove_from_queue: "Remove from queue",
+      select_project_conversation: "First select a conversation linked to a project.", ui_load_failed: "Joe could not load this interface: {error}", quotas_temporarily_unavailable: "Quotas temporarily unavailable",
+      quotas_unavailable: "Quotas unavailable", remaining: "remaining", reset_unknown: "Reset time not provided", reset_imminent: "Reset imminent", reset_in: "Reset in {duration}", return_time_unknown: "return time not exposed",
+      in_duration: "in {duration}", usage_limit_reached: "{provider} reached a usage limit.", cli_reset_unknown: "Return time not exposed by the CLI.", automatic_fallbacks: "Joe will automatically try: {choices}.",
+      no_fallback_available: "No other configured provider is currently available.", shared_limit_warning: "Switching models within the same provider generally does not bypass a shared limit.",
+      pairing_refused: "Joe local pairing refused", session_unpaired: "Joe session is not paired. Run `joe url` to reopen the interface.", profile_forbidden: "This Joe server profile does not allow that action. Restart Joe with --profile maintainer if needed."
+      ,consensus_running: "Consensus in progress", consensus_complete: "Consensus complete", consensus_detail: "Independent opinions and cross-reviews",
+      review_running: "Controlled implementation", review_complete: "Controlled implementation complete", review_detail: "Implementation, review, and correction",
+      execution_running: "Execution in progress", execution_complete: "Execution complete", execution_detail: "Handled by one agent",
+      fallback_from_lower: "fallback for {provider}", running_lower: "running", done_lower: "done", failed_lower: "failed",
+      joe_summary: "Joe · summary", background_task: "This task continues in the background…", experiment_without_hypothesis: "Experiment without a structured hypothesis",
+      plan_has_no_steps: "This plan contains no listed steps: add them manually in the form.", validated_plan: "Validated plan", requested_changes: "Requested changes", implement_validated_plan: "Implement the validated plan above.",
+      storage: "Storage", needs_fix: "Needs attention", installed: "Installed", not_detected: "Not detected", dev_status_unknown: "unknown dev status", dev_integrated: "origin/dev is integrated",
+      dev_not_integrated: "origin/dev is not integrated", pushed: "Committed and pushed", committed: "Committed", kept: "Kept", branch: "Branch", detached_head: "detached HEAD",
+      changed: "changed", unchanged: "unchanged", reference_updated: "reference updated", fetch_observed: "fetch observed", no_fetch_observed: "no fetch observed",
+      changes_kept_automatically: "Changes kept automatically.", no_model_called: "no model called", autonomous_creation: "Autonomous creation", implementation: "Implementation",
+      local_action_no_model: "local action · no model called", final_synthesis_pending: "Final synthesis pending…", default_model: "default model", default_effort: "default",
+      quota_exhausted_fallback: "Quota exhausted · fallback to {provider}", unavailable_fallback: "Unavailable · fallback to {provider}", verified: "Verified", inferred: "Inferred", refused: "Refused",
+      exact_model_prompt: "Exact model identifier:", full_access_denied: "Request cancelled: full access denied.", interrupted_by_restart: "The task was interrupted by the Joe restart."
+      ,plan_first: "Propose a plan first", plan_first_help: "The AI writes a plan without executing anything. You can approve, adjust, or reject it; execution is then assigned to the best-suited agent.",
+      web_search: "Web search", web_search_codex_help: "Available by default. For now, this control is effective only for Codex.", project_files: "Project files", refresh: "Refresh", no_attached_files: "No attached files.", ai_quotas: "AI quotas", refresh_quotas: "Refresh quotas, including Claude /usage",
+      shared_context: "Shared context", general: "General", name: "Name", project_name_placeholder: "E.g. Phase D, Ablations, Documentation…", working_root: "Working root", project_root_placeholder: "/path/to/project", additional_roots: "Additional allowed roots", additional_roots_placeholder: "One explicit path per line",
+      execution_delivery: "Execution & delivery", ai_access_help: "Applies to all providers and all requests in this project. The allowed area remains the project root and its additional roots.", auto_commit_push: "Automatically commit and push validated changes", isolated_worktrees_option: "Isolate changes in a Git worktree", isolated_worktrees_help: "Recommended for running multiple tasks without mixing their files.", resume_after_quota: "Resume automatically after a quota reset", resume_after_quota_help: "Joe keeps the task and restarts it during the next available window.",
+      costs_external_actions: "Costs and external actions", costs_external_actions_help: "Joe sends your requests to configured AI tools and may execute their commands according to this access level. You remain responsible for consumed credits, granted permissions, and stopping runs.", context: "Context", shared_project_context: "Context shared with all its conversations", project_context_placeholder: "Objective, conventions, stable decisions… (e.g. SSH access to a compute cluster)",
+      project_skills: "Project skills", skills_providers_help: "Used by Claude, Codex, Gemini, and Copilot", shared_skills: "Shared skills", shared_skills_help: "Applied to all projects", create_skill: "Create a skill", create_skill_help: "Write the rules to send to agents directly", shared: "Shared", import_existing_skill: "Import an existing SKILL.md", import: "Import", advanced_options_title: "Advanced options", advanced_options_help: "Network access and remote integrations", allow_web_network: "Allow Web search and network access",
+      permanent_deletion: "Permanent deletion", delete_conversation_question: "Delete this conversation?", conversation_prefix: "The conversation", conversation_delete_explanation: "and its history will no longer be accessible in Joe.", authorization: "Authorization", allow_full_access_question: "Allow full access?", full_access_explanation: "This task may modify the project, run its tests, and use the network within the project root and its additional roots.", always_allow_help: "Always switches the project to automatic access: no further confirmation will be requested. This is reversible in the project settings under AI access.", always_allow: "Always allow", allow_once: "Allow once", manage_active_project_skills: "Manage skills for the active project",
+      welcome_to_joe: "Welcome to Joe", everything_ready: "Everything ready?", doctor_intro: "Joe checks providers and storage locally. No test prompt is sent.", before_starting: "Before you start", orchestrator_responsibility: "Joe is not an AI provider: it orchestrates the accounts, CLIs, and APIs you configure. Their billing and quotas remain your responsibility. A run may continue after the browser closes.", diagnostic_running: "Running diagnostics…", start_using_joe: "Get started"
+      ,ai_access: "AI access", ai_access_read_only: "Read only — no commands", ai_access_manual: "Manual approval — approve each request", ai_access_auto: "Automatic — no confirmation", skill_name_placeholder: "Skill name · e.g. python-conventions", skill_instructions_placeholder: "Skill instructions…", new_skill_scope: "New skill scope", skill_source_placeholder: "Path to SKILL.md or its folder", import_skill_scope: "Imported skill scope"
+      ,approval_requested: "Approval requested", refuse: "Refuse", allow: "Allow", proposed_plan: "Proposed plan", schedule_ellipsis: "Schedule…", allow_with_changes: "Allow with changes", joe_local_action: "Local Joe action"
+      ,day_short: "d"
     }
   };
 
@@ -226,8 +338,12 @@
   function initialLanguage(storage, navigatorLanguage) {
     return supported(storage?.getItem("joe-language") || navigatorLanguage || "fr");
   }
-  function translate(language, key) {
-    return translations[supported(language)][key] || translations.fr[key] || key;
+  function translate(language, key, params = {}) {
+    const template = translations[supported(language)][key] || translations.fr[key] || key;
+    return Object.entries(params).reduce(
+      (text, [name, value]) => text.replaceAll(`{${name}}`, String(value)),
+      template
+    );
   }
   function apply(document, language) {
     const selected = supported(language);

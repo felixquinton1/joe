@@ -244,8 +244,8 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert b"renderMarkdown" in script
         assert b"launchNextQueued" in script
         assert b"copyButton" in script
-        assert "⧉ Copier".encode() in script
-        assert "✓ Copié".encode() in script
+        assert b't("copy")' in script
+        assert b't("copied")' in script
         assert b"moveConversation" in script
         assert b"setupPanelResizers" in script
         assert b"resizeComposer" in script

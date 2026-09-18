@@ -17,7 +17,7 @@ window.createJoeConversations = function createJoeConversations({
   fetcher
 }) {
   const lastConversationKey = "joe-last-conversation-id";
-  const tr = key => translate ? translate(key) : key;
+  const tr = (key, params) => translate ? translate(key, params) : key;
   let draggedItem = null;
   let historyFilter = "";
   let searchTimer = null;
@@ -120,7 +120,7 @@ window.createJoeConversations = function createJoeConversations({
         tr(project.collapsed ? "expand_conversations" : "collapse_conversations"),
         () => toggleProjectCollapsed(project, group, collapse)
       );
-      const editProject = smallButton("⚙", "Modifier le contexte du projet", () => openProject(project));
+      const editProject = smallButton("⚙", tr("edit_project_context"), () => openProject(project));
       const addConversation = smallButton("＋", tr("add_conversation"), () => createConversation(true, project.id));
       projectActions.append(collapse, editProject, addConversation);
       header.appendChild(projectActions);
@@ -181,12 +181,12 @@ window.createJoeConversations = function createJoeConversations({
         pin.onclick = () => togglePin(conversation);
         const rename = document.createElement("button");
         rename.className = "pin-button";
-        rename.title = "Renommer";
+        rename.title = tr("rename");
         rename.textContent = "✎";
         rename.onclick = () => renameConversation(conversation);
         const remove = document.createElement("button");
         remove.className = "pin-button delete-button";
-        remove.title = "Supprimer";
+        remove.title = tr("delete");
         remove.textContent = "×";
         remove.onclick = () => confirmDeleteConversation(conversation);
         row.append(drag, button, rename, pin, remove);
@@ -372,7 +372,7 @@ window.createJoeConversations = function createJoeConversations({
         );
       } else {
         bubble = addMessage(
-          "Joe · synthèse",
+          tr("joe_summary"),
           "",
           "assistant",
           { suppressScroll: true }
@@ -429,7 +429,7 @@ window.createJoeConversations = function createJoeConversations({
       );
       const bubble = existing?.querySelector(".bubble") || addMessage(
         "Joe",
-        "Cette tâche continue en arrière-plan…",
+        tr("background_task"),
         "assistant"
       );
       activeRun.bubble = bubble;
@@ -495,7 +495,7 @@ window.createJoeConversations = function createJoeConversations({
           existing.dataset.runId = message.run_id;
           continue;
         }
-        bubble = addMessage("Joe · synthèse", "", "assistant", { suppressScroll: true });
+        bubble = addMessage(tr("joe_summary"), "", "assistant", { suppressScroll: true });
         renderHistoricalRunSummary(message, bubble);
         renderMarkdown(bubble, message.content);
         if (message.git_report) renderGitReport(message.git_report, message.run_id);
@@ -556,7 +556,7 @@ window.createJoeConversations = function createJoeConversations({
   }
 
   async function renameConversation(conversation) {
-    const title = window.prompt("Nouveau nom de la conversation :", conversation.title);
+    const title = window.prompt(tr("rename_conversation_prompt"), conversation.title);
     if (!title?.trim()) return;
     await fetcher(`/api/conversations/${conversation.id}`, {
       method: "PATCH",
@@ -585,7 +585,7 @@ window.createJoeConversations = function createJoeConversations({
     if (!response.ok) {
       const payload = await response.json();
       $("delete-conversation-dialog").close();
-      window.alert(payload.error || "La conversation n’a pas pu être supprimée.");
+      window.alert(payload.error || tr("conversation_delete_failed"));
       return;
     }
     $("delete-conversation-dialog").close();
@@ -602,8 +602,8 @@ window.createJoeConversations = function createJoeConversations({
 
   function createProject() {
     state.editingProjectId = null;
-    $("project-dialog-title").textContent = "Nouveau projet";
-    $("save-project").textContent = "Créer";
+    $("project-dialog-title").textContent = tr("new_project");
+    $("save-project").textContent = tr("create");
     $("project-name").value = "";
     $("project-root").value = "";
     $("project-extra-roots").value = "";
@@ -618,7 +618,7 @@ window.createJoeConversations = function createJoeConversations({
     $("skill-name").value = "";
     $("skill-instructions").value = "";
     $("skill-source").value = "";
-    $("project-skills").innerHTML = "<small>Enregistre le projet pour ajouter des skills.</small>";
+    $("project-skills").innerHTML = `<small>${tr("save_project_for_skills")}</small>`;
     setSkillProjectAvailability(false);
     $("trash-project").hidden = true;
     loadGlobalSkills();
@@ -628,8 +628,8 @@ window.createJoeConversations = function createJoeConversations({
 
   function openProject(project) {
     state.editingProjectId = project.id;
-    $("project-dialog-title").textContent = "Modifier le projet";
-    $("save-project").textContent = "Enregistrer";
+    $("project-dialog-title").textContent = tr("edit_project");
+    $("save-project").textContent = tr("save");
     $("project-name").value = project.name;
     $("project-root").value = project.workspace_root || "";
     $("project-extra-roots").value = (project.additional_roots || []).join("\n");
@@ -665,7 +665,7 @@ window.createJoeConversations = function createJoeConversations({
     if (!projectId) return;
     const response = await fetcher(`/api/projects/${projectId}/trash`, { method: "POST" });
     const payload = await response.json();
-    if (!response.ok) return window.alert(payload.error || "Impossible de mettre ce projet à la corbeille.");
+    if (!response.ok) return window.alert(payload.error || tr("project_trash_failed"));
     $("trash-project-dialog").close();
     $("project-dialog").close();
     state.editingProjectId = null;
@@ -728,7 +728,9 @@ window.createJoeConversations = function createJoeConversations({
   $("confirm-trash-project").onclick = trashProject;
   $("open-project-trash").onclick = openProjectTrash;
 
-  const SKILL_SCOPE_LABELS = { project: "projet", configured: "configuré", global: "commun" };
+  const skillScopeLabel = scope => tr({
+    project: "project_scope", configured: "configured_scope", global: "shared_scope"
+  }[scope] || "project_scope");
 
   function renderSkillList(target, skills, { emptyText, promotable = false }) {
     target.replaceChildren();
@@ -743,15 +745,15 @@ window.createJoeConversations = function createJoeConversations({
       const name = document.createElement("b");
       name.textContent = skill.name;
       const meta = document.createElement("small");
-      const scope = SKILL_SCOPE_LABELS[skill.scope] || skill.scope || "projet";
-      meta.textContent = skill.active ? `actif · ${scope}` : scope;
+      const scope = skillScopeLabel(skill.scope);
+      meta.textContent = skill.active ? `${tr("active_label")} · ${scope}` : scope;
       row.append(name, meta);
       if (promotable && skill.scope === "project") {
         const promote = document.createElement("button");
         promote.type = "button";
         promote.className = "skill-promote";
-        promote.textContent = "Rendre commun";
-        promote.title = "Proposer ce skill à tous les projets";
+        promote.textContent = tr("make_shared");
+        promote.title = tr("make_shared_help");
         promote.onclick = () => promoteSkill(skill.name);
         row.appendChild(promote);
       }
@@ -761,16 +763,16 @@ window.createJoeConversations = function createJoeConversations({
       const show = document.createElement("button");
       show.type = "button";
       show.className = "skill-show";
-      show.textContent = "Voir";
-      show.title = "Afficher le contenu envoyé aux fournisseurs";
+      show.textContent = tr("view");
+      show.title = tr("view_skill_help");
       show.onclick = () => showSkill(skill.name, global);
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "skill-delete";
-      remove.textContent = "Supprimer";
+      remove.textContent = tr("delete");
       remove.title = global
-        ? "Retirer ce skill de tous les projets"
-        : "Retirer ce skill du projet";
+        ? tr("remove_global_skill")
+        : tr("remove_project_skill");
       remove.onclick = () => deleteSkill(skill.name, global);
       row.append(show, remove);
       target.appendChild(row);
@@ -780,7 +782,7 @@ window.createJoeConversations = function createJoeConversations({
   async function loadProjectSkills(projectId) {
     const skills = await fetcher(`/api/projects/${projectId}/skills`).then(response => response.json());
     renderSkillList($("project-skills"), skills, {
-      emptyText: "Aucun skill de projet détecté.",
+      emptyText: tr("no_project_skills"),
       promotable: true,
     });
   }
@@ -789,7 +791,7 @@ window.createJoeConversations = function createJoeConversations({
     try {
       const skills = await fetcher("/api/skills/global").then(response => response.json());
       renderSkillList($("global-skills"), skills, {
-        emptyText: "Aucun skill commun pour l’instant.",
+        emptyText: tr("no_shared_skills"),
       });
     } catch {
       /* liste facultative : on ignore les erreurs réseau */
@@ -806,19 +808,19 @@ window.createJoeConversations = function createJoeConversations({
     const response = await fetcher(skillPath(name, global));
     const skill = await response.json();
     if (!response.ok) {
-      window.alert(skill.message || "Skill introuvable.");
+      window.alert(skill.message || tr("skill_not_found"));
       return;
     }
     window.alert(`${skill.name}\n\n${skill.content}`);
   }
 
   async function deleteSkill(name, global) {
-    const scope = global ? "de tous les projets" : "de ce projet";
-    if (!window.confirm(`Supprimer définitivement « ${name} » ${scope} ?`)) return;
+    const scope = tr(global ? "all_projects_scope" : "this_project_scope");
+    if (!window.confirm(tr("delete_skill_confirm", { name, scope }))) return;
     const response = await fetcher(skillPath(name, global), { method: "DELETE" });
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      window.alert(error.message || "Suppression impossible.");
+      window.alert(error.message || tr("skill_delete_failed"));
       return;
     }
     await refreshSkills();
@@ -838,7 +840,7 @@ window.createJoeConversations = function createJoeConversations({
     });
     const payload = await response.json();
     if (!response.ok) {
-      window.alert(payload.message || "Promotion du skill impossible.");
+      window.alert(payload.message || tr("skill_promote_failed"));
       return;
     }
     await loadGlobalSkills();
@@ -862,7 +864,7 @@ window.createJoeConversations = function createJoeConversations({
     const name = $("skill-name").value.trim();
     const instructions = $("skill-instructions").value.trim();
     if (!name || !instructions) {
-      window.alert("Indique un nom et les instructions du skill.");
+      window.alert(tr("skill_fields_required"));
       return;
     }
     const scope = selectedSkillScope("skill-create-scope");
@@ -877,7 +879,7 @@ window.createJoeConversations = function createJoeConversations({
     });
     const payload = await response.json();
     if (!response.ok) {
-      window.alert(payload.message || "Création du skill impossible.");
+      window.alert(payload.message || tr("skill_create_failed"));
       return;
     }
     $("skill-name").value = "";
@@ -901,7 +903,7 @@ window.createJoeConversations = function createJoeConversations({
     });
     const payload = await response.json();
     if (!response.ok) {
-      window.alert(payload.message || "Import du skill impossible.");
+      window.alert(payload.message || tr("skill_import_failed"));
       return;
     }
     $("skill-source").value = "";
@@ -913,8 +915,8 @@ window.createJoeConversations = function createJoeConversations({
     const help = $("project-auto-delivery-help");
     if (!help) return;
     help.textContent = $("project-auto-delivery").checked
-      ? "Activé : Joe committe et pousse automatiquement ; le rejet sélectif n’est plus disponible après la livraison."
-      : "Désactivé : tu peux examiner les changements et utiliser « Rejeter la sélection ».";
+      ? tr("auto_delivery_on")
+      : tr("auto_delivery_off");
   }
 
   $("project-auto-delivery").onchange = updateAutoDeliveryHelp;

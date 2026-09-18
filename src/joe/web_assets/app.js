@@ -1,4 +1,4 @@
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.0.1";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -25,7 +25,7 @@ let language = window.JoeI18n.initialLanguage(
   window.localStorage,
   window.navigator.language
 );
-const t = key => window.JoeI18n.translate(language, key);
+const t = (key, params) => window.JoeI18n.translate(language, key, params);
 
 function applyLanguage(value) {
   language = window.JoeI18n.apply(document, value);
@@ -47,6 +47,7 @@ function applyLanguage(value) {
     refreshSelectMenu(select);
   }
   if (knownTasks.length) renderTasks();
+  if (typeof renderUsage === "function" && state.usage.length) renderUsage();
   automation.render?.();
   if (typeof renderConversations === "function" && state.projects.length) {
     renderConversations();
@@ -60,10 +61,10 @@ async function loadStatus() {
   const status = await fetch("/api/status").then(response => response.json());
   updateProviderMenu(status.provider_catalog || status.providers || []);
   annotateNetworkControl(status.network_control_providers);
-  $("version").textContent = status.version || "ancienne version";
+  $("version").textContent = status.version || t("old_version");
   if (status.version !== APP_VERSION) {
     const warning = $("restart-warning");
-    warning.textContent = `Le serveur Joe ${status.version || "actuel"} utilise encore un ancien backend. Arrête-le avec Ctrl+C, relance joe, puis recharge cette page.`;
+    warning.textContent = t("old_backend", { version: status.version || t("current_version") });
     warning.classList.remove("hidden");
   }
 }
@@ -74,14 +75,14 @@ function annotateNetworkControl(controlled) {
   // garantie globale.
   if (!Array.isArray(controlled)) return;
   const scope = controlled.length
-    ? `Pour l’instant, ce contrôle est effectif uniquement sur ${controlled.map(capitalize).join(", ")} : les autres CLI n’exposent pas de réglage réseau.`
-    : "Aucune CLI installée n’expose de réglage réseau : ce choix reste indicatif.";
+    ? t("network_control_only", { providers: controlled.map(capitalize).join(", ") })
+    : t("network_control_none");
   for (const id of ["tool-web-access-help", "project-remote-access-help"]) {
     const target = $(id);
     if (!target) continue;
     const prefix = id === "tool-web-access-help"
-      ? "Disponible par défaut."
-      : "Activé par défaut.";
+      ? t("available_default")
+      : t("enabled_default");
     target.textContent = `${prefix} ${scope}`;
   }
 }
@@ -219,14 +220,14 @@ function renderApproval(approval) {
   const card = document.createElement("article");
   card.className = "task-card approval";
   card.innerHTML = `
-    <div class="task-card-head"><strong>Autorisation demandée</strong><b>À valider</b></div>
+    <div class="task-card-head"><strong>${t("approval_requested")}</strong><b>${t("review_task")}</b></div>
     <p class="task-error">${escapeHtml(approval.message)}</p>
     <div class="task-meta"><span>${escapeHtml(approval.payload?.request || "")}</span></div>
     <div class="task-actions"></div>`;
   const actions = card.querySelector(".task-actions");
   actions.append(
-    taskAction("Refuser", () => decideApproval(approval, "refused"), "danger"),
-    taskAction("Autoriser", () => decideApproval(approval, "approved"), "primary")
+    taskAction(t("refuse"), () => decideApproval(approval, "refused"), "danger"),
+    taskAction(t("allow"), () => decideApproval(approval, "approved"), "primary")
   );
   return card;
 }
@@ -237,7 +238,7 @@ function renderPlanApproval(approval) {
   const card = document.createElement("article");
   card.className = "task-card approval plan-approval";
   card.innerHTML = `
-    <div class="task-card-head"><strong>Plan proposé</strong><b>À valider</b></div>
+    <div class="task-card-head"><strong>${t("proposed_plan")}</strong><b>${t("review_task")}</b></div>
     <div class="task-meta"><span>${escapeHtml(approval.payload?.request || "")}</span></div>
     <div class="plan-body"></div>`;
   renderMarkdown(card.querySelector(".plan-body"), approval.payload?.plan || "");
@@ -252,11 +253,11 @@ function planControls(approval) {
   wrap.className = "plan-controls";
   const notesLabel = document.createElement("label");
   notesLabel.className = "plan-notes-label";
-  notesLabel.textContent = "Modifications à apporter (facultatif)";
+  notesLabel.textContent = t("changes_optional");
   const notes = document.createElement("textarea");
   notes.className = "plan-notes";
   notes.rows = 2;
-  notes.placeholder = "Ex. commence par les tests, ne touche pas au loader…";
+  notes.placeholder = t("changes_placeholder");
   notesLabel.appendChild(notes);
   const actions = document.createElement("div");
   actions.className = "task-actions";
@@ -264,13 +265,13 @@ function planControls(approval) {
   // les deux jeux de boutons pour éviter une double validation.
   const done = () => dropPlanControls(approval.id);
   actions.append(
-    taskAction("Refuser", () => decideApproval(approval, "refused").then(done), "danger"),
-    taskAction("Planifier…", () => schedulePlan(approval)),
+    taskAction(t("refuse"), () => decideApproval(approval, "refused").then(done), "danger"),
+    taskAction(t("schedule_ellipsis"), () => schedulePlan(approval)),
     taskAction(
-      "Autoriser avec modifications",
+      t("allow_with_changes"),
       () => decideApproval(approval, "approved", notes.value.trim()).then(done)
     ),
-    taskAction("Autoriser", () => decideApproval(approval, "approved").then(done), "primary")
+    taskAction(t("allow"), () => decideApproval(approval, "approved").then(done), "primary")
   );
   wrap.append(notesLabel, actions);
   wrap.dataset.approvalId = approval.id;
@@ -308,7 +309,7 @@ async function schedulePlan(approval) {
   const steps = window.JoeMarkdown.planSteps(payload.plan);
   if (!steps.length) {
     window.alert(
-      "Ce plan n’expose aucune étape en liste : ajoute-les à la main dans le formulaire."
+      t("plan_has_no_steps")
     );
   }
   await automation.open({
@@ -343,14 +344,14 @@ async function decideApproval(approval, decision, notes = "") {
     if (approval.kind === "plan") {
       // Pas de fournisseur imposé ni d'approval_id : le routeur choisit à neuf
       // l'agent le mieux placé selon les quotas restants et la tâche.
-      const parts = [payload.request, "# Plan validé", payload.plan];
-      if (notes) parts.push("# Modifications demandées", notes);
+      const parts = [payload.request, `# ${t("validated_plan")}`, payload.plan];
+      if (notes) parts.push(`# ${t("requested_changes")}`, notes);
       // Le modèle reçoit tout (demande + plan + ajustements), mais l'historique
       // n'affiche qu'un intitulé court : le plan est déjà lisible juste au-dessus.
       await startRun(parts.join("\n\n"), approval.conversation_id, {
         ...currentRunSettings(),
         plan: false,
-        promptLabel: "Implémenter le plan validé ci-dessus."
+        promptLabel: t("implement_validated_plan")
       });
     } else {
       await startRun(
@@ -395,26 +396,26 @@ async function showTaskDiff(task) {
   const response = await joeFetch(`/api/tasks/${encodeURIComponent(task.id)}/diff`);
   const report = await response.json();
   if (!response.ok) {
-    window.alert(report.error || "Diff indisponible.");
+    window.alert(report.error || t("diff_unavailable"));
     return;
   }
   $("task-diff-title").textContent = task.title;
-  $("task-diff-stats").textContent = `${report.files.length} fichier${report.files.length === 1 ? "" : "s"} · +${report.insertions} −${report.deletions}`;
+  $("task-diff-stats").textContent = `${report.files.length} ${t(report.files.length === 1 ? "file_singular" : "file_plural")} · +${report.insertions} −${report.deletions}`;
   $("task-diff-files").innerHTML = report.files.map(file => (
     `<span><b>${escapeHtml(file.path)}</b><small>+${file.insertions} −${file.deletions}</small></span>`
-  )).join("") || "<small>Aucune modification.</small>";
-  $("task-diff-preview").textContent = report.patch_preview || "Aucun diff textuel disponible.";
+  )).join("") || `<small>${t("no_changes")}</small>`;
+  $("task-diff-preview").textContent = report.patch_preview || t("no_text_diff");
   $("task-diff-dialog").showModal();
 }
 
 async function integrateTask(task) {
-  if (!window.confirm(`Intégrer la branche ${task.branch} dans le dépôt principal ?`)) return;
+  if (!window.confirm(t("integrate_branch_confirm", { branch: task.branch }))) return;
   const response = await joeFetch(`/api/tasks/${encodeURIComponent(task.id)}/integrate`, {
     method: "POST"
   });
   const payload = await response.json();
   if (!response.ok) {
-    window.alert(payload.error || "Intégration impossible.");
+    window.alert(payload.error || t("integration_impossible"));
     return;
   }
   await loadTasks();
@@ -422,14 +423,14 @@ async function integrateTask(task) {
 
 async function deleteTask(task) {
   if (!window.confirm(
-    `Supprimer la tâche et abandonner les modifications de ${task.branch} ?`
+    t("discard_task_confirm", { branch: task.branch })
   )) return;
   const response = await joeFetch(`/api/tasks/${encodeURIComponent(task.id)}`, {
     method: "DELETE"
   });
   const payload = await response.json();
   if (!response.ok) {
-    window.alert(payload.error || "Suppression impossible.");
+    window.alert(payload.error || t("deletion_impossible"));
     return;
   }
   await loadTasks();
@@ -459,7 +460,7 @@ function renderFileLibrary() {
   const target = $("file-library");
   target.replaceChildren();
   if (!knownFiles.length) {
-    target.innerHTML = "<small>Aucun fichier dans ce projet.</small>";
+    target.innerHTML = `<small>${t("no_project_files")}</small>`;
     return;
   }
   for (const file of knownFiles) {
@@ -480,7 +481,7 @@ function renderFileLibrary() {
     remove.type = "button";
     remove.className = "file-delete";
     remove.textContent = "×";
-    remove.title = "Supprimer ce fichier";
+    remove.title = t("delete_file");
     remove.onclick = async () => {
       const response = await joeFetch(
         `/api/files/${encodeURIComponent(file.id)}?project=${encodeURIComponent(file.project_id)}`,
@@ -492,7 +493,7 @@ function renderFileLibrary() {
     download.type = "button";
     download.className = "file-download";
     download.textContent = "↗";
-    download.title = "Ouvrir ou télécharger";
+    download.title = t("open_or_download");
     download.onclick = () => window.open(
       `/api/files/${encodeURIComponent(file.id)}/download?project=${encodeURIComponent(file.project_id)}`,
       "_blank",
@@ -511,7 +512,7 @@ function renderAttachmentChips() {
     if (!file) continue;
     const chip = document.createElement("button");
     chip.type = "button";
-    chip.title = "Retirer de cette demande";
+    chip.title = t("remove_from_request");
     chip.innerHTML = `<span>${escapeHtml(file.name)}</span><b>×</b>`;
     chip.onclick = () => {
       selectedFileIds.delete(id);
@@ -544,7 +545,7 @@ async function uploadFiles(fileList) {
     });
     const payload = await response.json();
     if (!response.ok) {
-      window.alert(payload.error || `Impossible d’ajouter ${file.name}.`);
+      window.alert(payload.error || t("add_file_failed", { name: file.name }));
       continue;
     }
     selectedFileIds.add(payload.id);
@@ -564,18 +565,18 @@ async function loadDoctor() {
   dialog.showModal();
   const response = await joeFetch("/api/doctor");
   if (!response.ok) {
-    $("doctor-status").innerHTML = "<p>Diagnostic indisponible.</p>";
+    $("doctor-status").innerHTML = `<p>${t("diagnostic_unavailable")}</p>`;
     return;
   }
   const report = await response.json();
   $("doctor-status").innerHTML = `
     <p class="${report.storage?.writable ? "ok" : "error"}">
-      <b>Stockage</b><span>${report.storage?.writable ? "Prêt" : "À corriger"}</span>
+      <b>${t("storage")}</b><span>${report.storage?.writable ? t("ready") : t("needs_fix")}</span>
     </p>
     ${(report.providers || []).map(provider => `
       <p class="${provider.installed ? "ok" : "muted"}">
         <b>${escapeHtml(capitalize(provider.provider))}</b>
-        <span>${provider.installed ? escapeHtml(provider.version || "Installé") : "Non détecté"}</span>
+        <span>${provider.installed ? escapeHtml(provider.version || t("installed")) : t("not_detected")}</span>
       </p>`).join("")}`;
 }
 
@@ -675,9 +676,10 @@ async function loadCapabilities() {
 let loadUsage;
 let showQuotaNotice;
 let updateCountdowns;
+let renderUsage;
 
 function shortCommit(value) {
-  return value ? value.slice(0, 8) : "indisponible";
+  return value ? value.slice(0, 8) : t("unavailable");
 }
 
 function renderGitReport(report, runId) {
@@ -691,23 +693,23 @@ function renderGitReport(report, runId) {
   const card = document.createElement("section");
   card.className = "git-report";
   const integration = report.origin_dev_integrated === null
-    ? "état de dev inconnu"
+    ? t("dev_status_unknown")
     : report.origin_dev_integrated
-      ? "origin/dev est intégré"
-      : "origin/dev n’est pas intégré";
+      ? t("dev_integrated")
+      : t("dev_not_integrated");
   card.innerHTML = `
     <header>
-      <div><span class="eyebrow">Modifications du dépôt</span><div class="diff-summary"><strong>${report.files.length} fichier${report.files.length > 1 ? "s" : ""}</strong><span class="insertions">+${report.insertions}</span><span class="deletions">−${report.deletions}</span></div></div>
-      <span class="change-status">${report.delivery?.status === "pushed" ? "Commit et push effectués" : report.delivery?.status === "committed" ? "Commit effectué" : "Conservées"}</span>
+      <div><span class="eyebrow">${t("repository_changes")}</span><div class="diff-summary"><strong>${report.files.length} ${t(report.files.length === 1 ? "file_singular" : "file_plural")}</strong><span class="insertions">+${report.insertions}</span><span class="deletions">−${report.deletions}</span></div></div>
+      <span class="change-status">${t(report.delivery?.status === "pushed" ? "pushed" : report.delivery?.status === "committed" ? "committed" : "kept")}</span>
     </header>`;
   const details = document.createElement("details");
   details.className = "git-details";
   details.innerHTML = `
     <summary>Voir les détails</summary>
     <div class="git-facts">
-      <span>Branche <b>${escapeHtml(report.branch || "HEAD détachée")}</b></span>
-      <span>HEAD <b>${shortCommit(report.head_before)} → ${shortCommit(report.head_after)}</b>${headChanged ? " · modifié" : " · inchangé"}</span>
-      <span>origin/dev <b>${shortCommit(report.origin_dev_before)} → ${shortCommit(report.origin_dev_after)}</b>${devChanged ? " · référence actualisée" : " · inchangé"} · ${report.fetch_observed ? "fetch observé" : "aucun fetch observé"}</span>
+      <span>${t("branch")} <b>${escapeHtml(report.branch || t("detached_head"))}</b></span>
+      <span>HEAD <b>${shortCommit(report.head_before)} → ${shortCommit(report.head_after)}</b> · ${t(headChanged ? "changed" : "unchanged")}</span>
+      <span>origin/dev <b>${shortCommit(report.origin_dev_before)} → ${shortCommit(report.origin_dev_after)}</b> · ${t(devChanged ? "reference_updated" : "unchanged")} · ${t(report.fetch_observed ? "fetch_observed" : "no_fetch_observed")}</span>
       <span>${integration}</span>
       ${report.delivery ? `<span>Livraison <b>${escapeHtml(report.delivery.message || report.delivery.status)}</b>${report.delivery.commit ? ` · ${shortCommit(report.delivery.commit)}` : ""}</span>` : ""}
     </div>`;
@@ -715,14 +717,14 @@ function renderGitReport(report, runId) {
     const hint = document.createElement("p");
     hint.className = "git-selection-hint";
     hint.textContent = report.rejectable
-      ? "Coche les fichiers que tu souhaites rejeter."
-      : "Modifications conservées automatiquement.";
+      ? t("reject_files_help")
+      : t("changes_kept_automatically");
     details.appendChild(hint);
     const list = document.createElement("div");
     list.className = "diff-files";
     for (const file of report.files) {
       const row = document.createElement("label");
-      row.innerHTML = `${report.rejectable ? `<input type="checkbox" value="${escapeHtml(file.path)}">` : ""}<code>${escapeHtml(file.path)}</code><span class="insertions">+${file.insertions}</span><span class="deletions">−${file.deletions}</span>${file.preexisting ? '<small title="Déjà modifié avant la tâche">préexistant</small>' : ""}`;
+      row.innerHTML = `${report.rejectable ? `<input type="checkbox" value="${escapeHtml(file.path)}">` : ""}<code>${escapeHtml(file.path)}</code><span class="insertions">+${file.insertions}</span><span class="deletions">−${file.deletions}</span>${file.preexisting ? `<small title="${t("preexisting_help")}">${t("preexisting")}</small>` : ""}`;
       list.appendChild(row);
     }
     details.appendChild(list);
@@ -731,7 +733,7 @@ function renderGitReport(report, runId) {
     const preview = document.createElement("details");
     preview.className = "diff-preview";
     const summaryNode = document.createElement("summary");
-    summaryNode.textContent = "Voir le diff complet";
+    summaryNode.textContent = t("view_full_diff");
     const patch = document.createElement("pre");
     patch.textContent = report.patch_preview;
     preview.append(summaryNode, patch);
@@ -740,26 +742,26 @@ function renderGitReport(report, runId) {
   const actions = document.createElement("div");
   actions.className = "git-actions";
   const keep = document.createElement("button");
-  keep.textContent = "Conserver tout";
+  keep.textContent = t("keep_all");
   keep.onclick = () => {
     keep.disabled = true;
-    keep.textContent = "Tout est conservé";
+    keep.textContent = t("all_kept");
     details.open = false;
   };
   const rejectButton = document.createElement("button");
   rejectButton.className = "reject-changes";
-  rejectButton.textContent = "Rejeter la sélection";
+  rejectButton.textContent = t("reject_selection");
   rejectButton.disabled = !report.rejectable || !runId;
   rejectButton.title = report.rejectable
-    ? "Restaurer les fichiers sélectionnés à leur état précédent"
-    : report.reject_reason || "Restauration automatique indisponible";
+    ? t("restore_selected")
+    : report.reject_reason || t("automatic_restore_unavailable");
   rejectButton.onclick = async () => {
     const files = [...details.querySelectorAll('.diff-files input:checked')].map((input) => input.value);
     if (!files.length) {
-      window.alert("Sélectionne au moins un fichier à rejeter.");
+      window.alert(t("choose_rejected_file"));
       return;
     }
-    if (!window.confirm(`Rejeter ${files.length} fichier${files.length > 1 ? "s" : ""} sélectionné${files.length > 1 ? "s" : ""} ?`)) return;
+    if (!window.confirm(t("reject_files_confirm", { count: files.length }))) return;
     const response = await joeFetch(`/api/runs/${runId}/reject`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -772,7 +774,7 @@ function renderGitReport(report, runId) {
     }
     rejectButton.disabled = true;
     keep.disabled = true;
-    card.querySelector(".change-status").textContent = "Sélection rejetée";
+    card.querySelector(".change-status").textContent = t("selection_rejected");
   };
   actions.append(keep, rejectButton);
   if (!report.rejectable && report.files.length) {
@@ -944,9 +946,9 @@ function copyButton(getText) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "copy-button";
-  button.textContent = "⧉ Copier";
-  button.title = "Copier dans le presse-papiers";
-  button.setAttribute("aria-label", "Copier dans le presse-papiers");
+  button.textContent = t("copy");
+  button.title = t("copy_clipboard");
+  button.setAttribute("aria-label", t("copy_clipboard"));
   button.onclick = async event => {
     event.preventDefault();
     event.stopPropagation();
@@ -961,10 +963,10 @@ function copyButton(getText) {
       document.execCommand("copy");
       area.remove();
     }
-    button.textContent = "✓ Copié";
+    button.textContent = t("copied");
     button.classList.add("copied");
     setTimeout(() => {
-      button.textContent = "⧉ Copier";
+      button.textContent = t("copy");
       button.classList.remove("copied");
     }, 1200);
   };
@@ -976,7 +978,7 @@ function showRoute(event) {
   const target = `${event.primary}${event.reviewer ? ` → ${event.reviewer}` : ""}`;
   // Le modèle effectivement appelé fait partie de l'information attendue : une
   // action locale doit dire qu'aucun modèle ne tourne, pas rester muette.
-  const model = event.local_action ? "aucun modèle appelé" : event.model;
+  const model = event.local_action ? t("no_model_called") : event.model;
   badge.textContent = [
     event.mode?.toUpperCase(),
     target,
@@ -990,8 +992,8 @@ function describeRouterDecision(event) {
   const classifier = event.classifier;
   if (!classifier) {
     return event.decided_by === "lexical"
-      ? "Routage lexical déterministe — aucun modèle de routage appelé."
-      : `Routage lexical · ${event.reason || "règles internes"}`;
+      ? t("lexical_route_no_model")
+      : t("lexical_route", { reason: event.reason || t("internal_rules") });
   }
   return [
     classifier.classifier_provider && classifier.classifier_model
@@ -1010,9 +1012,9 @@ function describeRouterDecision(event) {
 function primaryStageLabel(run, localAction) {
   // Un même libellé à l'ouverture et à la clôture de l'étape, sinon le
   // pipeline change de nom en cours de route.
-  if ((localAction || run?.localAction) === "create_skill") return "Création du skill";
-  if ((localAction || run?.localAction) === "create_autonomous_campaign") return "Création d’Autonomous";
-  if (run?.intent === "modify") return "Implémentation";
+  if ((localAction || run?.localAction) === "create_skill") return t("create_skill_stage");
+  if ((localAction || run?.localAction) === "create_autonomous_campaign") return t("autonomous_creation");
+  if (run?.intent === "modify") return t("implementation");
   if (run?.intent === "analyze") return "Analyse";
   return "Traitement";
 }
@@ -1027,7 +1029,7 @@ function renderRouterDecision(event) {
   const row = document.createElement("div");
   row.className = "activity-row";
   row.dataset.signature = signature;
-  row.innerHTML = `<i></i><div><strong>Routage</strong><span>${escapeHtml(detail)}</span></div>`;
+  row.innerHTML = `<i></i><div><strong>${t("routing_label")}</strong><span>${escapeHtml(detail)}</span></div>`;
   agent.activity.appendChild(row);
   while (agent.activity.children.length > 12) {
     agent.activity.firstElementChild.remove();
@@ -1038,7 +1040,7 @@ function ensureAgent(name) {
   if (state.agents.has(name)) return state.agents.get(name);
   const card = document.createElement("div");
   card.className = "agent-card";
-  card.innerHTML = `<div class="agent-head"><span class="agent-name">${escapeHtml(name)}</span><span class="agent-meta hidden"></span><span class="agent-status">En attente</span></div><p class="agent-heartbeat hidden"></p><div class="agent-activity"></div><pre class="agent-output"></pre>`;
+  card.innerHTML = `<div class="agent-head"><span class="agent-name">${escapeHtml(name)}</span><span class="agent-meta hidden"></span><span class="agent-status">${t("waiting")}</span></div><p class="agent-heartbeat hidden"></p><div class="agent-activity"></div><pre class="agent-output"></pre>`;
   $("agents").appendChild(card);
   const agent = {
     card,
@@ -1092,9 +1094,9 @@ function renderWorkflowUpdate(event, finalBubble, runId) {
     capitalize(event.provider),
     event.model || "",
     event.effort ? `effort ${event.effort}` : "",
-    event.fallback_from ? `relais de ${capitalize(event.fallback_from)}` : ""
+    event.fallback_from ? t("fallback_from_lower", { provider: capitalize(event.fallback_from) }) : ""
   ].filter(Boolean).join(" · ");
-  stage.innerHTML = `<summary><span>${escapeHtml(event.label)}</span><b>${escapeHtml(providerDetails)} · ${complete ? "terminé" : failed ? "échec" : "en cours"}</b></summary><div class="workflow-opinion"></div>`;
+  stage.innerHTML = `<summary><span>${escapeHtml(event.label)}</span><b>${escapeHtml(providerDetails)} · ${t(complete ? "done_lower" : failed ? "failed_lower" : "running_lower")}</b></summary><div class="workflow-opinion"></div>`;
   if ((complete || failed) && event.content) {
     renderMarkdown(stage.querySelector(".workflow-opinion"), event.content);
     stage.querySelector("summary").appendChild(
@@ -1106,22 +1108,22 @@ function renderWorkflowUpdate(event, finalBubble, runId) {
 function workflowLabels(mode) {
   if (mode === "consensus") {
     return {
-      running: "Consensus en cours",
-      complete: "Consensus terminé",
-      detail: "Avis et examens croisés"
+      running: t("consensus_running"),
+      complete: t("consensus_complete"),
+      detail: t("consensus_detail")
     };
   }
   if (mode === "review") {
     return {
-      running: "Implémentation contrôlée",
-      complete: "Implémentation contrôlée terminée",
-      detail: "Réalisation, revue et correction"
+      running: t("review_running"),
+      complete: t("review_complete"),
+      detail: t("review_detail")
     };
   }
   return {
-    running: "Exécution en cours",
-    complete: "Exécution terminée",
-    detail: "Traitement par un agent"
+    running: t("execution_running"),
+    complete: t("execution_complete"),
+    detail: t("execution_detail")
   };
 }
 
@@ -1138,7 +1140,7 @@ function failRunningWorkflow() {
     stage.classList.remove("running");
     stage.classList.add("failed");
     const status = stage.querySelector("summary b");
-    if (status) status.textContent = "Échec";
+    if (status) status.textContent = t("failed");
   }
   // Arrêter toutes les animations d'agents (heartbeats)
   for (const heartbeat of document.querySelectorAll(".agent-heartbeat")) {
@@ -1174,9 +1176,9 @@ function updateWorkflowProviderMetadata(provider, metadata) {
     const status = stage.querySelector("summary b");
     if (status?.textContent.toLowerCase().startsWith(provider)) {
       const relay = stage.dataset.fallbackFrom
-        ? ` · relais de ${capitalize(stage.dataset.fallbackFrom)}`
+        ? ` · ${t("fallback_from_lower", { provider: capitalize(stage.dataset.fallbackFrom) })}`
         : "";
-      status.textContent = `${capitalize(provider)} · ${metadata}${relay} · en cours`;
+      status.textContent = `${capitalize(provider)} · ${metadata}${relay} · ${t("running_lower")}`;
     }
   }
 }
@@ -1186,20 +1188,22 @@ function updateWorkflowFallback(provider, fallback) {
     const status = stage.querySelector("summary b");
     if (!status?.textContent.toLowerCase().startsWith(provider)) continue;
     stage.dataset.fallbackFrom = provider;
-    status.textContent = `${capitalize(fallback)} · relais de ${capitalize(provider)} · en cours`;
+    status.textContent = `${capitalize(fallback)} · ${t("fallback_from_lower", { provider: capitalize(provider) })} · ${t("running_lower")}`;
   }
 }
 
 ({
   loadUsage,
   showQuotaNotice,
-  updateCountdowns
+  updateCountdowns,
+  renderUsage
 } = window.createJoeUsage({
   state,
   $,
   escapeHtml,
   capitalize,
   addMessage,
+  translate: t,
   fetcher: joeFetch
 }));
 
@@ -1281,9 +1285,9 @@ function handleEvent(conversationId, event, finalBubble) {
         for (const node of panel.agentNodes) {
           node.classList.remove("active");
           const status = node.querySelector(".agent-status");
-          if (status) status.textContent = event.type === "complete" ? "Terminé" : "Interrompu";
+          if (status) status.textContent = t(event.type === "complete" ? "done" : "interrupted");
         }
-        panel.runState = event.type === "complete" ? "Terminé" : "Échec";
+        panel.runState = t(event.type === "complete" ? "done" : "failed");
         panel.runStateClass = `run-state ${event.type === "complete" ? "done" : "idle"}`;
       }
     }
@@ -1311,17 +1315,17 @@ function handleEvent(conversationId, event, finalBubble) {
     // provider_start, et la carte restait donc sans modèle ni statut.
     setAgentMeta(primary, {
       model: event.local_action
-        ? "action locale · aucun modèle appelé"
+        ? t("local_action_no_model")
         : (event.model || undefined),
       effort: event.local_action ? "" : (event.effort || undefined)
     });
     if (event.local_action) {
-      primary.status.textContent = "Action locale Joe";
+      primary.status.textContent = t("joe_local_action");
     }
     renderRouterDecision(event);
     if (event.reviewer) ensureAgent(event.reviewer);
     setSummaryPending(finalBubble, true);
-    finalBubble.textContent = "Synthèse finale en attente…";
+    finalBubble.textContent = t("final_synthesis_pending");
     if (event.mode === "fast") {
       const label = primaryStageLabel(
         { intent: event.intent },
@@ -1338,12 +1342,12 @@ function handleEvent(conversationId, event, finalBubble) {
   } else if (event.type === "provider_start") {
     const agent = ensureAgent(event.provider);
     agent.card.classList.add("active");
-    agent.status.textContent = "En cours";
+    agent.status.textContent = t("running");
     agent.heartbeat.textContent = "";
     agent.heartbeat.classList.add("hidden");
     const metadata = setAgentMeta(agent, {
-      model: event.model || "modèle par défaut",
-      effort: event.effort || "défaut"
+      model: event.model || t("default_model"),
+      effort: event.effort || t("default_effort")
     });
     updateWorkflowProviderMetadata(event.provider, metadata);
   } else if (event.type === "activity") {
@@ -1379,7 +1383,7 @@ function handleEvent(conversationId, event, finalBubble) {
     const agent = ensureAgent(event.provider);
     agent.card.classList.remove("active");
     agent.heartbeat.classList.add("hidden");
-    agent.status.textContent = event.ok ? "Terminé" : `Échec · ${event.error || "inconnu"}`;
+    agent.status.textContent = event.ok ? t("done") : `${t("failed")} · ${event.error || t("unknown")}`;
     if (!structuredWorkflow && event.ok) {
       renderWorkflowUpdate({
         mode: activeRun?.mode || "fast",
@@ -1394,24 +1398,24 @@ function handleEvent(conversationId, event, finalBubble) {
     agent.card.classList.remove("active");
     agent.heartbeat.classList.add("hidden");
     agent.status.textContent = event.error === "quota"
-      ? `Quota épuisé · relais ${capitalize(event.fallback)}`
-      : `Indisponible · relais ${capitalize(event.fallback)}`;
+      ? t("quota_exhausted_fallback", { provider: capitalize(event.fallback) })
+      : t("unavailable_fallback", { provider: capitalize(event.fallback) });
     const fallback = ensureAgent(event.fallback);
-    fallback.status.textContent = `Relais de ${capitalize(event.provider)}`;
+    fallback.status.textContent = t("relay_from", { provider: capitalize(event.provider) });
     updateWorkflowFallback(event.provider, event.fallback);
   } else if (event.type === "quota_admission") {
     finalBubble.textContent += `\n${event.message}`;
   } else if (event.type === "quota_scheduled") {
     const when = new Date(event.retry_at * 1000).toLocaleString();
     setSummaryPending(finalBubble, false);
-    finalBubble.textContent = `En attente de quota · reprise automatique ${when}`;
-    $("run-state").textContent = "En attente";
+    finalBubble.textContent = t("quota_wait", { when });
+    $("run-state").textContent = t("waiting");
     $("run-state").className = "run-state running";
     loadTasks().catch(() => {});
   } else if (event.type === "evidence") {
     const row = document.createElement("div");
     row.className = `evidence-row ${event.status}`;
-    const labels = { verified: "Vérifié", inferred: "Inféré", refused: "Refusé" };
+    const labels = { verified: t("verified"), inferred: t("inferred"), refused: t("refused") };
     row.innerHTML = `<b>${labels[event.status] || escapeHtml(event.status)}</b><span>${escapeHtml(event.label)} · ${escapeHtml(event.detail || "")}</span>`;
     $("evidence-log").appendChild(row);
   } else if (event.type === "quota_notice") {
@@ -1443,7 +1447,7 @@ function handleEvent(conversationId, event, finalBubble) {
     loadTasks().catch(() => {});
     $("request").value = prompt;
     resizeComposer();
-    $("run-state").textContent = "Interrompu";
+    $("run-state").textContent = t("interrupted");
     loadConversations(false).then(() => selectConversation(conversationId));
   }
   scrollIfFollowing(conversationViewport, followConversation);
@@ -1474,7 +1478,7 @@ function finishRun(conversationId, ok) {
 function currentRunSettings() {
   let model = $("model").value;
   if (model === "__custom__") {
-    model = window.prompt("Identifiant exact du modèle :") || "";
+    model = window.prompt(t("exact_model_prompt")) || "";
   }
   return {
     agent: $("agent").value,
@@ -1501,7 +1505,7 @@ function renderPromptQueue() {
   if (!queue.length) return;
   const heading = document.createElement("div");
   heading.className = "queue-heading";
-  heading.innerHTML = `<strong>File d’attente</strong><span>${queue.length} prompt${queue.length > 1 ? "s" : ""}</span>`;
+  heading.innerHTML = `<strong>${t("queue_title")}</strong><span>${t("prompt_count", { count: queue.length })}</span>`;
   target.appendChild(heading);
   queue.forEach((item, index) => {
     const row = document.createElement("div");
@@ -1510,7 +1514,7 @@ function renderPromptQueue() {
     text.textContent = item.request;
     const remove = document.createElement("button");
     remove.type = "button";
-    remove.title = "Retirer de la file";
+    remove.title = t("remove_from_queue");
     remove.textContent = "×";
     remove.onclick = () => {
       queue.splice(index, 1);
@@ -1580,8 +1584,8 @@ async function startRun(
   }
   const finalBubble = visible
     ? addMessage(
-        "Joe · synthèse",
-        "Routage local en cours…",
+        t("joe_summary"),
+        t("local_routing"),
         "assistant",
         { forceScroll: true }
       )
@@ -1606,7 +1610,7 @@ async function startRun(
     const pending = await response.json();
     const choice = await confirmFullAccess();
     if (!choice) {
-      failVisibly("Demande annulée : accès complet refusé.");
+      failVisibly(t("full_access_denied"));
       await loadTasks();
       return;
     }
@@ -1691,7 +1695,7 @@ function attachRun(conversationId, runId, request, finalBubble = null) {
     stream.close();
     if (state.runs.has(conversationId)) {
       if (activeRun.bubble) {
-        activeRun.bubble.textContent = "Connexion au flux interrompue · vérification du run côté serveur…";
+        activeRun.bubble.textContent = t("stream_interrupted");
       }
       activeRun.stream = null;
       setTimeout(() => reconcileRun(conversationId, runId), 1200);
@@ -1763,8 +1767,8 @@ async function reconcileRun(conversationId, previousRunId, attempt = 0) {
   }
   if (local?.bubble) {
     local.bubble.textContent = previousRunId
-      ? "La tâche a été interrompue par le redémarrage de Joe."
-      : "Aucune tâche active côté serveur.";
+      ? t("interrupted_by_restart")
+      : t("no_active_task");
   }
   if (conversationId === state.activeConversationId) {
     finishRun(conversationId, false);
@@ -1913,7 +1917,7 @@ $("open-project-skills").onclick = () => {
     item => item.id === conversation?.project_id
   );
   if (!project) {
-    window.alert("Sélectionne d’abord une conversation liée à un projet.");
+    window.alert(t("select_project_conversation"));
     return;
   }
   $("preferences-dialog").close();
@@ -2066,7 +2070,7 @@ function reportStartupFailure(error) {
   console.error("Joe initialization failed", error);
   const banner = $("restart-warning");
   if (!banner) return;
-  banner.textContent = `Joe n’a pas pu charger cette interface : ${error.message}`;
+  banner.textContent = t("ui_load_failed", { error: error.message });
   banner.classList.remove("hidden");
 }
 
@@ -2082,7 +2086,7 @@ window.JoeAuth.pairBrowser()
       state.capabilities = {};
     });
     loadUsage().catch(() => {
-      $("usage").innerHTML = '<span class="usage-loading">Quotas momentanément indisponibles</span>';
+      $("usage").innerHTML = `<span class="usage-loading">${t("quotas_temporarily_unavailable")}</span>`;
     });
   })
   .catch(error => {

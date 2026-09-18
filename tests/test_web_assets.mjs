@@ -88,6 +88,17 @@ test("keeps French and English catalogs in lockstep", () => {
   }
 });
 
+test("interpolates translated dynamic labels", () => {
+  assert.equal(
+    translate("en", "reset_in", { duration: "2 h" }),
+    "Reset in 2 h"
+  );
+  assert.equal(
+    translate("fr", "old_backend", { version: "1.2.3" }),
+    "Le serveur Joe 1.2.3 utilise encore un ancien backend. Arrête-le avec Ctrl+C, relance joe, puis recharge cette page."
+  );
+});
+
 test("all translation markers in the page exist in both catalogs", () => {
   const html = readFileSync(new URL("../src/joe/web_assets/index.html", import.meta.url), "utf8");
   const keys = [...html.matchAll(/data-i18n(?:-placeholder|-title|-aria-label)?="([^"]+)"/g)]
