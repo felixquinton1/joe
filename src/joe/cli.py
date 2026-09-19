@@ -445,7 +445,7 @@ def _active_runs(url: str) -> list[dict] | None:
     from .auth import auth_token_path
 
     try:
-        token = auth_token_path().read_text().strip()
+        token = auth_token_path().read_text(encoding="utf-8").strip()
         request = urllib.request.Request(
             f"{url}/api/runs/active",
             headers={"Authorization": f"Bearer {token}"},
@@ -549,7 +549,7 @@ def _auth(argv: list[str]) -> int:
     from .auth import auth_token_path
 
     try:
-        current = auth_token_path().read_text().strip()
+        current = auth_token_path().read_text(encoding="utf-8").strip()
         request = urllib.request.Request(
             f"{url}/api/auth/rotate",
             data=b"{}",

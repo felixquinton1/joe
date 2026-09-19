@@ -505,21 +505,40 @@ def test_consensus_emits_structured_completed_opinions(tmp_path):
 
 
 def test_consensus_runs_proposals_and_reviews_in_parallel(tmp_path):
+    # On compte les runs simultanés plutôt que de chronométrer : un seuil de
+    # durée échouait sur un runner chargé alors que l'exécution restait bien
+    # parallèle. Deux runs en même temps prouvent le parallélisme, quelle que
+    # soit la vitesse de la machine.
+    import threading
+
+    concurrency = {"active": 0, "peak": 0}
+    lock = threading.Lock()
+
+    class TrackingProvider(FakeProvider):
+        def run(self, *args, **kwargs):
+            with lock:
+                concurrency["active"] += 1
+                concurrency["peak"] = max(concurrency["peak"], concurrency["active"])
+            try:
+                return super().run(*args, **kwargs)
+            finally:
+                with lock:
+                    concurrency["active"] -= 1
+
     providers = {
-        "codex": FakeProvider("codex", delay=0.12),
-        "claude": FakeProvider("claude", delay=0.12),
-        "gemini": FakeProvider("gemini"),
-        "copilot": FakeProvider("copilot"),
+        "codex": TrackingProvider("codex", delay=0.12),
+        "claude": TrackingProvider("claude", delay=0.12),
+        "gemini": TrackingProvider("gemini"),
+        "copilot": TrackingProvider("copilot"),
     }
     orchestrator = Orchestrator(tmp_path, providers=providers)
 
-    started = time.monotonic()
     orchestrator.execute(
         "important",
         Route(Intent.ANALYZE, Mode.CONSENSUS, "codex"),
     )
 
-    assert time.monotonic() - started < 0.4
+    assert concurrency["peak"] == 2
 
 
 def test_consensus_marks_each_proposal_complete_without_waiting_for_peer(

@@ -1,6 +1,20 @@
+import os
+import stat
+
 import pytest
 
 from joe.provider_health import clear_cooldowns
+
+
+def assert_mode(path, expected):
+    """Assert POSIX permission bits, where they exist.
+
+    Windows n'a pas de bits de permission : un fichier y hérite des ACL du
+    profil utilisateur, et `chmod` n'y bascule que la lecture seule. Le mode
+    lu vaut alors 0o666 quoi que Joe ait demandé, et l'assertion n'a pas de sens.
+    """
+    if os.name != "nt":
+        assert stat.S_IMODE(path.stat().st_mode) == expected
 
 
 @pytest.fixture(autouse=True)

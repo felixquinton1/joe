@@ -1,8 +1,7 @@
 import http.client
 import json
-import stat
 
-from conftest import build_test_server
+from conftest import assert_mode, build_test_server
 
 from joe.auth import load_or_create_token, required_role, rotate_token
 
@@ -35,12 +34,12 @@ def test_local_token_is_stable_and_private(tmp_path):
 
     assert first == second
     assert len(first) >= 32
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert_mode(path, 0o600)
 
     rotated = rotate_token(path)
     assert rotated != first
     assert load_or_create_token(path) == rotated
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert_mode(path, 0o600)
 
 
 def test_capability_matrix_is_centralized():

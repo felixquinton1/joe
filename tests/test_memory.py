@@ -1,9 +1,9 @@
 import json
 import os
-import stat
 import threading
 
 from joe.memory import ProjectMemory, redact
+from conftest import assert_mode
 
 
 def test_memory_is_created_and_active_files_are_rewritten(tmp_path):
@@ -79,8 +79,8 @@ def test_logs_redact_common_secret_shapes(tmp_path):
     assert "super-secret" not in path.read_text()
     assert "abc" not in path.read_text()
     assert "[REDACTED]" in redact("token:abc")
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
-    assert stat.S_IMODE(memory.root.stat().st_mode) == 0o700
+    assert_mode(path, 0o600)
+    assert_mode(memory.root, 0o700)
 
 
 def test_active_memory_redacts_request(tmp_path):

@@ -38,7 +38,11 @@ def test_web_shell_renders_in_headless_chromium(tmp_path, size):
                 f"http://127.0.0.1:{server.server_port}/",
             ],
             capture_output=True,
-            timeout=25,
+            # Le premier lancement d'un Chromium en snap monte son image avant
+            # de rendre quoi que ce soit : 25 s suffisaient en local, pas sur un
+            # runner neuf. Une expiration reste un échec, pas un saut : elle
+            # pourrait aussi trahir une page qui ne finit jamais de charger.
+            timeout=90,
             check=False,
         )
         stderr = result.stderr.decode(errors="replace")

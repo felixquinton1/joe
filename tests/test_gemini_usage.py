@@ -2,6 +2,7 @@ import json
 import threading
 
 from joe.usage import _gemini_status, record_gemini_usage
+from conftest import assert_mode
 
 
 def test_gemini_usage_accumulates_headless_stats(tmp_path):
@@ -27,7 +28,7 @@ def test_gemini_usage_accumulates_headless_stats(tmp_path):
     day = next(iter(payload["days"].values()))
     assert day["tokens"] == 240
     assert day["requests"] == 2
-    assert path.stat().st_mode & 0o777 == 0o600
+    assert_mode(path, 0o600)
 
 
 def test_gemini_status_exposes_metrics_without_inventing_remaining_quota(

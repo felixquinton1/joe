@@ -11,6 +11,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from .text_encoding import read_utf8_compatible
+
 
 def claude_status(
     path: Path | None,
@@ -21,7 +23,7 @@ def claude_status(
 ) -> dict[str, Any]:
     cache_path = path or Path.home() / ".claude.json"
     try:
-        payload = json.loads(cache_path.read_text())
+        payload = json.loads(read_utf8_compatible(cache_path))
         cached = payload["cachedUsageUtilization"]
         fetched_at = float(cached["fetchedAtMs"]) / 1000
         utilization = cached["utilization"]
@@ -310,7 +312,7 @@ def claude_plan(payload: dict[str, Any]) -> str | None:
 def local_claude_plan(path: Path | None = None) -> str | None:
     target = path or Path.home() / ".claude.json"
     try:
-        payload = json.loads(target.read_text())
+        payload = json.loads(read_utf8_compatible(target))
     except (OSError, json.JSONDecodeError):
         return None
     return claude_plan(payload)

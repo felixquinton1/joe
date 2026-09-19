@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-from enum import StrEnum
+from enum import Enum
 from typing import Any
 
 
-class AutonomousState(StrEnum):
+# `StrEnum` n'existe qu'à partir de Python 3.11, alors que Joe déclare 3.10 :
+# l'import de ce module faisait planter `joe web` au démarrage. `__str__` rend
+# la valeur comme le faisait `StrEnum` — `AutonomousState(str(état))` en dépend.
+class AutonomousState(str, Enum):
+    def __str__(self) -> str:
+        return self.value
+
     PREPARING = "preparing"
     READY = "ready"
     RESEARCHING = "researching"

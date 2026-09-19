@@ -3,6 +3,7 @@ import json
 import pytest
 
 from joe.conversations import CURRENT_SCHEMA_VERSION, ConversationStore
+from conftest import assert_mode
 
 
 def test_conversation_messages_settings_and_pin_persist(tmp_path):
@@ -420,7 +421,7 @@ def test_history_recovers_from_atomic_backup(tmp_path):
     recovered = ConversationStore(root, runs).get(conversation["id"])
 
     assert recovered["messages"][0]["content"] == "Message préservé"
-    assert store.backup_path.stat().st_mode & 0o777 == 0o600
+    assert_mode(store.backup_path, 0o600)
 
     store.path.unlink()
     restored = ConversationStore(root, runs).get(conversation["id"])
@@ -474,7 +475,7 @@ def test_one_daily_backup_is_kept_outside_the_project(tmp_path):
 
     daily = list((backup.parent / "daily").glob("*.json"))
     assert len(daily) == 1
-    assert daily[0].stat().st_mode & 0o777 == 0o600
+    assert_mode(daily[0], 0o600)
 def test_project_trash_is_reversible_and_never_deletes_workspace(tmp_path):
     root = tmp_path / ".agentflow"
     runs = root / "runs"

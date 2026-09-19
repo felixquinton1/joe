@@ -110,7 +110,7 @@ def gemini_status(
     auth_type = gemini_auth_type(settings_path)
     quota_description = gemini_quota_description(auth_type)
     try:
-        payload = json.loads(target.read_text())
+        payload = json.loads(read_utf8_compatible(target))
     except (OSError, json.JSONDecodeError):
         return {
             "provider": "gemini",
@@ -157,7 +157,7 @@ def gemini_status(
 def gemini_auth_type(path: Path | None = None) -> str | None:
     target = path or Path.home() / ".gemini" / "settings.json"
     try:
-        payload = json.loads(target.read_text())
+        payload = json.loads(read_utf8_compatible(target))
     except (OSError, json.JSONDecodeError):
         return None
     selected = payload.get("security", {}).get("auth", {}).get("selectedType")

@@ -245,7 +245,7 @@ class WorktreeManager:
     def _contains_conflict_markers(path: Path, conflicts: list[str]) -> bool:
         for relative in conflicts:
             try:
-                content = (path / relative).read_text(errors="replace")
+                content = (path / relative).read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
             if "<<<<<<< " in content or ">>>>>>> " in content:
@@ -255,6 +255,6 @@ class WorktreeManager:
 
 def _line_count(path: Path) -> int:
     try:
-        return len(path.read_text(errors="replace").splitlines())
+        return len(path.read_text(encoding="utf-8", errors="replace").splitlines())
     except OSError:
         return 0

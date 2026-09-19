@@ -347,7 +347,7 @@ def _numstat(value: str, preexisting: frozenset[str]) -> list[dict[str, Any]]:
 
 def _line_count(path: Path) -> int:
     try:
-        return len(path.read_text(errors="replace").splitlines())
+        return len(path.read_text(encoding="utf-8", errors="replace").splitlines())
     except OSError:
         return 0
 

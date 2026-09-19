@@ -102,7 +102,7 @@ def _storage_status(project: Path) -> dict[str, Any]:
     try:
         agentflow.mkdir(parents=True, exist_ok=True)
         probe = agentflow / ".doctor.tmp"
-        probe.write_text("ok")
+        probe.write_text("ok", encoding="utf-8")
         probe.unlink()
         return {"writable": True, "path": str(agentflow), "message": None}
     except OSError as exc:

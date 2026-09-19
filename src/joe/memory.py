@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .provider_registry import default_fallbacks
+from .text_encoding import read_utf8_compatible
 
 DEFAULT_CONFIG = {
     "version": 1,
@@ -107,7 +108,7 @@ class ProjectMemory:
         with _MEMORY_LOCK:
             self.ensure()
             try:
-                loaded = json.loads((self.root / "config.yaml").read_text())
+                loaded = json.loads(read_utf8_compatible(self.root / "config.yaml"))
             except (OSError, json.JSONDecodeError):
                 loaded = {}
             return _deep_merge(DEFAULT_CONFIG, loaded)
@@ -121,7 +122,7 @@ class ProjectMemory:
                 RESPONSE_ORGANIZATION.strip(),
             ]
             for filename in ("project.md", "session.md", "handoff.md"):
-                text = (self.root / filename).read_text(errors="replace")
+                text = (self.root / filename).read_text(encoding="utf-8", errors="replace")
                 sections.append(f"# {filename}\n{text.strip()}")
             instructions = self._instructions()
             if instructions:
@@ -135,7 +136,7 @@ class ProjectMemory:
                 return None
             match = re.search(
                 r"^Provider:\s*(\w+)",
-                path.read_text(),
+                read_utf8_compatible(path),
                 re.MULTILINE,
             )
             return match.group(1) if match else None
@@ -216,7 +217,7 @@ class ProjectMemory:
         # every provider's prompt.
         agents = self.project / "AGENTS.md"
         if agents.exists():
-            chunks.append(f"## AGENTS.md\n{agents.read_text(errors='replace')}")
+            chunks.append(f"## AGENTS.md\n{agents.read_text(encoding='utf-8', errors='replace')}")
         from .skills import global_skills_root
 
         skill_roots = [
@@ -239,14 +240,14 @@ class ProjectMemory:
                 if not path.is_file() or path.name.startswith("."):
                     continue
                 try:
-                    content = path.read_text(errors="replace")
+                    content = path.read_text(encoding="utf-8", errors="replace")
                 except OSError:
                     continue
                 remaining = 12000 - total
                 if remaining <= 0:
                     break
                 content = content[:remaining]
-                chunks.append(f"## Shared skill: {path.relative_to(root)}\n{content}")
+                chunks.append(f"## Shared skill: {path.relative_to(root).as_posix()}\n{content}")
                 total += len(content)
         return "\n\n".join(chunks)
 
