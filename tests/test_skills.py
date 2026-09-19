@@ -313,7 +313,10 @@ def test_promotion_strips_the_import_header_from_a_windows_file(tmp_path, monkey
     (source / "SKILL.md").write_text("Toujours écrire des tests ciblés.", encoding="utf-8")
     import_skill(project, source, name="conventions")
     imported = project / ".agentflow" / "skills" / "conventions" / "SKILL.md"
-    imported.write_bytes(imported.read_bytes().replace(b"\n", b"\r\n"))
+    # Normaliser d'abord : sous Windows le fichier porte déjà des `\r\n`, et
+    # les convertir une seconde fois produirait des `\r\r\n`.
+    lines = imported.read_bytes().replace(b"\r\n", b"\n")
+    imported.write_bytes(lines.replace(b"\n", b"\r\n"))
 
     promoted = promote_skill(project, "conventions")
 
