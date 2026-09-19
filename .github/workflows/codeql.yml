@@ -13,10 +13,16 @@ on:
 jobs:
   analyze:
     name: Analyse · ${{ matrix.language }}
+    # Le code scanning n'est gratuit que sur un dépôt public : sur un dépôt
+    # privé sans GitHub Advanced Security, l'envoi des résultats échoue et la
+    # vérification reste rouge. L'analyse s'active d'elle-même à la publication.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     permissions:
       security-events: write
       contents: read
+      # Lecture du run courant, sans laquelle l'action échoue.
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -25,7 +31,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: github/codeql-action/init@v3
         with:
-          language: ${{ matrix.language }}
+          languages: ${{ matrix.language }}
           queries: security-and-quality
       - uses: github/codeql-action/analyze@v3
         with:
