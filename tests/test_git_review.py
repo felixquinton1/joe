@@ -9,7 +9,7 @@ def git(project, *args):
         cwd=project,
         text=True,
         capture_output=True,
-        check=True,
+        check=True, encoding="utf-8"
     )
 
 
@@ -18,7 +18,7 @@ def repository(tmp_path):
     git(tmp_path, "config", "user.email", "joe@example.test")
     git(tmp_path, "config", "user.name", "Joe Tests")
     tracked = tmp_path / "tracked.txt"
-    tracked.write_text("one\n")
+    tracked.write_text("one\n", encoding="utf-8")
     git(tmp_path, "add", "tracked.txt")
     git(tmp_path, "commit", "-m", "initial")
     (tmp_path / ".agentflow" / "runs").mkdir(parents=True)
@@ -28,9 +28,9 @@ def repository(tmp_path):
 def test_report_tracks_files_and_can_restore_clean_start(tmp_path):
     tracked = repository(tmp_path)
     before = snapshot(tmp_path)
-    tracked.write_text("one\ntwo\n")
+    tracked.write_text("one\ntwo\n", encoding="utf-8")
     created = tmp_path / "created.txt"
-    created.write_text("new\n")
+    created.write_text("new\n", encoding="utf-8")
 
     report, rejection = build_report(
         tmp_path, before, "run-1", concurrent_run=False
@@ -46,15 +46,15 @@ def test_report_tracks_files_and_can_restore_clean_start(tmp_path):
 
     restored, _ = reject(tmp_path, rejection)
     assert restored is True
-    assert tracked.read_text() == "one\n"
+    assert tracked.read_text(encoding="utf-8") == "one\n"
     assert not created.exists()
 
 
 def test_report_does_not_offer_rejection_over_preexisting_work(tmp_path):
     tracked = repository(tmp_path)
-    tracked.write_text("existing change\n")
+    tracked.write_text("existing change\n", encoding="utf-8")
     before = snapshot(tmp_path)
-    tracked.write_text("agent change\n")
+    tracked.write_text("agent change\n", encoding="utf-8")
 
     report, rejection = build_report(
         tmp_path, before, "run-2", concurrent_run=False
@@ -68,9 +68,9 @@ def test_report_does_not_offer_rejection_over_preexisting_work(tmp_path):
 def test_reject_can_restore_only_selected_files(tmp_path):
     tracked = repository(tmp_path)
     before = snapshot(tmp_path)
-    tracked.write_text("one\ntwo\n")
+    tracked.write_text("one\ntwo\n", encoding="utf-8")
     created = tmp_path / "created.txt"
-    created.write_text("new\n")
+    created.write_text("new\n", encoding="utf-8")
     _, rejection = build_report(
         tmp_path, before, "run-selected", concurrent_run=False
     )
@@ -82,16 +82,16 @@ def test_reject_can_restore_only_selected_files(tmp_path):
     )
 
     assert restored is True
-    assert tracked.read_text() == "one\ntwo\n"
+    assert tracked.read_text(encoding="utf-8") == "one\ntwo\n"
     assert not created.exists()
 
 
 def test_reject_can_restore_selected_tracked_file(tmp_path):
     tracked = repository(tmp_path)
     before = snapshot(tmp_path)
-    tracked.write_text("one\ntwo\n")
+    tracked.write_text("one\ntwo\n", encoding="utf-8")
     created = tmp_path / "created.txt"
-    created.write_text("new\n")
+    created.write_text("new\n", encoding="utf-8")
     _, rejection = build_report(
         tmp_path, before, "run-selected-tracked", concurrent_run=False
     )
@@ -103,15 +103,15 @@ def test_reject_can_restore_selected_tracked_file(tmp_path):
     )
 
     assert restored is True
-    assert tracked.read_text() == "one\n"
-    assert created.read_text() == "new\n"
+    assert tracked.read_text(encoding="utf-8") == "one\n"
+    assert created.read_text(encoding="utf-8") == "new\n"
 
 
 def test_unchanged_preexisting_files_are_not_attributed_to_run(tmp_path):
     tracked = repository(tmp_path)
-    tracked.write_text("existing change\n")
+    tracked.write_text("existing change\n", encoding="utf-8")
     untracked = tmp_path / "existing-output.txt"
-    untracked.write_text("existing output\n")
+    untracked.write_text("existing output\n", encoding="utf-8")
     before = snapshot(tmp_path)
 
     report, _ = build_report(
@@ -126,7 +126,7 @@ def test_unchanged_preexisting_files_are_not_attributed_to_run(tmp_path):
 def test_fetch_head_change_is_reported_even_when_remote_ref_is_unchanged(tmp_path):
     repository(tmp_path)
     before = snapshot(tmp_path)
-    (tmp_path / ".git" / "FETCH_HEAD").write_text("same remote commit\n")
+    (tmp_path / ".git" / "FETCH_HEAD").write_text("same remote commit\n", encoding="utf-8")
 
     report, _ = build_report(
         tmp_path, before, "run-4", concurrent_run=False
@@ -146,7 +146,7 @@ def test_deliver_commits_and_pushes_only_attributed_changes(tmp_path):
     branch = git(project, "branch", "--show-current").stdout.strip()
     git(project, "push", "-u", "origin", branch)
     before = snapshot(project)
-    tracked.write_text("one\ntwo\n")
+    tracked.write_text("one\ntwo\n", encoding="utf-8")
     report, _ = build_report(
         project, before, "run-delivery", concurrent_run=False
     )

@@ -42,7 +42,7 @@ def _nvidia_gpus() -> list[dict[str, Any]]:
                 "nvidia-smi", "--query-gpu=index,name,memory.total,driver_version",
                 "--format=csv,noheader,nounits",
             ],
-            capture_output=True, text=True, check=False, timeout=15,
+            capture_output=True, text=True, check=False, timeout=15, encoding="utf-8", errors="replace"
         )
     except (OSError, subprocess.TimeoutExpired):
         return []

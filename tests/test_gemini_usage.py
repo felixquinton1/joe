@@ -24,7 +24,7 @@ def test_gemini_usage_accumulates_headless_stats(tmp_path):
     record_gemini_usage(raw, path, now=1_800_000_000)
     record_gemini_usage(raw, path, now=1_800_000_001)
 
-    payload = json.loads(path.read_text())
+    payload = json.loads(path.read_text(encoding="utf-8"))
     day = next(iter(payload["days"].values()))
     assert day["tokens"] == 240
     assert day["requests"] == 2
@@ -77,7 +77,7 @@ def test_gemini_usage_understands_stream_result_stats(tmp_path):
 
     record_gemini_usage(raw, path)
 
-    day = next(iter(json.loads(path.read_text())["days"].values()))
+    day = next(iter(json.loads(path.read_text(encoding="utf-8"))["days"].values()))
     assert day["tokens"] == 321
     assert day["requests"] == 1
 
@@ -109,6 +109,6 @@ def test_gemini_usage_concurrent_updates_are_not_lost(tmp_path):
     for thread in threads:
         thread.join()
 
-    day = next(iter(json.loads(path.read_text())["days"].values()))
+    day = next(iter(json.loads(path.read_text(encoding="utf-8"))["days"].values()))
     assert day["tokens"] == 80
     assert day["requests"] == 8

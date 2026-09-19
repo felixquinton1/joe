@@ -162,7 +162,7 @@ def test_claude_status_reads_fresh_local_cache(tmp_path, monkeypatch):
                     },
                 }
             }
-        )
+        ), encoding="utf-8"
     )
 
     status = _claude_status(path)
@@ -191,7 +191,7 @@ def test_claude_status_keeps_recent_stale_cache_for_routing(tmp_path, monkeypatc
                     },
                 }
             }
-        )
+        ), encoding="utf-8"
     )
 
     status = _claude_status(path)
@@ -221,7 +221,7 @@ def test_claude_status_discards_a_window_after_its_reset(tmp_path, monkeypatch):
                     },
                 }
             }
-        )
+        ), encoding="utf-8"
     )
 
     status = _claude_status(path)
@@ -306,7 +306,7 @@ def test_claude_status_rejects_cache_older_than_six_hours(tmp_path, monkeypatch)
                     },
                 }
             }
-        )
+        ), encoding="utf-8"
     )
 
     status = _claude_status(path)
@@ -409,7 +409,7 @@ def test_gemini_status_explains_api_key_quota(tmp_path):
     settings_path.write_text(
         json.dumps(
             {"security": {"auth": {"selectedType": "gemini-api-key"}}}
-        )
+        ), encoding="utf-8"
     )
 
     status = _gemini_status(usage_path, settings_path)

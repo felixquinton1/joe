@@ -167,7 +167,7 @@ def _reproducibility(workspace: Path) -> dict[str, Any]:
     try:
         value = subprocess.run(
             ["git", "-C", str(workspace), "rev-parse", "HEAD"],
-            capture_output=True, text=True, check=False, timeout=10,
+            capture_output=True, text=True, check=False, timeout=10, encoding="utf-8", errors="replace"
         )
         commit = value.stdout.strip() if value.returncode == 0 else None
     except (OSError, subprocess.TimeoutExpired):

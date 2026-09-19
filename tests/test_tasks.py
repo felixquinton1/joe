@@ -105,7 +105,7 @@ def test_task_store_recovers_from_atomic_backup(tmp_path):
         isolated=False,
     )
     store.update("run1", status="completed")
-    store.path.write_text("{broken")
+    store.path.write_text("{broken", encoding="utf-8")
 
     assert TaskStore(tmp_path).get("run1")["id"] == "run1"
 

@@ -52,7 +52,7 @@ def test_create_project_skill_from_instructions(tmp_path):
     target = Path(created["path"])
     assert created["scope"] == "project"
     assert target == project / ".agentflow/skills/conventions-python/SKILL.md"
-    assert target.read_text() == (
+    assert target.read_text(encoding="utf-8") == (
         "# Conventions Python\n\n"
         "Écrire des fonctions courtes et ajouter des tests.\n"
     )
@@ -70,7 +70,7 @@ def test_create_and_import_global_skills(tmp_path, monkeypatch):
     )
     source = tmp_path / "existing"
     source.mkdir()
-    (source / "SKILL.md").write_text("Documenter les décisions.")
+    (source / "SKILL.md").write_text("Documenter les décisions.", encoding="utf-8")
     imported = import_skill(None, source, global_scope=True)
 
     assert created["scope"] == "global"
@@ -91,7 +91,7 @@ def test_create_skill_refuses_empty_or_existing_content(tmp_path):
 def test_import_skill_creates_provider_neutral_project_skill(tmp_path):
     source = tmp_path / "claude-skill"
     source.mkdir()
-    (source / "SKILL.md").write_text("Use Claude's plan mode before editing.")
+    (source / "SKILL.md").write_text("Use Claude's plan mode before editing.", encoding="utf-8")
     project = tmp_path / "project"
     project.mkdir()
 
@@ -99,7 +99,7 @@ def test_import_skill_creates_provider_neutral_project_skill(tmp_path):
 
     target = Path(result["path"])
     assert target.exists()
-    content = target.read_text()
+    content = target.read_text(encoding="utf-8")
     assert "provider-specific commands must be translated" in content
     assert "Claude's plan mode" in content
     listed = list_skills(project)
@@ -113,7 +113,7 @@ def test_promote_skill_copies_project_skill_to_global(tmp_path, monkeypatch):
     project = tmp_path / "project"
     source = tmp_path / "rules"
     source.mkdir()
-    (source / "SKILL.md").write_text("Toujours écrire des tests ciblés.")
+    (source / "SKILL.md").write_text("Toujours écrire des tests ciblés.", encoding="utf-8")
     import_skill(project, source, name="conventions")
 
     assert list_global_skills() == []
@@ -121,7 +121,7 @@ def test_promote_skill_copies_project_skill_to_global(tmp_path, monkeypatch):
     promoted = promote_skill(project, "conventions")
 
     assert promoted["scope"] == "global"
-    assert Path(promoted["path"]).read_text() == "Toujours écrire des tests ciblés."
+    assert Path(promoted["path"]).read_text(encoding="utf-8") == "Toujours écrire des tests ciblés."
     common = list_global_skills()
     assert [item["name"] for item in common] == ["conventions"]
     assert common[0]["scope"] == "global"
@@ -271,3 +271,29 @@ def test_a_local_action_can_be_cancelled_and_leaves_no_pending(tmp_path):
     # après un redémarrage.
     assert manager._read_pending() == {}
     assert manager.get_run(run.run_id) is run
+
+
+@pytest.mark.parametrize(
+    ("label", "payload"),
+    [
+        ("utf-8", "Écrire des tests ciblés.".encode("utf-8")),
+        # Le Bloc-notes de Windows ajoutait une marque d'ordre des octets.
+        ("utf-8 avec BOM", "Écrire des tests ciblés.".encode("utf-8-sig")),
+        # Encodage par défaut des anciens éditeurs Windows.
+        ("cp1252", "Écrire des tests ciblés.".encode("cp1252")),
+    ],
+)
+def test_a_skill_keeps_its_accents_whatever_editor_saved_it(tmp_path, label, payload):
+    """Un skill en français arrivait déformé chez tous les modèles sous Windows.
+
+    Lu sans encodage, il était décodé selon la locale ; lu en UTF-8 strict, un
+    fichier hérité en cp1252 aurait levé une erreur. La lecture accepte les
+    trois formes qu'un utilisateur peut réellement produire.
+    """
+    skill = tmp_path / ".agentflow" / "skills" / "conventions" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_bytes(payload)
+
+    content = skills.read_skill(tmp_path, "conventions")["content"]
+
+    assert content == "Écrire des tests ciblés.", label

@@ -493,7 +493,7 @@ def test_contract_exposes_persisted_run_history(tmp_path):
         "workflow": [{"provider": "codex", "status": "complete"}],
     }
     history_path = server.manager.orchestrator.memory.runs / "contractrun.json"
-    history_path.write_text(json.dumps(run_payload))
+    history_path.write_text(json.dumps(run_payload), encoding="utf-8")
     try:
         connection = http.client.HTTPConnection(
             "127.0.0.1", server.server_port, timeout=5

@@ -58,7 +58,7 @@ def _version(provider: str) -> str | None:
             capture_output=True,
             text=True,
             timeout=8,
-            check=False,
+            check=False, encoding="utf-8", errors="replace"
         )
     except (OSError, subprocess.TimeoutExpired):
         return None

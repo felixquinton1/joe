@@ -192,7 +192,7 @@ def test_maintainer_can_rotate_and_revoke_the_previous_token(tmp_path):
         )
         assert status == 200
         assert payload["rotated"] is True
-        replacement = server.auth_path.read_text().strip()
+        replacement = server.auth_path.read_text(encoding="utf-8").strip()
         assert replacement != "test-token"
 
         status, _, _ = request(

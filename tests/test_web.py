@@ -309,7 +309,7 @@ def test_skills_import_promote_and_global_listing(tmp_path, monkeypatch):
     monkeypatch.setattr(skills, "global_skills_root", lambda: global_root)
     source = tmp_path / "conventions"
     source.mkdir()
-    (source / "SKILL.md").write_text("Toujours écrire des tests ciblés.")
+    (source / "SKILL.md").write_text("Toujours écrire des tests ciblés.", encoding="utf-8")
 
     server, thread = start_server(tmp_path)
     try:
@@ -429,7 +429,7 @@ def test_skills_can_be_created_or_imported_at_both_scopes(tmp_path, monkeypatch)
     monkeypatch.setattr(skills, "global_skills_root", lambda: global_root)
     source = tmp_path / "shared-source"
     source.mkdir()
-    (source / "SKILL.md").write_text("Règle commune importée.")
+    (source / "SKILL.md").write_text("Règle commune importée.", encoding="utf-8")
     server, thread = start_server(tmp_path)
     try:
         connection = http.client.HTTPConnection("127.0.0.1", server.server_port)
@@ -513,7 +513,7 @@ def test_explicit_skill_prompt_is_handled_locally_without_provider(tmp_path):
         assert run.events[0]["primary"] == "joe"
         skill = tmp_path / ".agentflow/skills/test/SKILL.md"
         assert skill.exists()
-        assert "SKILL_TEST_ACTIF" in skill.read_text()
+        assert "SKILL_TEST_ACTIF" in skill.read_text(encoding="utf-8")
         messages = server.manager.conversations.get(conversation["id"])["messages"]
         assert messages[-1]["provider"] == "joe"
         assert "créé comme skill du projet" in messages[-1]["content"]

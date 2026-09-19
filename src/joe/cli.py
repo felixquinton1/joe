@@ -315,7 +315,7 @@ def _kill(argv: list[str]) -> int:
         ["tmux", "list-sessions", "-F", "#{session_name}"],
         capture_output=True,
         text=True,
-        check=False,
+        check=False, encoding="utf-8", errors="replace"
     )
     sessions = [
         name

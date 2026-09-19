@@ -199,7 +199,7 @@ def reject(
             cwd=project,
             text=True,
             capture_output=True,
-            check=False,
+            check=False, encoding="utf-8", errors="replace"
         )
         if check.returncode:
             return False, "Certains fichiers ont changé depuis la fin de la tâche."
@@ -208,7 +208,7 @@ def reject(
             cwd=project,
             text=True,
             capture_output=True,
-            check=False,
+            check=False, encoding="utf-8", errors="replace"
         )
         if applied.returncode:
             return False, applied.stderr.strip() or "Échec de restauration Git."
@@ -225,7 +225,7 @@ def reject(
                 cwd=project,
                 text=True,
                 capture_output=True,
-                check=False,
+                check=False, encoding="utf-8", errors="replace"
             )
     for relative in selected_untracked:
         path = (project / relative).resolve()

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .provider_registry import default_fallbacks
-from .text_encoding import read_utf8_compatible
+from .text_encoding import read_user_text, read_utf8_compatible
 
 DEFAULT_CONFIG = {
     "version": 1,
@@ -217,7 +217,7 @@ class ProjectMemory:
         # every provider's prompt.
         agents = self.project / "AGENTS.md"
         if agents.exists():
-            chunks.append(f"## AGENTS.md\n{agents.read_text(encoding='utf-8', errors='replace')}")
+            chunks.append(f"## AGENTS.md\n{read_user_text(agents)}")
         from .skills import global_skills_root
 
         skill_roots = [
@@ -240,7 +240,7 @@ class ProjectMemory:
                 if not path.is_file() or path.name.startswith("."):
                     continue
                 try:
-                    content = path.read_text(encoding="utf-8", errors="replace")
+                    content = read_user_text(path)
                 except OSError:
                     continue
                 remaining = 12000 - total

@@ -64,7 +64,7 @@ def test_mutable_state_request_requires_current_workspace_inspection(tmp_path):
     )
 
     prompt = providers["claude"].calls[0][0]
-    payload = json.loads(log.read_text())
+    payload = json.loads(log.read_text(encoding="utf-8"))
     assert requires_fresh_workspace(
         "Est-ce que les worktrees sont déjà implémentés ?"
     )
@@ -95,7 +95,7 @@ def test_mutable_state_answer_records_observed_tool_activity(tmp_path):
         Route(Intent.ANALYZE, Mode.FAST, "claude"),
     )
 
-    payload = json.loads(log.read_text())
+    payload = json.loads(log.read_text(encoding="utf-8"))
     assert response == "claude response"
     assert payload["tool_activity"] == [
         {

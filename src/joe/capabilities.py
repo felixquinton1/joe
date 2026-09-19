@@ -162,7 +162,7 @@ def _codex() -> dict[str, Any]:
                 text=True,
                 capture_output=True,
                 timeout=8,
-                check=False,
+                check=False, encoding="utf-8", errors="replace"
             )
             payload = json.loads(completed.stdout)
             catalog = payload.get("models", payload)
@@ -231,7 +231,7 @@ def _cursor() -> dict[str, Any]:
                 text=True,
                 capture_output=True,
                 timeout=8,
-                check=False,
+                check=False, encoding="utf-8", errors="replace"
             )
             if completed.returncode == 0:
                 models = _cursor_models(completed.stdout)

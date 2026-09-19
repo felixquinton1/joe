@@ -359,7 +359,7 @@ def test_old_runs_are_imported_once(tmp_path):
     runs = root / "runs"
     runs.mkdir(parents=True)
     (runs / "one.json").write_text(
-        json.dumps({"request": "Ancienne demande", "final": "Ancienne réponse"})
+        json.dumps({"request": "Ancienne demande", "final": "Ancienne réponse"}), encoding="utf-8"
     )
 
     store = ConversationStore(root, runs)
@@ -416,7 +416,7 @@ def test_history_recovers_from_atomic_backup(tmp_path):
     store = ConversationStore(root, runs)
     conversation = store.create()
     store.append_message(conversation["id"], "user", "Message préservé")
-    store.path.write_text("{broken")
+    store.path.write_text("{broken", encoding="utf-8")
 
     recovered = ConversationStore(root, runs).get(conversation["id"])
 
@@ -434,16 +434,16 @@ def test_old_history_is_migrated_with_a_pre_migration_snapshot(tmp_path):
     runs.mkdir(parents=True)
     backup = tmp_path / "external" / "conversations.json"
     root.joinpath("conversations.json").write_text(
-        json.dumps({"version": 2, "conversations": []})
+        json.dumps({"version": 2, "conversations": []}), encoding="utf-8"
     )
 
     store = ConversationStore(root, runs, backup_path=backup)
     store.ensure()
 
-    assert json.loads(store.path.read_text())["version"] == CURRENT_SCHEMA_VERSION
+    assert json.loads(store.path.read_text(encoding="utf-8"))["version"] == CURRENT_SCHEMA_VERSION
     snapshots = list((backup.parent / "migrations").glob("*.json"))
     assert len(snapshots) == 1
-    assert json.loads(snapshots[0].read_text())["version"] == 2
+    assert json.loads(snapshots[0].read_text(encoding="utf-8"))["version"] == 2
 
 
 def test_newer_history_schema_is_never_overwritten(tmp_path):
@@ -454,13 +454,13 @@ def test_newer_history_schema_is_never_overwritten(tmp_path):
     path.write_text(
         json.dumps(
             {"version": CURRENT_SCHEMA_VERSION + 1, "conversations": []}
-        )
+        ), encoding="utf-8"
     )
 
     with pytest.raises(RuntimeError, match="version plus récente"):
         ConversationStore(root, runs).ensure()
 
-    assert json.loads(path.read_text())["version"] == CURRENT_SCHEMA_VERSION + 1
+    assert json.loads(path.read_text(encoding="utf-8"))["version"] == CURRENT_SCHEMA_VERSION + 1
 
 
 def test_one_daily_backup_is_kept_outside_the_project(tmp_path):

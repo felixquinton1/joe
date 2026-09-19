@@ -169,7 +169,7 @@ def refresh_claude_noninteractive(
             capture_output=True,
             timeout=timeout,
             check=False,
-            env={**os.environ, "DISABLE_AUTOUPDATER": "1"},
+            env={**os.environ, "DISABLE_AUTOUPDATER": "1"}, encoding="utf-8", errors="replace"
         )
     except (OSError, subprocess_module.TimeoutExpired):
         return None
@@ -229,7 +229,7 @@ def refresh_claude_via_tmux(
                 ["tmux", "capture-pane", "-p", "-J", "-t", session],
                 text=True,
                 capture_output=True,
-                check=False,
+                check=False, encoding="utf-8", errors="replace"
             ).stdout
             if not sent and "/effort" in screen:
                 subprocess_module.run(
@@ -330,7 +330,7 @@ def claude_account_plan(
             text=True,
             capture_output=True,
             timeout=timeout,
-            check=False,
+            check=False, encoding="utf-8", errors="replace"
         )
         payload = json.loads(result.stdout)
     except (OSError, subprocess_module.TimeoutExpired, json.JSONDecodeError):

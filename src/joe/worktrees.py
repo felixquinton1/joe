@@ -214,7 +214,7 @@ class WorktreeManager:
             cwd=path,
             text=True,
             capture_output=True,
-            check=False,
+            check=False, encoding="utf-8", errors="replace"
         )
 
     def _value(self, *arguments: str) -> str:

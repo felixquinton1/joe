@@ -5,6 +5,8 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from .text_encoding import read_user_text
+
 
 _CREATE_REQUEST = re.compile(
     r"\b(?:cr(?:ée|éer|éé|ee|eer)|ajoute(?:r)?)\s+"
@@ -155,7 +157,7 @@ def promote_skill(project: Path, name: str) -> dict[str, Any]:
     if global_root not in destination.parents:
         raise ValueError("Destination de skill commun invalide.")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    content = source.read_text(encoding="utf-8", errors="replace")
+    content = read_user_text(source)
     content = re.sub(
         r"^<!-- Joe shared skill: imported from .*? -->\n\n",
         "",
@@ -203,7 +205,7 @@ def read_skill(
         "path": str(document),
         "scope": "global" if global_scope else "project",
         "size": document.stat().st_size,
-        "content": document.read_text(encoding="utf-8", errors="replace"),
+        "content": read_user_text(document),
     }
 
 
@@ -237,7 +239,7 @@ def import_skill(
     if not source_file.is_file():
         raise FileNotFoundError(f"Skill introuvable : {source_file}")
     skill_name = _skill_name(name or source_file.parent.name)
-    content = source_file.read_text(encoding="utf-8", errors="replace").strip()
+    content = read_user_text(source_file).strip()
     root = global_skills_root() if global_scope else _project_skills_root(project)
     destination = (root / skill_name / "SKILL.md").resolve()
     root = root.resolve()
