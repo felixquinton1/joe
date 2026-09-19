@@ -24,7 +24,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install . pytest
+      # Le plugin publie chaque test en échec comme annotation : lisible sur
+      # la PR et par l'API, là où le journal brut n'indique qu'un code de sortie.
+      - run: python -m pip install . pytest pytest-github-actions-annotate-failures
       - run: joe --version
       - run: joe --help
       - run: joe cli --help
@@ -46,7 +48,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: python -m pip install -e . pytest ruff
+      # Version épinglée : une montée de ruff ne doit pas faire échouer la CI
+      # sans qu'une ligne de code ait changé.
+      - run: python -m pip install -e . pytest ruff==0.15.4
       - run: ruff check src tests
       - run: pytest -q
       # Tout script livré est vérifié : en nommer cinq sur sept laissait
