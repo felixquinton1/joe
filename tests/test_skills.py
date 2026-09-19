@@ -297,3 +297,26 @@ def test_a_skill_keeps_its_accents_whatever_editor_saved_it(tmp_path, label, pay
     content = skills.read_skill(tmp_path, "conventions")["content"]
 
     assert content == "Écrire des tests ciblés.", label
+
+
+def test_promotion_strips_the_import_header_from_a_windows_file(tmp_path, monkeypatch):
+    """Sous Windows, `write_text` enregistre des `\r\n` en fin de ligne.
+
+    Relu octet par octet, l'en-tête d'import gardait ses `\r\n` et le motif
+    ancré sur `\n` ne le retirait plus : il partait avec le skill promu.
+    """
+    global_root = tmp_path / "global-skills"
+    monkeypatch.setattr(skills, "global_skills_root", lambda: global_root)
+    project = tmp_path / "project"
+    source = tmp_path / "rules"
+    source.mkdir()
+    (source / "SKILL.md").write_text("Toujours écrire des tests ciblés.", encoding="utf-8")
+    import_skill(project, source, name="conventions")
+    imported = project / ".agentflow" / "skills" / "conventions" / "SKILL.md"
+    imported.write_bytes(imported.read_bytes().replace(b"\n", b"\r\n"))
+
+    promoted = promote_skill(project, "conventions")
+
+    assert Path(promoted["path"]).read_text(encoding="utf-8") == (
+        "Toujours écrire des tests ciblés."
+    )

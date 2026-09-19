@@ -22,6 +22,10 @@ def read_user_text(path: Path) -> str:
     """
     payload = path.read_bytes()
     try:
-        return payload.decode("utf-8-sig")
+        text = payload.decode("utf-8-sig")
     except UnicodeDecodeError:
-        return payload.decode("cp1252", errors="replace")
+        text = payload.decode("cp1252", errors="replace")
+    # Lire des octets bruts saute la conversion des fins de ligne que fait
+    # `read_text` : un fichier écrit sous Windows garderait ses `\r\n`, et un
+    # motif ancré sur `\n` cesserait d'y correspondre.
+    return text.replace("\r\n", "\n").replace("\r", "\n")
