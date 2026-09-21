@@ -601,8 +601,16 @@ window.createJoeConversations = function createJoeConversations({
       method: "DELETE"
     });
     if (!response.ok) {
-      const payload = await response.json();
+      const payload = await response.json().catch(() => ({}));
       $("delete-conversation-dialog").close();
+      // 404 : la conversation n'est pas dans le journal servi. Joe a ete
+      // relance depuis un autre dossier, et l'echec generique laissait croire
+      // a une suppression refusee.
+      if (response.status === 404) {
+        await loadConversations(false).catch(() => {});
+        window.alert(tr("conversation_gone"));
+        return;
+      }
       window.alert(payload.error || tr("conversation_delete_failed"));
       return;
     }
