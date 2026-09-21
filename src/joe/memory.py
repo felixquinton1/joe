@@ -68,30 +68,54 @@ class ProjectMemory:
         self.root = self.project / ".agentflow"
         self.runs = self.root / "runs"
 
+    # Ces fichiers portent le contenu de l'utilisateur : ses conversations, ses
+    # campagnes, ses invites en attente. Joe les crée dans le dépôt qu'il
+    # travaille, donc il lui revient de les y faire ignorer.
+    IGNORED_STATE = (
+        "conversations.json",
+        "conversations.json.bak",
+        "runs/",
+        "session.md",
+        "handoff.md",
+        "pending_runs.json",
+        "automations.json",
+        "automations.json.bak",
+        "autonomous.json",
+        "autonomous.json.bak",
+        "autonomous/",
+        "backups/",
+        "migrations/",
+        "*.reject.json",
+        "*.reject.patch",
+        "*.tmp",
+    )
+
+    def _ensure_ignored(self) -> None:
+        """Complete the ignore list rather than only writing it once.
+
+        Le fichier n'était écrit qu'à la création du dossier : une
+        installation antérieure à l'ajout d'une entrée gardait l'ancienne
+        liste, et publiait sans prévenir les campagnes ou les automatisations
+        dans le dépôt de l'utilisateur. Les lignes qu'il a ajoutées lui-même
+        sont conservées.
+        """
+        path = self.root / ".gitignore"
+        present = (
+            read_user_text(path).splitlines() if path.is_file() else []
+        )
+        missing = [line for line in self.IGNORED_STATE if line not in present]
+        if not missing:
+            return
+        kept = [line for line in present if line.strip()]
+        self._atomic_write(path, "\n".join([*kept, *missing]) + "\n")
+
     def ensure(self) -> None:
         with _MEMORY_LOCK:
             self.runs.mkdir(parents=True, exist_ok=True)
             self.root.chmod(0o700)
             self.runs.chmod(0o700)
+            self._ensure_ignored()
             initial = {
-                ".gitignore": (
-                    "conversations.json\n"
-                    "conversations.json.bak\n"
-                    "runs/\n"
-                    "session.md\n"
-                    "handoff.md\n"
-                    "pending_runs.json\n"
-                    "automations.json\n"
-                    "automations.json.bak\n"
-                    "autonomous.json\n"
-                    "autonomous.json.bak\n"
-                    "autonomous/\n"
-                    "backups/\n"
-                    "migrations/\n"
-                    "*.reject.json\n"
-                    "*.reject.patch\n"
-                    "*.tmp\n"
-                ),
                 "project.md": "# Project\n\nStable conventions and project context.\n",
                 "session.md": "# Session\n\nNo active work recorded yet.\n",
                 "handoff.md": "# Handoff\n\nNo previous handoff.\n",

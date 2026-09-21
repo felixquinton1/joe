@@ -156,3 +156,27 @@ def test_concurrent_active_updates_keep_session_and_handoff_together(tmp_path):
     handoff = (memories[0].root / "handoff.md").read_text(encoding="utf-8")
     final_marker = "alpha" if "Objective: alpha" in session else "beta"
     assert f"Request: {final_marker}" in handoff
+
+
+def test_an_older_ignore_list_is_completed_without_losing_user_lines(tmp_path):
+    """Le fichier n'était écrit qu'à la création du dossier.
+
+    Une installation antérieure à l'ajout d'une entrée gardait l'ancienne
+    liste : les campagnes et les automatisations, qui portent le contenu de
+    l'utilisateur, partaient sans prévenir dans son dépôt.
+    """
+    root = tmp_path / ".agentflow"
+    root.mkdir()
+    (root / ".gitignore").write_text(
+        "conversations.json\nruns/\nmes-notes-perso.md\n", encoding="utf-8"
+    )
+
+    ProjectMemory(tmp_path).ensure()
+
+    lines = (root / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert "autonomous.json" in lines
+    assert "automations.json" in lines
+    assert "backups/" in lines
+    # Ce que l'utilisateur avait ajouté lui-même reste en place.
+    assert "mes-notes-perso.md" in lines
+    assert lines.count("conversations.json") == 1
