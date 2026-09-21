@@ -380,17 +380,17 @@ window.createJoeConversations = function createJoeConversations({
       let bubble;
       if (message.role === "user") {
         bubble = addMessage(
-          "Toi",
+          null,
           message.content,
           "user",
-          { suppressScroll: true }
+          { suppressScroll: true, labelKey: "you" }
         );
       } else {
         bubble = addMessage(
-          tr("joe_summary"),
+          null,
           "",
           "assistant",
-          { suppressScroll: true }
+          { suppressScroll: true, labelKey: "joe_summary" }
         );
         renderHistoricalRunSummary(message, bubble);
         renderAnswer(bubble, message.content);
@@ -493,7 +493,10 @@ window.createJoeConversations = function createJoeConversations({
           if (message.run_id) existing.dataset.runId = message.run_id;
           continue;
         }
-        bubble = addMessage("Toi", message.content, "user", { suppressScroll: true });
+        bubble = addMessage(null, message.content, "user", {
+          suppressScroll: true,
+          labelKey: "you"
+        });
       } else {
         const activeRun = state.runs.get(conversationId);
         const existing = message.run_id && activeRun?.runId === message.run_id
@@ -510,7 +513,10 @@ window.createJoeConversations = function createJoeConversations({
           existing.dataset.runId = message.run_id;
           continue;
         }
-        bubble = addMessage(tr("joe_summary"), "", "assistant", { suppressScroll: true });
+        bubble = addMessage(null, "", "assistant", {
+          suppressScroll: true,
+          labelKey: "joe_summary"
+        });
         renderHistoricalRunSummary(message, bubble);
         renderAnswer(bubble, message.content);
         if (message.git_report) renderGitReport(message.git_report, message.run_id);

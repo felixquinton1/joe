@@ -18,6 +18,12 @@ from .orchestrator_workflows import (
     run_consensus_workflow,
     run_review_workflow,
 )
+from .prompt_language import (
+    DEFAULT_LANGUAGE,
+    PLAN_HEADING,
+    normalize as normalize_language,
+    response_language,
+)
 from .provider_health import recent_failure, record_result
 from .providers import Provider, default_providers
 from .router import Router
@@ -133,10 +139,12 @@ class Orchestrator:
         effort: str | None = None,
         execution_mode: str | None = None,
         extra_context: str | None = None,
+        language: str = DEFAULT_LANGUAGE,
         cancel_event: threading.Event | None = None,
         on_event: Callable[[dict], None] | None = None,
     ) -> tuple[str, Path]:
         self.memory.ensure()
+        language = normalize_language(language)
         health_check = "health-check" in route.reason
         needs_fresh_state = not health_check and requires_fresh_workspace(request)
         observation = (
@@ -162,7 +170,7 @@ class Orchestrator:
         context = (
             self._health_check_prompt(request, route.primary)
             if health_check
-            else self.memory.context(request)
+            else self.memory.context(request, language)
         )
         if extra_context and not health_check:
             context += "\n\n" + extra_context
@@ -172,9 +180,15 @@ class Orchestrator:
             context += (
                 "\n\n# Direct-answer style\n"
                 "Answer the user's question directly. Do not write a plan, "
-                "do not start with 'Ce que je vais faire', and do not describe "
-                "an implementation workflow unless the user asks for one."
+                f"do not start with '{PLAN_HEADING[language]}', and do not "
+                "describe an implementation workflow unless the user asks for one."
             )
+        # La consigne de langue ferme le prompt : c'est la dernière chose lue,
+        # après un contexte projet et un historique qui peuvent être rédigés
+        # dans l'autre langue. Les étapes de revue et de consensus la
+        # rappellent à la fin de chacun de leurs prompts.
+        if not health_check:
+            context += response_language(language)
         results: list[ProviderResult] = []
 
         if route.mode is Mode.FAST:
@@ -202,6 +216,7 @@ class Orchestrator:
                 model=model,
                 effort=effort,
                 execution_mode=execution_mode,
+                language=language,
                 cancel_event=cancel_event,
                 on_event=emit,
             )
@@ -220,6 +235,7 @@ class Orchestrator:
                 model=model,
                 effort=effort,
                 execution_mode=execution_mode,
+                language=language,
                 cancel_event=cancel_event,
             )
 

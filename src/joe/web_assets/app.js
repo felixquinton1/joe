@@ -947,7 +947,15 @@ function addMessage(label, text, kind, options = {}) {
   const title = document.createElement("div");
   title.className = "message-label";
   const titleText = document.createElement("span");
-  titleText.textContent = label;
+  // Une étiquette traduisible se donne par sa clé : elle est rendue dans la
+  // langue courante, et `data-i18n` la fait suivre un changement de langue.
+  // Un nom de fournisseur, lui, s'écrit tel quel.
+  if (options.labelKey) {
+    titleText.dataset.i18n = options.labelKey;
+    titleText.textContent = t(options.labelKey);
+  } else {
+    titleText.textContent = label;
+  }
   const copy = copyButton(() => bubble.dataset.source || bubble.textContent);
   title.append(titleText, copy);
   const bubble = document.createElement("div");
@@ -1463,7 +1471,15 @@ function handleEvent(conversationId, event, finalBubble) {
     const row = document.createElement("div");
     row.className = `evidence-row ${event.status}`;
     const labels = { verified: t("verified"), inferred: t("inferred"), refused: t("refused") };
-    row.innerHTML = `<b>${labels[event.status] || escapeHtml(event.status)}</b><span>${escapeHtml(event.label)} · ${escapeHtml(event.detail || "")}</span>`;
+    // Le serveur envoie une clé quand la phrase est traduisible, et du texte
+    // brut quand elle ne l'est pas (un nom de fournisseur, un message d'outil).
+    const label = event.label_key
+      ? t(event.label_key, event.label_params)
+      : event.label;
+    const detail = event.detail_key
+      ? t(event.detail_key, event.detail_params)
+      : event.detail || "";
+    row.innerHTML = `<b>${labels[event.status] || escapeHtml(event.status)}</b><span>${escapeHtml(label)} · ${escapeHtml(detail)}</span>`;
     $("evidence-log").appendChild(row);
   } else if (event.type === "quota_notice") {
     showQuotaNotice(event);
@@ -1628,14 +1644,16 @@ async function startRun(
     $("stop").classList.remove("hidden");
     $("run-state").textContent = t("running");
     $("run-state").className = "run-state running";
-    optimisticUserBubble = addMessage("Toi", shownRequest, "user");
+    optimisticUserBubble = addMessage(null, shownRequest, "user", {
+      labelKey: "you"
+    });
   }
   const finalBubble = visible
     ? addMessage(
-        t("joe_summary"),
+        null,
         t("local_routing"),
         "assistant",
-        { forceScroll: true }
+        { forceScroll: true, labelKey: "joe_summary" }
       )
     : null;
   // Comme l'affichage précède désormais l'appel réseau, tout échec doit

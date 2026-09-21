@@ -102,7 +102,9 @@ window.createJoeUsage = function createJoeUsage({
   }
 
   function showQuotaNotice(event) {
-    const bubble = addMessage("Joe · limite atteinte", "", "notice");
+    const bubble = addMessage(null, "", "notice", {
+      labelKey: "joe_limit_reached"
+    });
     const lines = [tr("usage_limit_reached", { provider: capitalize(event.provider) })];
     if (event.windows?.length) {
       for (const window of event.windows) {

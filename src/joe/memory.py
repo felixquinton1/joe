@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .prompt_language import DEFAULT_LANGUAGE, response_organization
 from .provider_registry import default_fallbacks
 from .text_encoding import read_user_text, read_utf8_compatible
 
@@ -36,16 +37,6 @@ SECRET_PATTERN = re.compile(
     r"""(?i)(api[_-]?key|token|secret|password)(\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s]+)"""
 )
 _MEMORY_LOCK = threading.RLock()
-RESPONSE_ORGANIZATION = """# Organisation de la réponse
-Sépare clairement les annonces de progression de la réponse finale.
-
-- Avant d'agir, indique brièvement ce que tu vas faire sous
-  `Ce que je vais faire :`.
-- Réserve les mises à jour intermédiaires aux informations de progression utiles.
-- Une fois le travail terminé, commence la réponse finale par `Résultat :`.
-- Rends la réponse finale autonome et centrée sur le résultat. Ne répète pas le
-  plan initial et ne mélange pas les intentions futures avec le travail terminé.
-"""
 
 
 def redact(text: str) -> str:
@@ -137,13 +128,13 @@ class ProjectMemory:
                 loaded = {}
             return _deep_merge(DEFAULT_CONFIG, loaded)
 
-    def context(self, request: str) -> str:
+    def context(self, request: str, language: str = DEFAULT_LANGUAGE) -> str:
         with _MEMORY_LOCK:
             self.ensure()
             limit = int(self.config()["max_context_chars"])
             sections = [
                 f"# Current request\n{request.strip()}",
-                RESPONSE_ORGANIZATION.strip(),
+                response_organization(language).strip(),
             ]
             for filename in ("project.md", "session.md", "handoff.md"):
                 text = (self.root / filename).read_text(encoding="utf-8", errors="replace")

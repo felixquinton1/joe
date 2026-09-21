@@ -68,7 +68,23 @@ def test_context_requires_a_clear_plan_and_result_separation(tmp_path):
 
     assert "`Ce que je vais faire :`" in context
     assert "`Résultat :`" in context
-    assert "réponse finale autonome" in context
+    assert "self-contained" in context
+
+
+def test_the_response_headings_follow_the_selected_language(tmp_path):
+    """Les intertitres appartiennent à la réponse, donc à la langue choisie.
+
+    Écrits en dur en français, ils pesaient plus lourd que la consigne de
+    langue : une interface en anglais recevait « Ce que je vais faire : ».
+    """
+    memory = ProjectMemory(tmp_path)
+
+    english = memory.context("organise the answer", "en")
+
+    assert "`What I will do:`" in english
+    assert "`Result:`" in english
+    assert "Ce que je vais faire" not in english
+    assert "Résultat" not in english
 
 
 def test_logs_redact_common_secret_shapes(tmp_path):

@@ -33,7 +33,7 @@ from .files import FileLibrary
 from .git_review import GitSnapshot, reject, snapshot
 from .models import Intent, Mode, Route
 from .orchestrator import OrchestrationError, Orchestrator
-from .orchestrator_workflows import QUESTION_RULES
+from .prompt_language import question_rules
 from .providers import _access_level
 from .router import _routing_text
 from .routing import resolve_route
@@ -62,24 +62,6 @@ def _quota_backoff(defer_count: int, now: float | None = None) -> float:
     timestamp = time.time() if now is None else now
     delay = min(3600, 300 * (2 ** min(max(0, defer_count), 4)))
     return timestamp + delay
-
-
-def _language_context(language: str) -> str:
-    """Keep provider output aligned with the language selected in Joe Web."""
-    if language == "en":
-        return (
-            "\n\n# Response language\n"
-            "Answer the user in English. Keep code, commands, paths, and "
-            "quoted source text unchanged. This instruction also applies to "
-            "plans, reviews, consensus stages, and the final synthesis."
-        )
-    return (
-        "\n\n# Langue de réponse\n"
-        "Réponds à l’utilisateur en français. Conserve le code, les commandes, "
-        "les chemins et les citations de sources dans leur forme d’origine. "
-        "Cette consigne s’applique aussi aux plans, revues, étapes de consensus "
-        "et à la synthèse finale."
-    )
 
 
 @dataclass(frozen=True)
@@ -853,15 +835,18 @@ class RunManager:
                             language,
                         )
                     raise RuntimeError(quota_admission["message"])
+            # Le serveur ignore la langue de l'interface qui lira cette ligne :
+            # il envoie la clé et ses paramètres, l'interface la rend.
             run.emit(
                 {
                     "type": "evidence",
                     "status": "inferred",
-                    "label": "Routage",
-                    "detail": (
-                        f"{route.mode.value} vers {route.primary}, décidé par "
-                        "les règles locales"
-                    ),
+                    "label_key": "routing_label",
+                    "detail_key": "evidence_local_route",
+                    "detail_params": {
+                        "mode": route.mode.value,
+                        "provider": route.primary,
+                    },
                 }
             )
             if route.intent is Intent.MODIFY and not os.access(workspace, os.W_OK):
@@ -869,9 +854,11 @@ class RunManager:
                     "Le projet n'est pas accessible en écriture. "
                     "Relance Joe depuis un montage inscriptible."
                 )
+            # La consigne de langue n'est plus insérée ici : l'orchestrateur la
+            # place en dernier, après l'historique et le contexte projet qui
+            # peuvent être rédigés dans l'autre langue.
             evidence_context = (
                 self.conversations.context(run.conversation_id)
-                + _language_context(language)
                 + "\n\n# Evidence policy\n"
                 "Never claim that a file, command, remote state, or URL was checked "
                 "unless the corresponding tool completed successfully. In reports, "
@@ -885,7 +872,11 @@ class RunManager:
                 # Un run rapide est à lui seul la réponse : il peut donc
                 # conclure sur une question. En relecture et en consensus,
                 # seule l'étape finale la reçoit, depuis le workflow.
-                + (QUESTION_RULES if decision.route.mode is Mode.FAST else "")
+                + (
+                    question_rules(language)
+                    if decision.route.mode is Mode.FAST
+                    else ""
+                )
                 + (_PLAN_CONTEXT if decision.plan_stage == "propose" else "")
                 + self._attachment_context(attachments)
             )
@@ -908,6 +899,7 @@ class RunManager:
                     effort=effort,
                     execution_mode=execution_mode,
                     extra_context=evidence_context,
+                    language=language,
                     cancel_event=run.cancel_event,
                     on_event=lambda event: self._emit_run_event(run, event),
                 )
@@ -1012,12 +1004,16 @@ class RunManager:
                 {
                     "type": "evidence",
                     "status": "verified" if ok else "refused",
-                    "label": str(event.get("provider", "fournisseur")),
-                    "detail": (
-                        "Exécution terminée avec succès"
+                    # Un nom de fournisseur n'a pas de traduction ; le reste en a.
+                    "label": str(event.get("provider", "provider")),
+                    "detail_key": (
+                        "evidence_run_succeeded"
                         if ok
-                        else f"Accès ou exécution interrompu : {event.get('error') or 'erreur'}"
+                        else "evidence_run_stopped"
+                        if event.get("error")
+                        else "evidence_run_stopped_unknown"
                     ),
+                    "detail_params": {"error": str(event.get("error") or "")},
                 }
             )
         if event.get("type") != "provider_end" or event.get("error") != "quota":

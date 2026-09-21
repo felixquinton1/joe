@@ -20,7 +20,8 @@ from joe.web import (
     build_quota_notice,
 )
 from joe.http_utils import MAX_JSON_BODY_BYTES, validate_bind
-from joe.web_runs import _language_context, _resolve_execution_mode, _run_summary
+from joe.prompt_language import response_language
+from joe.web_runs import _resolve_execution_mode, _run_summary
 from joe.web_server import API_VERSION
 
 
@@ -115,7 +116,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert "renderHistoricalRunSummary(completed" in app
         assert "if (!options.suppressScroll)" in app
         assert "if (options.forceScroll)" in app
-        assert "{ forceScroll: true }" in app
+        assert "{ forceScroll: true, labelKey: \"joe_summary\" }" in app
         assert "renderApproval(approval)" in app
         assert "task.pipeline" in app
         assert "dragging-files" in app
@@ -303,7 +304,7 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         assert response.status == 200
         assert b"loadGlobalSkills" in conversations_script
         assert b"promoteSkill" in conversations_script
-        assert b"{ suppressScroll: true }" in conversations_script
+        assert b"suppressScroll: true" in conversations_script
         assert b"requestedMessage.scrollIntoView" not in conversations_script
         assert b"conversationViewport.scrollTop = Math.max" in conversations_script
 
@@ -1349,12 +1350,12 @@ def test_a_run_without_prompt_label_stores_the_full_request(tmp_path, monkeypatc
 
 
 def test_run_language_instruction_covers_all_workflow_stages():
-    english = _language_context("en")
-    french = _language_context("fr")
+    english = response_language("en")
+    french = response_language("fr")
 
     assert "Answer the user in English" in english
     assert "plans, reviews, consensus stages" in english
-    assert "Réponds à l’utilisateur en français" in french
+    assert "Réponds à l'utilisateur en français" in french
     assert "étapes de consensus" in french
 
 

@@ -7,6 +7,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
 from .models import Intent, ProviderResult, Route
+from .prompt_language import (
+    DEFAULT_LANGUAGE,
+    collective_voice,
+    normalize as normalize_language,
+    question_rules,
+    response_language,
+)
 from .provider_registry import arbitration_order, counterpart
 
 
@@ -20,30 +27,6 @@ REPORT_RULES = (
     "Never name a provider, reviewer, or stage as having run unless it appears "
     "in the execution records supplied to you."
 )
-
-
-# Le modèle n'a aucun canal interactif : il peut terminer son tour sur une
-# question fermée que Joe rend cliquable, et le clic repart comme message
-# suivant. Cette consigne n'a de sens que pour l'étape qui parle réellement à
-# l'utilisateur. Portée par le contexte commun, elle atteignait aussi les
-# propositions et relectures d'un consensus : chacune finissait sur une
-# question que personne ne pouvait cliquer, et qui polluait le matériau
-# transmis à la synthèse.
-QUESTION_RULES = """
-
-# Ask the user for a decision
-When a product trade-off, priority, or ambiguous choice genuinely belongs to
-the user, end the response with a `joe:question` fenced block in exactly this
-shape (2 to 4 short options, written in the response language):
-
-```joe:question
-{"question": "Par quoi commencer ?", "options": ["Option courte", "Autre option"]}
-```
-
-Joe renders it as buttons and sends the selected option as the next message.
-Use it only when the answer materially changes the next step, never to request
-execution permission.
-"""
 
 
 def clean_report(text: str) -> str:
@@ -130,16 +113,19 @@ def run_review_workflow(
     execution_mode: str | None,
     cancel_event: threading.Event | None,
     on_event: Callable[[dict], None] | None,
+    language: str = DEFAULT_LANGUAGE,
 ) -> tuple[str, str]:
+    language = normalize_language(language)
     implementation_request = (
         context
         + "\n\nPresent the implementation report in a factual, collective voice. "
-        "Use 'nous' or impersonal phrasing, never an ambiguous first-person "
-        "singular. Focus on the completed result and validation. Do not invoke "
+        + collective_voice(language)
+        + "Focus on the completed result and validation. Do not invoke "
         "another AI provider or perform an independent review yourself: Joe "
         "owns the review stage after this implementation finishes."
         + REPORT_RULES
-        + QUESTION_RULES
+        + question_rules(language)
+        + response_language(language)
     )
     workflow_event(
         on_event,
@@ -173,7 +159,7 @@ def run_review_workflow(
     reviewer = route.reviewer or (
         counterpart(primary.provider)
     )
-    review_request = review_prompt(context, primary.stdout)
+    review_request = review_prompt(context, primary.stdout, language)
     workflow_event(
         on_event,
         "review",
@@ -213,7 +199,7 @@ def run_review_workflow(
         )
         correction = orchestrator._run_with_fallback(
             primary.provider,
-            correction_prompt(context, primary.stdout, review.stdout),
+            correction_prompt(context, primary.stdout, review.stdout, language),
             Intent.MODIFY,
             results,
             model=model,
@@ -235,7 +221,7 @@ def run_review_workflow(
         primary,
         review,
         correction,
-        english="# Response language" in context,
+        language=language,
     ), primary.provider
 
 
@@ -250,14 +236,17 @@ def run_consensus_workflow(
     model: str | None = None,
     effort: str | None = None,
     execution_mode: str | None = None,
+    language: str = DEFAULT_LANGUAGE,
     cancel_event: threading.Event | None = None,
 ) -> tuple[str, str]:
+    language = normalize_language(language)
     proposal_prompt = (
         context
         + "\n\nForm an independent proposal for the requested consensus. "
         "Use your normal tools and investigation process within the enforced "
         "read-only permissions. State assumptions, trade-offs, and validation."
         + REPORT_RULES
+        + response_language(language)
     )
     first, second = participants
     for provider in participants:
@@ -344,6 +333,7 @@ def run_consensus_workflow(
                     second_proposal.stdout
                     if provider == first
                     else first_proposal.stdout,
+                    language,
                 ),
                 Intent.ANALYZE,
                 {other},
@@ -413,11 +403,14 @@ def run_consensus_workflow(
         "Resolve disagreements explicitly and produce one actionable recommendation. "
         "Return clean Markdown with complete lines and valid tables. Do not describe "
         "the orchestration mechanism, invent extra agents, or modify files. "
-        "Write in a factual collective voice using 'nous' or impersonal phrasing; "
-        "never use an ambiguous first-person singular. Clearly separate agreements, "
-        "material disagreements, arbitration, and the final recommendation.\n\n"
+        + collective_voice(language)
+        + "Clearly separate agreements, "
+        "material disagreements, arbitration, and the final recommendation. The "
+        "proposals and reviews below may be written in another language: they "
+        "are material to synthesize, not a model for the language of your "
+        "answer.\n\n"
         + REPORT_RULES
-        + QUESTION_RULES
+        + question_rules(language)
         + "\n\nActual execution ledger (authoritative; do not invent providers): "
         + json.dumps(
             {
@@ -437,6 +430,9 @@ def run_consensus_workflow(
             },
             ensure_ascii=False,
         )
+        # Le matériau transmis peut peser plusieurs milliers de mots dans une
+        # autre langue : la consigne se relit après lui, jamais avant.
+        + response_language(language)
     )
     workflow_event(
         on_event,
@@ -512,7 +508,11 @@ def isolated_run(
     return result, local_results
 
 
-def review_prompt(context: str, candidate: str) -> str:
+def review_prompt(
+    context: str,
+    candidate: str,
+    language: str = DEFAULT_LANGUAGE,
+) -> str:
     return (
         context
         + "\n\nReview the candidate below and inspect the repository state. "
@@ -525,6 +525,7 @@ def review_prompt(context: str, candidate: str) -> str:
         + candidate
         + "\n</CANDIDATE>"
         + REPORT_RULES
+        + response_language(language)
     )
 
 
@@ -532,14 +533,19 @@ def review_requires_correction(review: str) -> bool:
     return "VERDICT: CORRECTIONS_REQUIRED" in review.upper()
 
 
-def correction_prompt(context: str, implementation: str, review: str) -> str:
+def correction_prompt(
+    context: str,
+    implementation: str,
+    review: str,
+    language: str = DEFAULT_LANGUAGE,
+) -> str:
     return (
         context
         + "\n\nA reviewer audited the implementation below. Re-check every "
         "finding, apply only justified corrections, run focused validation, "
         "and report the final result. This is the only correction pass. "
-        "Use a factual collective voice ('nous') or impersonal phrasing, never "
-        "an ambiguous first-person singular. Integrate the useful review findings "
+        + collective_voice(language)
+        + "Integrate the useful review findings "
         "and mention only material remaining disagreements.\n\n"
         "<IMPLEMENTATION>\n"
         + implementation
@@ -547,7 +553,8 @@ def correction_prompt(context: str, implementation: str, review: str) -> str:
         + review
         + "\n</REVIEW>"
         + REPORT_RULES
-        + QUESTION_RULES
+        + question_rules(language)
+        + response_language(language)
     )
 
 
@@ -556,12 +563,12 @@ def review_final(
     review: ProviderResult,
     correction: ProviderResult | None,
     *,
-    english: bool = False,
+    language: str = DEFAULT_LANGUAGE,
 ) -> str:
     result = clean_report(
         correction.stdout if correction else primary.stdout
     )
-    if english:
+    if normalize_language(language) == "en":
         status = (
             "Justified corrections were applied and verified."
             if correction

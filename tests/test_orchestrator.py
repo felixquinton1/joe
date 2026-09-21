@@ -636,11 +636,8 @@ def test_only_the_step_that_answers_the_user_may_ask_a_question():
     et les relectures d'un consensus : chacune finissait sur une question que
     personne ne pouvait cliquer, et qui polluait le matériau de la synthèse.
     """
-    from joe.orchestrator_workflows import (
-        QUESTION_RULES,
-        correction_prompt,
-        review_prompt,
-    )
+    from joe.orchestrator_workflows import correction_prompt, review_prompt
+    from joe.prompt_language import question_rules
 
     marker = "joe:question"
 
@@ -649,4 +646,62 @@ def test_only_the_step_that_answers_the_user_may_ask_a_question():
 
     # Étapes qui rendent la réponse : la consigne est présente.
     assert marker in correction_prompt("contexte", "implémentation", "revue")
-    assert marker in QUESTION_RULES
+    assert marker in question_rules("fr")
+
+
+def test_every_stage_ends_on_the_requested_response_language():
+    """La dernière consigne lue décide de la langue.
+
+    Le contexte projet, l'historique et, en consensus, les propositions à
+    synthétiser peuvent peser des milliers de mots dans l'autre langue : la
+    consigne placée avant eux ne tenait pas.
+    """
+    from joe.orchestrator_workflows import correction_prompt, review_prompt
+    from joe.prompt_language import response_language
+
+    for prompt in (
+        review_prompt("context", "candidate", "en"),
+        correction_prompt("context", "implementation", "review", "en"),
+    ):
+        assert prompt.endswith(response_language("en"))
+        assert "Réponds à l'utilisateur" not in prompt
+
+    # L'exemple de question suit lui aussi la langue : cité en français, il
+    # produisait des boutons français dans une interface anglaise.
+    assert "Where should we start?" in correction_prompt("c", "i", "r", "en")
+
+
+def test_an_english_run_carries_no_french_instruction_to_any_stage(tmp_path):
+    """Une question posée en anglais recevait une réponse en français.
+
+    La consigne de langue était noyée : l'organisation de la réponse, l'exemple
+    de question et le « nous » demandé étaient écrits en français, et le modèle
+    suivait la masse plutôt que la consigne.
+    """
+    from joe.prompt_language import response_language
+
+    providers = {
+        name: FakeProvider(name) for name in ("codex", "claude", "gemini")
+    }
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    orchestrator.execute(
+        "Should we vendor our dependencies?",
+        Route(Intent.ANALYZE, Mode.CONSENSUS, "codex", reviewer="claude"),
+        language="en",
+    )
+
+    prompts = [call[0] for provider in providers.values() for call in provider.calls]
+    assert prompts, "le consensus doit avoir appelé des fournisseurs"
+    for prompt in prompts:
+        assert prompt.endswith(response_language("en"))
+        assert "Ce que je vais faire" not in prompt
+        assert "Réponds à l'utilisateur" not in prompt
+
+
+def test_the_collective_voice_names_the_pronoun_of_the_answer():
+    """« Use 'nous' » dans un prompt anglais suffisait à faire basculer la réponse."""
+    from joe.orchestrator_workflows import correction_prompt
+
+    assert "'we'" in correction_prompt("context", "implementation", "review", "en")
+    assert "'nous'" in correction_prompt("contexte", "implémentation", "revue", "fr")
