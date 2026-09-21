@@ -31,18 +31,18 @@ REPORT_RULES = (
 # transmis à la synthèse.
 QUESTION_RULES = """
 
-# Demander un avis à l'utilisateur
-Si un choix t'appartient mal — arbitrage produit, priorité, option ambiguë —
-termine ta réponse par un bloc de code balisé `joe:question`, exactement sous
-cette forme (2 à 4 options courtes) :
+# Ask the user for a decision
+When a product trade-off, priority, or ambiguous choice genuinely belongs to
+the user, end the response with a `joe:question` fenced block in exactly this
+shape (2 to 4 short options, written in the response language):
 
 ```joe:question
 {"question": "Par quoi commencer ?", "options": ["Option courte", "Autre option"]}
 ```
 
-Joe l'affichera comme des boutons ; le clic renverra l'option choisie comme
-message suivant. N'utilise ce bloc que lorsque la réponse change réellement la
-suite du travail, jamais pour demander une permission d'exécution.
+Joe renders it as buttons and sends the selected option as the next message.
+Use it only when the answer materially changes the next step, never to request
+execution permission.
 """
 
 
@@ -231,7 +231,12 @@ def run_review_workflow(
             "complete",
             correction.stdout,
         )
-    return review_final(primary, review, correction), primary.provider
+    return review_final(
+        primary,
+        review,
+        correction,
+        english="# Response language" in context,
+    ), primary.provider
 
 
 def run_consensus_workflow(
@@ -550,23 +555,35 @@ def review_final(
     primary: ProviderResult,
     review: ProviderResult,
     correction: ProviderResult | None,
+    *,
+    english: bool = False,
 ) -> str:
     result = clean_report(
         correction.stdout if correction else primary.stdout
     )
-    status = (
-        "Les corrections justifiées ont été appliquées et vérifiées."
-        if correction
-        else "La revue n’a demandé aucune correction justifiée."
-    )
-    return (
-        result
-        + "\n\n## Contrôle croisé\n\n"
-        + status
-        + " Le détail de l’avis de "
-        + review.provider.capitalize()
-        + " reste disponible dans le panneau de revue."
-    )
+    if english:
+        status = (
+            "Justified corrections were applied and verified."
+            if correction
+            else "The review requested no justified correction."
+        )
+        footer = (
+            "## Cross-check\n\n"
+            f"{status} The detailed {review.provider.capitalize()} review remains "
+            "available in the review panel."
+        )
+    else:
+        status = (
+            "Les corrections justifiées ont été appliquées et vérifiées."
+            if correction
+            else "La revue n’a demandé aucune correction justifiée."
+        )
+        footer = (
+            "## Contrôle croisé\n\n"
+            f"{status} Le détail de l’avis de {review.provider.capitalize()} reste "
+            "disponible dans le panneau de revue."
+        )
+    return result + "\n\n" + footer
 
 
 def workflow_event(

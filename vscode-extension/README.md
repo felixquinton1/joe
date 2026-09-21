@@ -1,31 +1,30 @@
 # Joe for VS Code
 
-L’extension est un lanceur léger pour Joe Web.
+This extension is a lightweight launcher for Joe Web.
 
-## Prérequis
+## Requirements
 
-- ouvrir le projet avec VS Code ou Remote-SSH ;
-- installer l’extension sur l’hôte du workspace ;
-- installer la commande `joe` sur ce même hôte ;
-- conserver l’adresse par défaut `http://127.0.0.1:8765`.
+- open a project with VS Code, locally or through Remote-SSH;
+- install the extension on the workspace host;
+- install the `joe` command on that same host;
+- keep the default server address, `http://127.0.0.1:8765`, unless needed.
 
-## Boutons
+## Controls
 
-- `▶` démarre Joe pour le workspace courant ;
-- `🌐` ouvre Joe Web avec le port forwarding Remote-SSH automatique ;
-- `↻` actualise l’état ;
-- `⟳` redémarre l’instance du port courant ;
-- `■` arrête l’instance du port courant ;
-- `?` ouvre ce guide.
+- `▶` starts Joe for the current workspace;
+- `🌐` opens Joe Web, including Remote-SSH port forwarding;
+- `↻` refreshes server status;
+- `⟳` restarts the instance on the configured port;
+- `■` stops that instance;
+- `?` opens this guide.
 
-Les conversations, prompts, modèles, permissions et résultats restent dans Joe
-Web. Il n’existe donc pas deux interfaces de conversation à maintenir.
+Conversations, prompts, models, permissions, and results stay in Joe Web. The
+extension deliberately avoids maintaining a second chat interface.
 
-Le démarrage, le redémarrage et l’arrêt automatiques utilisent actuellement
-`tmux`. Sans tmux, lance `joe web` dans un terminal puis utilise le bouton
-« Ouvrir l’interface Web ».
+Automatic start, restart, and stop currently use `tmux`. Without `tmux`, run
+`joe web` in a terminal and use **Open Joe Web** from the extension.
 
-## Développement
+## Development
 
 ```bash
 npm ci

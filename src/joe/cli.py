@@ -27,11 +27,10 @@ def parser() -> argparse.ArgumentParser:
         prog="joe",
         description="Route natural-language project work across local AI CLIs.",
         epilog=(
-            "Interfaces : `joe <demande>` pour une commande unique, "
-            "`joe cli` ou `joe chat` pour le terminal interactif, "
-            "`joe web` pour l’interface locale. Commandes utiles : "
-            "`url` (réouvrir Joe Web appairé), `auth rotate` (renouveler le "
-            "secret local), `doctor`, `sync`, `restart`, `stop` et `kill`."
+            "Interfaces: `joe <request>` for a one-shot command, `joe cli` or "
+            "`joe chat` for the interactive terminal, and `joe web` for the "
+            "local interface. Useful commands: `url`, `auth rotate`, `doctor`, "
+            "`sync`, `restart`, `stop`, and `kill`."
         ),
     )
     result.add_argument("request", nargs="*", help="natural-language request")
@@ -137,7 +136,7 @@ def _handle(
     if local_skill is not None:
         if not local_skill["name"] or not local_skill["instructions"]:
             print(
-                "joe: précise le nom et les instructions du skill",
+                "joe: provide the skill name and instructions",
                 file=sys.stderr,
             )
             return 2
@@ -153,7 +152,7 @@ def _handle(
             local_skill["instructions"],
             global_scope=local_skill["scope"] == "global",
         )
-        print(f"Skill {created['name']} créé : {created['path']}")
+        print(f"Skill {created['name']} created: {created['path']}")
         return 0
     decision = resolve_route(
         orchestrator.router,
@@ -252,7 +251,7 @@ def _web(argv: list[str]) -> int:
     except KeyboardInterrupt:
         print("\nJoe Web stopped.")
     except OSError as exc:
-        print(f"joe: impossible de démarrer le serveur: {exc}", file=sys.stderr)
+        print(f"joe: could not start the server: {exc}", file=sys.stderr)
         return 1
     return 0
 
@@ -298,11 +297,11 @@ def _tmux_web(args: argparse.Namespace, url: str) -> int:
             check=False,
         )
         if created.returncode:
-            print("joe: impossible de créer la session tmux", file=sys.stderr)
+            print("joe: could not create the tmux session", file=sys.stderr)
             return created.returncode
     print(
-        f"Joe tourne dans tmux · session {session}\n{url}\n"
-        f"Console : tmux attach -t {session}"
+        f"Joe is running in tmux · session {session}\n{url}\n"
+        f"Console: tmux attach -t {session}"
     )
     if not args.no_browser:
         webbrowser.open(_pairing_url(url))
@@ -316,7 +315,7 @@ def _kill(argv: list[str]) -> int:
     )
     kill_parser.parse_args(argv)
     if not shutil.which("tmux"):
-        print("Joe : tmux n’est pas installé.")
+        print("Joe: tmux is not installed.")
         return 0
     listed = subprocess.run(
         ["tmux", "list-sessions", "-F", "#{session_name}"],
@@ -337,10 +336,10 @@ def _kill(argv: list[str]) -> int:
         )
         stopped += result.returncode == 0
     if not stopped:
-        print("Joe : aucune session tmux active.")
+        print("Joe: no active tmux session.")
     else:
         suffix = "s" if stopped > 1 else ""
-        print(f"Joe : {stopped} session{suffix} tmux arrêtée{suffix}.")
+        print(f"Joe: stopped {stopped} tmux session{suffix}.")
     return 0
 
 
@@ -353,8 +352,8 @@ def _stop(argv: list[str]) -> int:
     args = stop_parser.parse_args(argv)
     if not shutil.which("tmux"):
         print(
-            "Joe : arrêt automatique indisponible sans tmux ; "
-            "interromps le terminal qui exécute joe web."
+            "Joe: automatic stop is unavailable without tmux; interrupt the "
+            "terminal running `joe web`."
         )
         return 1
     session = f"joe-{args.port}"
@@ -365,9 +364,9 @@ def _stop(argv: list[str]) -> int:
         check=False,
     )
     if result.returncode:
-        print(f"Joe : aucune instance tmux active sur le port {args.port}.")
+        print(f"Joe: no active tmux instance on port {args.port}.")
         return 1
-    print(f"Joe : instance du port {args.port} arrêtée.")
+    print(f"Joe: stopped the instance on port {args.port}.")
     return 0
 
 
@@ -404,7 +403,7 @@ def _restart(argv: list[str]) -> int:
         return 2
     if not shutil.which("tmux"):
         print(
-            "joe restart: tmux est requis pour un redémarrage automatique.",
+            "joe restart: tmux is required for automatic restart.",
             file=sys.stderr,
         )
         return 2
@@ -412,14 +411,14 @@ def _restart(argv: list[str]) -> int:
     active = _active_runs(url)
     if active:
         print(
-            "joe restart: redémarrage refusé, une tâche est encore active.",
+            "joe restart: refused because a task is still active.",
             file=sys.stderr,
         )
         return 3
     if active is None and not args.force:
         print(
-            "joe restart: état du serveur inaccessible ; utilise --force "
-            "pour redémarrer quand même.",
+            "joe restart: server status is unavailable; use --force to "
+            "restart anyway.",
             file=sys.stderr,
         )
         return 3
@@ -531,7 +530,7 @@ def _skills(argv: list[str]) -> int:
         print(json.dumps(list_skills(project), ensure_ascii=False, indent=2))
         return 0
     if args.source is None:
-        skills_parser.error("skills import nécessite un chemin source")
+        skills_parser.error("skills import requires a source path")
     result = import_skill(
         project,
         args.source,
@@ -569,12 +568,12 @@ def _auth(argv: list[str]) -> int:
         with urllib.request.urlopen(request, timeout=5) as response:
             payload = json.loads(response.read())
     except (OSError, ValueError, json.JSONDecodeError, urllib.error.URLError) as exc:
-        print(f"joe auth: rotation impossible : {exc}", file=sys.stderr)
+        print(f"joe auth: rotation failed: {exc}", file=sys.stderr)
         return 1
     if not payload.get("rotated"):
-        print("joe auth: rotation refusée.", file=sys.stderr)
+        print("joe auth: rotation refused.", file=sys.stderr)
         return 1
-    print("Joe : secret local renouvelé ; les anciennes sessions sont révoquées.")
+    print("Joe: local secret rotated; previous sessions were revoked.")
     if not args.no_browser:
         webbrowser.open(_pairing_url(url))
     return 0
@@ -637,7 +636,7 @@ def _sync(argv: list[str]) -> int:
     print(format_audit(results))
     changed = any(item["changed"] for item in results)
     if not args.apply:
-        print("\nUtilise `joe sync --apply` pour intégrer les nouveautés détectées.")
+        print("\nUse `joe sync --apply` to integrate the detected updates.")
         return 1 if changed else 0
     if not changed and not args.force:
         print("\nAucune nouvelle version. Utilise --force pour un audit complet.")

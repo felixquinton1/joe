@@ -19,7 +19,7 @@ from joe.web import (
     build_quota_notice,
 )
 from joe.http_utils import MAX_JSON_BODY_BYTES, validate_bind
-from joe.web_runs import _resolve_execution_mode, _run_summary
+from joe.web_runs import _language_context, _resolve_execution_mode, _run_summary
 from joe.web_server import API_VERSION
 
 
@@ -1194,12 +1194,12 @@ def test_read_only_runs_are_told_no_approval_channel_exists():
     from joe.web_runs import _permission_context
 
     read_only = _permission_context(None)
-    assert "aucune invite d'approbation interactive" in read_only
-    assert "Ne demande jamais d'approuver une commande" in read_only
-    assert "Permission des validations opérationnelles" in read_only
+    assert "cannot relay an interactive permission request" in read_only
+    assert "Never ask the user to approve a command" in read_only
+    assert "operational validation permission" in read_only
 
     writable = _permission_context("workspace-write")
-    assert "Exécute directement les commandes" in writable
+    assert "Execute the necessary commands directly" in writable
     assert "Ne demande jamais" not in writable
 
 
@@ -1345,3 +1345,13 @@ def test_a_run_without_prompt_label_stores_the_full_request(tmp_path, monkeypatc
 
     messages = manager.conversations.get(conversation["id"])["messages"]
     assert messages[0]["content"] == "Corrige le bug de tri"
+
+
+def test_run_language_instruction_covers_all_workflow_stages():
+    english = _language_context("en")
+    french = _language_context("fr")
+
+    assert "Answer the user in English" in english
+    assert "plans, reviews, consensus stages" in english
+    assert "Réponds à l’utilisateur en français" in french
+    assert "étapes de consensus" in french

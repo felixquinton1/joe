@@ -2,6 +2,11 @@
 
 **A local control room for your AI coding CLIs.**
 
+[![CI](https://github.com/felixquinton1/joe/actions/workflows/ci.yml/badge.svg)](https://github.com/felixquinton1/joe/actions/workflows/ci.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB.svg)](https://www.python.org/)
+[![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/joe-orchestrator.svg)](https://pypi.org/project/joe-orchestrator/)
+
 Joe routes plain-language requests across Codex, Claude Code, Gemini CLI,
 GitHub Copilot CLI, and Cursor CLI. It keeps project context portable between
 providers, supports independent review and consensus workflows, and gives you
@@ -60,7 +65,15 @@ controls depend on what each installed CLI exposes.
 
 ## Installation
 
-Install the current repository build in an isolated environment:
+Once the first public release is available, install Joe in an isolated
+environment:
+
+```bash
+pipx install joe-orchestrator
+joe doctor
+```
+
+Until then, install the current repository build:
 
 ```bash
 pipx install git+https://github.com/felixquinton1/joe.git
@@ -328,6 +341,7 @@ Architecture and behavior references:
 - [VS Code integration plan](docs/vscode-extension-action-plan.md)
 - [Contributing guide](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
+- [Release guide](docs/releasing.md)
 
 ## License
 

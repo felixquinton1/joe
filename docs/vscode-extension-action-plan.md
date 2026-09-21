@@ -163,7 +163,7 @@ les irritants récurrents, puis publier sur PyPI et éventuellement Marketplace.
 ## 7. Artefacts attendus
 
 - ce plan, le contrat API et le [guide utilisateur](user-guide.md) ;
-- paquet Python `joe-orchestrator` et commandes `joe`/`agent` ;
+- paquet Python `joe-orchestrator` et commande `joe` ;
 - extension versionnée et VSIX non commité ;
 - tests de reprise et de portabilité ;
 - workflows CI et release ;

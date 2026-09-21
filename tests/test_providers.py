@@ -151,8 +151,8 @@ def test_silent_provider_emits_elapsed_time_heartbeat(tmp_path, monkeypatch):
     )
 
     assert result.ok
-    assert any("Toujours en cours" in text for _, text in events)
-    assert any("Processus actif depuis" in text for _, text in events)
+    assert any('"label_key": "still_running"' in text for _, text in events)
+    assert any('"detail": "0 s"' in text for _, text in events)
 
 
 def test_provider_can_be_cancelled_without_waiting_for_timeout(tmp_path):
@@ -691,3 +691,14 @@ def test_the_reviewer_counterpart_comes_from_the_registry():
     assert counterpart("gemini") == "codex"
     assert counterpart("copilot") == "codex"
     assert counterpart("codex", eligible=("codex",)) is None
+
+
+def test_codex_preparation_activity_exposes_a_translation_key():
+    activity = _activity("codex", "stdout", '{"type":"turn.started"}')
+
+    assert activity == {
+        "kind": "status",
+        "label": "Preparing the response",
+        "label_key": "preparing_response",
+        "detail": "",
+    }

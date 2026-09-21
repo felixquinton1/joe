@@ -1,0 +1,44 @@
+name: Bug report
+description: Report a reproducible problem in Joe
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not report security vulnerabilities here. Use the private security
+        reporting channel described in SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Joe version
+      description: Output of `joe --version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [Linux, macOS, Windows, WSL, Remote-SSH, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Include minimal steps, expected behavior, and actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Paste sanitized `joe doctor` output and relevant logs. Remove tokens, private prompts, paths, and repository data.
+      render: shell
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Data safety
+      options:
+        - label: I removed credentials, private conversations, and restricted project data.
+          required: true

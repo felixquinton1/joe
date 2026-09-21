@@ -647,6 +647,9 @@ class Handler(BaseHTTPRequestHandler):
             mode = payload.get("mode") or None
             model = str(payload.get("model", "")).strip() or None
             effort = str(payload.get("effort", "")).strip() or None
+            language = str(payload.get("language", "fr")).strip().lower()
+            if language not in {"fr", "en"}:
+                raise ValueError("invalid language")
             execution_mode = str(payload.get("execution_mode", "")).strip() or None
             attachments = payload.get("attachments") or []
             if (
@@ -812,6 +815,7 @@ class Handler(BaseHTTPRequestHandler):
                 decision=decision,
                 plan_stage=plan_stage,
                 prompt_label=prompt_label,
+                language=language,
             )
         except ActiveConversationError as exc:
             return self._json({"error": str(exc)}, HTTPStatus.CONFLICT)

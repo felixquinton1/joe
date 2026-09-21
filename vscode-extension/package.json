@@ -33,45 +33,45 @@
     "commands": [
       {
         "command": "joe.refresh",
-        "title": "Joe: Actualiser l’état",
+        "title": "Joe: Refresh status",
         "icon": "$(refresh)"
       },
       {
         "command": "joe.start",
-        "title": "Joe: Démarrer",
+        "title": "Joe: Start",
         "icon": "$(play)"
       },
       {
         "command": "joe.openWeb",
-        "title": "Joe: Ouvrir l’interface Web",
+        "title": "Joe: Open Web interface",
         "icon": "$(globe)"
       },
       {
         "command": "joe.restart",
-        "title": "Joe: Redémarrer le serveur",
+        "title": "Joe: Restart server",
         "icon": "$(debug-restart)"
       },
       {
         "command": "joe.stop",
-        "title": "Joe: Arrêter le serveur",
+        "title": "Joe: Stop server",
         "icon": "$(debug-stop)"
       },
       {
         "command": "joe.openGuide",
-        "title": "Joe: Ouvrir le guide",
+        "title": "Joe: Open guide",
         "icon": "$(question)"
       },
       {
         "command": "joe.zoomIn",
-        "title": "Joe: Zoomer"
+        "title": "Joe: Zoom in"
       },
       {
         "command": "joe.zoomOut",
-        "title": "Joe: Dézoomer"
+        "title": "Joe: Zoom out"
       },
       {
         "command": "joe.zoomReset",
-        "title": "Joe: Réinitialiser le zoom"
+        "title": "Joe: Reset zoom"
       }
     ],
     "configuration": {
@@ -80,7 +80,7 @@
         "joe.serverUrl": {
           "type": "string",
           "default": "http://127.0.0.1:8765",
-          "description": "Adresse locale du serveur Joe sur l’hôte du workspace."
+          "description": "Local Joe server URL on the workspace host."
         }
       }
     },
@@ -129,14 +129,9 @@
           "group": "navigation@4"
         },
         {
-          "command": "joe.refresh",
-          "when": "view == joe.overview",
-          "group": "navigation@5"
-        },
-        {
           "command": "joe.openGuide",
           "when": "view == joe.overview",
-          "group": "navigation@6"
+          "group": "navigation@5"
         }
       ]
     }

@@ -1,4 +1,4 @@
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.1.1";
 const state = {
   agents: new Map(),
   capabilities: {},
@@ -1085,7 +1085,11 @@ function ensureAgent(name) {
 function setAgentMeta(agent, { model, effort } = {}) {
   if (model !== undefined) agent.model = model;
   if (effort !== undefined) agent.effort = effort;
-  const parts = [agent.model, agent.effort ? `effort ${agent.effort}` : ""].filter(Boolean);
+  const displayedEffort = agent.effort || t("provider_default_effort");
+  const parts = [
+    agent.model,
+    agent.model ? `${t("effort").toLowerCase()} ${displayedEffort}` : ""
+  ].filter(Boolean);
   agent.meta.textContent = parts.join(" · ");
   agent.meta.classList.toggle("hidden", parts.length === 0);
   return parts.join(" · ");
@@ -1122,13 +1126,24 @@ function renderWorkflowUpdate(event, finalBubble, runId) {
     event.effort ? `effort ${event.effort}` : "",
     event.fallback_from ? t("fallback_from_lower", { provider: capitalize(event.fallback_from) }) : ""
   ].filter(Boolean).join(" · ");
-  stage.innerHTML = `<summary><span>${escapeHtml(event.label)}</span><b>${escapeHtml(providerDetails)} · ${t(complete ? "done_lower" : failed ? "failed_lower" : "running_lower")}</b></summary><div class="workflow-opinion"></div>`;
+  const stageLabel = workflowStageLabel(event);
+  stage.innerHTML = `<summary><span>${escapeHtml(stageLabel)}</span><b>${escapeHtml(providerDetails)} · ${t(complete ? "done_lower" : failed ? "failed_lower" : "running_lower")}</b></summary><div class="workflow-opinion"></div>`;
   if ((complete || failed) && event.content) {
     renderMarkdown(stage.querySelector(".workflow-opinion"), event.content);
     stage.querySelector("summary").appendChild(
       copyButton(() => event.content)
     );
   }
+}
+
+function workflowStageLabel(event) {
+  if (event.stage === "implementation") return t("workflow_implementation");
+  if (event.stage === "review") return t("workflow_review");
+  if (event.stage === "correction") return t("workflow_correction");
+  if (event.stage === "synthesis") return t("workflow_synthesis");
+  if (event.stage?.startsWith("proposal_")) return t("workflow_proposal");
+  if (event.stage?.startsWith("review_")) return t("workflow_cross_review");
+  return event.label;
 }
 
 function workflowLabels(mode) {
@@ -1373,13 +1388,15 @@ function handleEvent(conversationId, event, finalBubble) {
     agent.heartbeat.classList.add("hidden");
     const metadata = setAgentMeta(agent, {
       model: event.model || t("default_model"),
-      effort: event.effort || t("default_effort")
+      effort: event.effort || ""
     });
     updateWorkflowProviderMetadata(event.provider, metadata);
   } else if (event.type === "activity") {
     const agent = ensureAgent(event.provider);
     if (event.kind === "heartbeat") {
-      agent.heartbeat.textContent = event.detail || event.label;
+      agent.heartbeat.textContent = event.label_key === "still_running"
+        ? t("active_for", { duration: event.detail })
+        : (event.detail || (event.label_key ? t(event.label_key) : event.label));
       agent.heartbeat.classList.remove("hidden");
     } else if (event.kind === "model") {
       const metadata = setAgentMeta(agent, { model: event.label });
@@ -1391,7 +1408,8 @@ function handleEvent(conversationId, event, finalBubble) {
         const row = document.createElement("div");
         row.className = "activity-row";
         row.dataset.signature = signature;
-        row.innerHTML = `<i></i><div><strong>${escapeHtml(event.label)}</strong>${event.detail ? `<span>${escapeHtml(event.detail)}</span>` : ""}</div>`;
+        const activityLabel = event.label_key ? t(event.label_key) : event.label;
+        row.innerHTML = `<i></i><div><strong>${escapeHtml(activityLabel)}</strong>${event.detail ? `<span>${escapeHtml(event.detail)}</span>` : ""}</div>`;
         const followActivity = shouldFollow(agent.activity);
         agent.activity.appendChild(row);
         while (agent.activity.children.length > 12) agent.activity.firstElementChild.remove();
@@ -1589,6 +1607,7 @@ async function startRun(
   const payload = {
     request,
     conversation_id: conversationId,
+    language,
     ...runSettings
   };
   if (promptLabel) payload.prompt_label = promptLabel;

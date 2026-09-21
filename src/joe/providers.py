@@ -581,8 +581,9 @@ def _collect_streams(
                     json.dumps(
                         {
                             "kind": "heartbeat",
-                            "label": "Toujours en cours",
-                            "detail": f"Processus actif depuis {duration}",
+                            "label": "Still running",
+                            "label_key": "still_running",
+                            "detail": duration,
                         },
                         ensure_ascii=False,
                     ),
@@ -712,7 +713,8 @@ def _activity_codex(event: dict) -> dict[str, str] | None:
     if event.get("type") == "turn.started":
         return {
             "kind": "status",
-            "label": "Préparation de la réponse",
+            "label": "Preparing the response",
+            "label_key": "preparing_response",
             "detail": "",
         }
     return None

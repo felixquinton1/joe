@@ -1,8 +1,24 @@
 # Changelog
 
-Toutes les évolutions notables de Joe. Le format suit
-[Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), et les versions
-respectent [SemVer](https://semver.org/lang/fr/).
+All notable changes to Joe are documented here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
+[Semantic Versioning](https://semver.org/).
+
+## [Unreleased]
+
+### Added
+
+- Durable autonomous recovery across quota windows and server restarts.
+- English and French response-language propagation across FAST, REVIEW, plan,
+  and CONSENSUS workflows.
+- Explicit TestPyPI and PyPI trusted-publishing workflow.
+
+### Changed
+
+- Public documentation and VS Code Marketplace metadata are now written in
+  English.
+- Provider activity and workflow labels are translated by the interface rather
+  than emitted as French display strings by the backend.
 
 ## [1.0.0] — 2026-09-03
 

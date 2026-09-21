@@ -324,8 +324,8 @@ class Orchestrator:
                     {
                         "type": "provider_start",
                         "provider": name,
-                        "model": selected_model or "non exposé",
-                        "effort": selected_effort or "défaut fournisseur",
+                        "model": selected_model,
+                        "effort": selected_effort,
                     }
                 )
             result = self.providers[name].run(

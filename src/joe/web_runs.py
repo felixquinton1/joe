@@ -64,6 +64,24 @@ def _quota_backoff(defer_count: int, now: float | None = None) -> float:
     return timestamp + delay
 
 
+def _language_context(language: str) -> str:
+    """Keep provider output aligned with the language selected in Joe Web."""
+    if language == "en":
+        return (
+            "\n\n# Response language\n"
+            "Answer the user in English. Keep code, commands, paths, and "
+            "quoted source text unchanged. This instruction also applies to "
+            "plans, reviews, consensus stages, and the final synthesis."
+        )
+    return (
+        "\n\n# Langue de réponse\n"
+        "Réponds à l’utilisateur en français. Conserve le code, les commandes, "
+        "les chemins et les citations de sources dans leur forme d’origine. "
+        "Cette consigne s’applique aussi aux plans, revues, étapes de consensus "
+        "et à la synthèse finale."
+    )
+
+
 @dataclass(frozen=True)
 class RunDecision:
     """Everything decided before a run starts, computed once and transported.
@@ -299,6 +317,7 @@ class RunManager:
         record_user_message: bool = True,
         not_before: float | None = None,
         defer_count: int = 0,
+        language: str = "fr",
     ) -> LiveRun:
         run_id = run_id or uuid.uuid4().hex
         # Une décision fournie par l'appelant est celle qui a été autorisée :
@@ -389,6 +408,7 @@ class RunManager:
                         model,
                         effort,
                         execution_mode,
+                        language,
                     )
             except Exception:
                 self.live.pop(run.run_id, None)
@@ -415,6 +435,7 @@ class RunManager:
                 effort,
                 execution_mode,
                 decision,
+                language,
             ),
             daemon=True,
         )
@@ -718,6 +739,7 @@ class RunManager:
         effort: str | None,
         execution_mode: str | None,
         decision: RunDecision | None = None,
+        language: str = "fr",
     ) -> None:
         try:
             if run.not_before:
@@ -827,7 +849,8 @@ class RunManager:
                             str(quota_admission["message"]),
                         )
                         return self._execute(
-                            run, agent, mode, None, None, execution_mode, None
+                            run, agent, mode, None, None, execution_mode, None,
+                            language,
                         )
                     raise RuntimeError(quota_admission["message"])
             run.emit(
@@ -848,11 +871,13 @@ class RunManager:
                 )
             evidence_context = (
                 self.conversations.context(run.conversation_id)
+                + _language_context(language)
                 + "\n\n# Evidence policy\n"
                 "Never claim that a file, command, remote state, or URL was checked "
                 "unless the corresponding tool completed successfully. In reports, "
-                "separate material claims as Vérifié, Inféré, or Refusé. A blocked "
-                "sandbox or permission check is Refusé, never Vérifié.\n"
+                "separate material claims as Verified, Inferred, or Blocked, using "
+                "equivalent terms in the requested response language. A blocked "
+                "sandbox or permission check is Blocked, never Verified.\n"
                 f"The active workspace is {workspace}. Use only instructions and "
                 "skills whose repository scope matches this workspace. Never apply "
                 "a skill belonging to another project."
@@ -939,7 +964,8 @@ class RunManager:
                     "Quota atteint pendant l’exécution ; reprise automatique différée",
                 )
                 return self._execute(
-                    run, agent, mode, None, None, execution_mode, None
+                    run, agent, mode, None, None, execution_mode, None,
+                    language,
                 )
             git_report = self._capture_git_report(run)
             self._update_task_git(run, git_report)
@@ -2495,6 +2521,7 @@ class RunManager:
         model: str | None,
         effort: str | None,
         execution_mode: str | None,
+        language: str = "fr",
     ) -> None:
         pending = self._read_pending()
         pending[run.run_id] = {
@@ -2505,6 +2532,7 @@ class RunManager:
             "model": model,
             "effort": effort,
             "execution_mode": execution_mode,
+            "language": language,
             "attachments": run.attachments,
             "not_before": run.not_before,
             "defer_count": run.defer_count,
@@ -2551,6 +2579,7 @@ class RunManager:
                 resumed=True,
                 not_before=item.get("not_before"),
                 defer_count=int(item.get("defer_count", 0)),
+                language=str(item.get("language", "fr")),
             )
 
     def history(self) -> list[dict[str, Any]]:
@@ -3083,13 +3112,13 @@ def _task_pipeline(task: dict[str, Any]) -> list[dict[str, str]]:
 # décide à neuf, en fonction des quotas restants et de la tâche.
 _PLAN_CONTEXT = """
 
-# Mode plan
-Tu es en mode plan : n'exécute aucune commande et ne modifie aucun fichier.
-Inspecte ce dont tu as besoin en lecture seule, puis rends UN plan d'exécution :
-les étapes dans l'ordre, ce que chacune change, et ce qui la valide. Sois
-concret et court — ce plan sera soumis tel quel à l'utilisateur, puis exécuté
-par un agent qui n'aura que ce texte et l'historique de la conversation.
-Ne demande pas d'autorisation : la validation se fait sur ta réponse.
+# Plan mode
+Do not execute commands or modify files. Inspect only what can be read safely,
+then return ONE concise execution plan: ordered steps, what each changes, and
+how each is validated. Write it in the requested response language. The plan
+will be shown as-is to the user and later executed by an agent that receives
+only this text and the conversation history. Do not ask for execution
+permission; approval is performed on the completed plan.
 """
 
 
@@ -3104,27 +3133,25 @@ def _permission_context(execution_mode: str | None) -> str:
     recevra jamais.
     """
     read_only = _access_level(execution_mode, modifying=False) == "read"
-    level = execution_mode or "lecture seule (défaut)"
+    level = execution_mode or "read-only (default)"
     lines = [
-        "\n\n# Permissions de ce run\n",
-        f"Niveau accordé : {level}. ",
-        "Joe fixe ce niveau au lancement et ne peut PAS te transmettre une "
-        "demande d'autorisation en cours d'exécution : il n'existe aucune "
-        "invite d'approbation interactive. ",
+        "\n\n# Run permissions\n",
+        f"Granted level: {level}. ",
+        "Joe fixes this level when the provider starts and cannot relay an "
+        "interactive permission request during the run. ",
     ]
     if read_only:
         lines.append(
-            "Tu ne peux exécuter aucune commande. Si répondre en exige une, "
-            "dis-le explicitement, classe le point en Refusé, et indique à "
-            "l'utilisateur le réglage à changer — « Permissions » de la "
-            "conversation, ou « Permission des validations opérationnelles » "
-            "du projet. Ne demande jamais d'approuver une commande : personne "
-            "ne recevra la demande."
+            "You cannot execute commands. If the answer requires one, state the "
+            "limitation clearly in the requested response language and point to "
+            "the conversation Permissions setting or the project's operational "
+            "validation permission. Never ask the user to approve a command: no "
+            "such prompt will be delivered."
         )
     else:
         lines.append(
-            "Exécute directement les commandes nécessaires dans ce périmètre, "
-            "sans demander d'autorisation préalable."
+            "Execute the necessary commands directly within this scope without "
+            "asking for prior approval."
         )
     return "".join(lines)
 

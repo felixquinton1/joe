@@ -24,7 +24,7 @@ def test_kill_stops_only_numbered_joe_tmux_sessions(monkeypatch, capsys):
         ["tmux", "kill-session", "-t", "joe-8765"],
         ["tmux", "kill-session", "-t", "joe-9000"],
     ]
-    assert "2 sessions tmux arrêtées" in capsys.readouterr().out
+    assert "stopped 2 tmux sessions" in capsys.readouterr().out
 
 
 def test_kill_succeeds_when_no_joe_session_exists(monkeypatch, capsys):
@@ -35,7 +35,7 @@ def test_kill_succeeds_when_no_joe_session_exists(monkeypatch, capsys):
     )
 
     assert _kill([]) == 0
-    assert "aucune session" in capsys.readouterr().out
+    assert "no active tmux session" in capsys.readouterr().out
 
 
 def test_restart_refuses_when_a_run_is_active(tmp_path, monkeypatch, capsys):
@@ -43,7 +43,7 @@ def test_restart_refuses_when_a_run_is_active(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("joe.cli._active_runs", lambda url: [{"run_id": "one"}])
 
     assert _restart(["-C", str(tmp_path)]) == 3
-    assert "tâche est encore active" in capsys.readouterr().err
+    assert "a task is still active" in capsys.readouterr().err
 
 
 def test_restart_recreates_only_selected_tmux_session(
@@ -99,7 +99,7 @@ def test_restart_requires_force_when_server_is_unreachable(
     monkeypatch.setattr("joe.cli._active_runs", lambda url: None)
 
     assert _restart(["-C", str(tmp_path)]) == 3
-    assert "utilise --force" in capsys.readouterr().err
+    assert "use --force" in capsys.readouterr().err
 
 
 def test_forced_restart_recovers_an_unreachable_server(

@@ -150,6 +150,7 @@
       profile_forbidden: "Le profil de ce serveur Joe n’autorise pas cette action. Relance Joe avec --profile maintainer si nécessaire.",
       consensus_running: "Consensus en cours", consensus_complete: "Consensus terminé", consensus_detail: "Avis et examens croisés",
       review_running: "Implémentation contrôlée", review_complete: "Implémentation contrôlée terminée", review_detail: "Réalisation, revue et correction",
+      workflow_implementation: "Implémentation principale", workflow_review: "Revue indépendante", workflow_correction: "Corrections justifiées", workflow_proposal: "Proposition indépendante", workflow_cross_review: "Examen croisé", workflow_synthesis: "Synthèse du consensus",
       execution_running: "Exécution en cours", execution_complete: "Exécution terminée", execution_detail: "Traitement par un agent",
       fallback_from_lower: "relais de {provider}", running_lower: "en cours", done_lower: "terminé", failed_lower: "échec",
       joe_summary: "Joe · synthèse", background_task: "Cette tâche continue en arrière-plan…", experiment_without_hypothesis: "Expérience sans hypothèse structurée",
@@ -160,6 +161,8 @@
       changed: "modifié", unchanged: "inchangé", reference_updated: "référence actualisée", fetch_observed: "fetch observé", no_fetch_observed: "aucun fetch observé",
       changes_kept_automatically: "Modifications conservées automatiquement.", no_model_called: "aucun modèle appelé", autonomous_creation: "Création d’Autonomous", implementation: "Implémentation",
       local_action_no_model: "action locale · aucun modèle appelé", final_synthesis_pending: "Synthèse finale en attente…", default_model: "modèle par défaut", default_effort: "défaut",
+      provider_default_effort: "défaut fournisseur", preparing_response: "Préparation de la réponse",
+      still_running: "Toujours en cours", active_for: "Processus actif depuis {duration}",
       quota_exhausted_fallback: "Quota épuisé · relais {provider}", unavailable_fallback: "Indisponible · relais {provider}", verified: "Vérifié", inferred: "Inféré", refused: "Refusé",
       exact_model_prompt: "Identifiant exact du modèle :", full_access_denied: "Demande annulée : accès complet refusé.", interrupted_by_restart: "La tâche a été interrompue par le redémarrage de Joe."
       ,plan_first: "Proposer un plan d'abord", plan_first_help: "L'IA rédige un plan sans rien exécuter. Tu le valides, l'ajustes ou le refuses ; l'exécution est ensuite confiée à l'agent le mieux placé.",
@@ -308,6 +311,7 @@
       pairing_refused: "Joe local pairing refused", session_unpaired: "Joe session is not paired. Run `joe url` to reopen the interface.", profile_forbidden: "This Joe server profile does not allow that action. Restart Joe with --profile maintainer if needed."
       ,consensus_running: "Consensus in progress", consensus_complete: "Consensus complete", consensus_detail: "Independent opinions and cross-reviews",
       review_running: "Controlled implementation", review_complete: "Controlled implementation complete", review_detail: "Implementation, review, and correction",
+      workflow_implementation: "Primary implementation", workflow_review: "Independent review", workflow_correction: "Justified corrections", workflow_proposal: "Independent proposal", workflow_cross_review: "Cross-review", workflow_synthesis: "Consensus synthesis",
       execution_running: "Execution in progress", execution_complete: "Execution complete", execution_detail: "Handled by one agent",
       fallback_from_lower: "fallback for {provider}", running_lower: "running", done_lower: "done", failed_lower: "failed",
       joe_summary: "Joe · summary", background_task: "This task continues in the background…", experiment_without_hypothesis: "Experiment without a structured hypothesis",
@@ -317,6 +321,8 @@
       changed: "changed", unchanged: "unchanged", reference_updated: "reference updated", fetch_observed: "fetch observed", no_fetch_observed: "no fetch observed",
       changes_kept_automatically: "Changes kept automatically.", no_model_called: "no model called", autonomous_creation: "Autonomous creation", implementation: "Implementation",
       local_action_no_model: "local action · no model called", final_synthesis_pending: "Final synthesis pending…", default_model: "default model", default_effort: "default",
+      provider_default_effort: "provider default", preparing_response: "Preparing the response",
+      still_running: "Still running", active_for: "Process active for {duration}",
       quota_exhausted_fallback: "Quota exhausted · fallback to {provider}", unavailable_fallback: "Unavailable · fallback to {provider}", verified: "Verified", inferred: "Inferred", refused: "Refused",
       exact_model_prompt: "Exact model identifier:", full_access_denied: "Request cancelled: full access denied.", interrupted_by_restart: "The task was interrupted by the Joe restart."
       ,plan_first: "Propose a plan first", plan_first_help: "The AI writes a plan without executing anything. You can approve, adjust, or reject it; execution is then assigned to the best-suited agent.",

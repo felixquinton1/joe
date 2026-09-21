@@ -1,54 +1,47 @@
-# Politique de sécurité
+# Security policy
 
-## Signaler une vulnérabilité
+## Reporting a vulnerability
 
-Merci de **ne pas ouvrir d'issue publique** pour une faille de sécurité.
+Please **do not open a public issue** for a security vulnerability.
 
-Utilisez l'onglet *Security* du dépôt GitHub, « Report a vulnerability », qui
-ouvre un canal privé. Décrivez le défaut, la version concernée (`joe --version`)
-et, si possible, la manière de le reproduire.
+Use the repository's **Security → Report a vulnerability** form to open a
+private report. Include the affected version (`joe --version`) and a minimal
+reproduction when possible.
 
-Comptez une première réponse sous une semaine. Ce projet est maintenu sur du
-temps disponible : ce délai est un usage, pas un engagement contractuel.
+The project aims to acknowledge reports within one week. Joe is maintained on
+available time, so this is a target rather than a service-level commitment.
 
-## Versions suivies
+## Supported versions
 
-Seule la dernière version publiée reçoit des correctifs.
+Only the latest published version receives security fixes.
 
-## Ce que Joe fait, et ce que cela implique
+## Security model
 
-Joe est un orchestrateur local. Le comprendre évite de signaler comme faille un
-comportement voulu, et aide à reconnaître ce qui en est vraiment une.
+Joe is a local orchestrator:
 
-- **Joe lance les CLI de fournisseurs déjà installées et authentifiées** sur la
-  machine. Il ne demande, ne stocke ni ne transmet leurs identifiants. Les
-  jetons de ces outils restent là où eux les rangent.
-- **Joe leur accorde le niveau d'accès choisi pour le projet**, jusqu'à
-  l'exécution de commandes et la modification de fichiers dans la racine du
-  projet et ses racines additionnelles. C'est la fonction même de l'outil : un
-  agent qui modifie des fichiers avec l'accès accordé n'est pas une faille.
-- **L'interface web n'écoute que sur la boucle locale**, sauf `--allow-remote`
-  explicite, et l'authentification reste obligatoire dans ce cas.
-- **Les campagnes autonomes enchaînent des appels de modèles et des commandes
-  sans intervention.** Elles sont expérimentales et bornées par des budgets que
-  l'utilisateur fixe.
+- it launches provider CLIs that are already installed and authenticated;
+- it grants them the project access level selected by the user, including
+  command execution and file modification when explicitly allowed;
+- it binds the Web interface to loopback by default;
+- remote binds require `--allow-remote` and remain authenticated;
+- autonomous campaigns can call models and commands without interaction, but
+  are bounded by user-configured budgets and stop conditions.
 
-Sont en revanche des vulnérabilités, et nous voulons les connaître :
+Joe does not request or store provider passwords. Provider credentials remain
+under the control of their respective CLIs.
 
-- une commande exécutée hors du périmètre accordé au projet ;
-- un moyen d'obtenir le jeton d'authentification, ou de s'en passer ;
-- un accès aux données d'un projet depuis un autre ;
-- une page web tierce capable d'agir sur l'instance locale de l'utilisateur ;
-- la divulgation, par une route non authentifiée, d'informations sur la machine.
+Please report behavior such as:
 
-## Limites connues
+- command execution outside the configured project scope;
+- disclosure or bypass of the local authentication token;
+- cross-project access to files or conversation data;
+- a third-party page acting on a local Joe instance;
+- unauthenticated disclosure of machine-specific information.
 
-Ces points sont documentés plutôt que corrigés, et ne sont pas à signaler :
+## Known limitations
 
-- **L'en-tête `Host` n'est pas validé.** Le serveur reste donc atteignable par
-  un nom qui résout vers la boucle locale. Les routes sensibles exigent un
-  jeton, que le cookie `SameSite=Strict` ne divulgue pas à une autre origine.
-- **`/api/status` répond sans authentification.** L'interface en a besoin pour
-  se rendre et signaler un serveur périmé. Elle n'expose que la version, les
-  fournisseurs déclarés et les modes ; le chemin du projet et le profil ne sont
-  joints qu'à un appelant identifié.
+- The `Host` header is not restricted. Sensitive endpoints still require the
+  local token, and the authentication cookie uses `SameSite=Strict`.
+- `/api/status` is intentionally public so the UI can detect and pair with the
+  server. It exposes product version, provider catalog, modes, and whether
+  authentication is required; workspace paths and profiles remain protected.
