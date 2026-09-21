@@ -67,18 +67,6 @@ async function loadStatus() {
   updateProviderMenu(status.provider_catalog || status.providers || []);
   annotateNetworkControl(status.network_control_providers);
   $("version").textContent = status.version || t("old_version");
-  // Joe lit son historique dans le dossier d'où il a été lancé. Relancé
-  // ailleurs, il ouvre un autre journal et les conversations semblent
-  // perdues : afficher ce dossier rend la situation lisible.
-  const workspace = $("workspace");
-  if (status.project) {
-    const parts = status.project.replace(/[\\/]+$/, "").split(/[\\/]/);
-    workspace.textContent = parts[parts.length - 1] || status.project;
-    workspace.title = t("workspace_root", { path: status.project });
-  } else {
-    workspace.textContent = "";
-    workspace.removeAttribute("title");
-  }
   if (status.conversation_store) {
     if (servedStore && status.conversation_store !== servedStore) {
       const banner = $("restart-warning");
