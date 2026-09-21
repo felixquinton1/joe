@@ -5,7 +5,7 @@ public or publishing packages.
 
 ## Before the first public release
 
-1. Add sanitized screenshots under `docs/assets/` using the documented names.
+1. Review the sanitized screenshots under `docs/assets/` one final time.
 2. Review the complete Git history for credentials, private conversations,
    company names, internal paths, and restricted data.
 3. Confirm the repository description, topics, social preview, Discussions,
@@ -90,8 +90,11 @@ joe doctor
 4. Run **Release packages** manually from that tag with target `pypi`.
 5. Approve the protected `pypi` environment after reviewing the build.
 6. Verify PyPI installation on a clean Linux, macOS, or Windows environment.
-7. Create the GitHub release from the same tag and attach the wheel, source
-   archive, and VSIX if the extension is part of that release.
+7. Confirm that the workflow created the GitHub release only after the PyPI
+   publication succeeded. The release contains the wheel and source archive.
+
+The VS Code companion is not part of the first public distribution. It remains
+available as source in `vscode-extension/` and can be packaged locally.
 
 PyPI versions are immutable. If any check fails after publication, bump the
 version and publish a new release instead of replacing files.

@@ -45,7 +45,7 @@ jobs:
 
   github-release:
     if: inputs.target == 'pypi'
-    needs: build
+    needs: [build, pypi]
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -1,63 +1,116 @@
 # Joe
 
-**A local control room for your AI coding CLIs.**
+**A visual control room for your AI coding agents.**
 
 [![CI](https://github.com/felixquinton1/joe/actions/workflows/ci.yml/badge.svg)](https://github.com/felixquinton1/joe/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB.svg)](https://www.python.org/)
 [![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/joe-orchestrator.svg)](https://pypi.org/project/joe-orchestrator/)
 
-Joe routes plain-language requests across Codex, Claude Code, Gemini CLI,
-GitHub Copilot CLI, and Cursor CLI. It keeps project context portable between
-providers, supports independent review and consensus workflows, and gives you
-one persistent interface for conversations, tasks, permissions, diffs, and
-provider activity.
+Joe brings Codex, Claude Code, Gemini CLI, GitHub Copilot CLI, and Cursor CLI
+into one persistent local workspace. Write a request naturally; Joe selects an
+appropriate workflow and agent, carries project context between providers, and
+shows what is happening as it runs.
 
-Joe runs on your machine and uses the provider accounts and CLIs you already
-have. It is not an AI provider, proxy, or billing service.
+It uses the CLI subscriptions you already have. Joe is not an AI provider,
+proxy, or additional billing service.
 
-![Joe Web: conversations on the left, provider and workflow controls on top, live agent activity on the right](https://raw.githubusercontent.com/felixquinton1/joe/main/docs/assets/joe-overview.png)
+![Joe Web interface with conversations, model controls, and live agent activity](https://raw.githubusercontent.com/felixquinton1/joe/main/docs/assets/joe-overview.png)
 
-*One entry point per project. The provider, workflow, model, effort, and
-permission controls stay visible above the conversation.*
+## What Joe brings together
 
-> [!IMPORTANT]
-> Joe can launch commands and edit files through the selected provider. Review
-> project roots, permissions, autonomous limits, and Git changes before relying
-> on unattended execution. Closing the browser does not stop server-side work.
+- **One visual workspace** for projects, conversations, tasks, approvals, Git
+  changes, provider activity, quotas, and settings.
+- **Automatic routing** based on the request, model capabilities, provider
+  availability, recent failures, and known quota windows.
+- **Persistent context** that lets Codex, Claude, Gemini, Copilot, and Cursor
+  continue the same project without asking you to restate everything.
+- **Live, honest progress** showing the provider, model, effort, stage, tools,
+  fallbacks, and failures that actually occurred.
+- **Concurrent conversations** with queued prompts, cancellation, durable task
+  states, and optional Git worktree isolation.
+- **Human control** over permissions, approvals, diffs, integration, commits,
+  and autonomous limits.
 
-## Why Joe?
+## Workflows
 
-- **One natural-language entry point.** Ask a question or request a change;
-  workflow verbs are optional.
-- **Provider-aware routing.** Joe considers task type, model capabilities,
-  availability, recent failures, and known personal quota windows.
-- **Shared project context.** Move between providers without rebuilding the
-  conversation by hand.
-- **Controlled collaboration.** Use one agent, an implementation with an
-  independent review, or a multi-agent consensus.
-- **Persistent work.** Conversations, tasks, queued prompts, approvals, and run
-  logs survive browser and server restarts.
-- **Safe parallel changes.** Optional Git worktrees isolate modifying tasks and
-  keep integration explicit.
-- **Local-first operation.** The Web UI, history, memory, and control plane stay
-  on the machine running Joe.
+Joe chooses a workflow automatically, while always allowing a manual override.
 
-## Status
+| Mode | How it works | Best suited to |
+| --- | --- | --- |
+| **FAST** | One agent answers or implements directly | Questions and focused changes |
+| **REVIEW** | One agent works, another reviews, then at most one justified correction pass runs | Meaningful implementation work |
+| **CONSENSUS** | Independent proposals run in parallel, each is challenged, then a final synthesis reconciles the evidence | Research, architecture, scientific plans, and important decisions |
 
-Joe is an alpha project intended for local, single-user workflows. CI runs the
-test suite on Python 3.10 and 3.12, plus installation checks on Linux, macOS,
-and Windows with Python 3.12. Provider behavior can still change when
-third-party CLIs update.
+### Consensus, visible from start to finish
 
-## Requirements
+Consensus is not a black box. Joe exposes each independent proposal and
+cross-review as it completes, with the real provider, model, and effort used
+for every stage.
 
-- Python 3.10 or newer
-- One or more supported provider CLIs, installed and authenticated separately
-- Git for repository-aware features
-- `tmux` on Linux/macOS if you want the Web server to remain detached
+![A consensus in progress with independent proposals and cross-reviews](https://raw.githubusercontent.com/felixquinton1/joe/main/docs/assets/joe-consensus-running.png)
 
-| Provider | Expected command |
+The synthesis is produced only after the available opinions and reviews have
+finished. If a provider fails or reaches a quota, Joe reports the degradation
+and uses an eligible fallback instead of pretending that every stage ran.
+
+![A completed consensus with its final synthesis](https://raw.githubusercontent.com/felixquinton1/joe/main/docs/assets/joe-consensus.png)
+
+## Autonomous work
+
+Joe can turn a longer objective into a bounded sequence of steps and continue
+it without keeping the browser open. An autonomous campaign can:
+
+- plan, implement, run tests, inspect results, and make a limited correction;
+- prefer a particular provider and wait for its quota window to reset;
+- schedule work for a later time or a defined overnight/weekend window;
+- enforce maximum steps, model calls, retries, runtime, and stop conditions;
+- checkpoint progress and resume after a Joe restart or provider interruption;
+- reattach to a still-running process instead of launching the same attempt
+  twice;
+- stop for human review when recovery is unsafe or repeatedly fails.
+
+Quota waiting does not consume the campaign's active-time budget. Unknown
+capacity is never treated as guaranteed capacity, and a missing result is never
+fabricated to keep a workflow moving.
+
+> [!WARNING]
+> Autonomous execution can run commands and modify files through the selected
+> provider. Review project roots, permissions, resource limits, Git policy, and
+> validation steps before leaving a campaign unattended.
+
+## Install and open Joe
+
+Joe requires Python 3.10 or newer and at least one supported provider CLI,
+installed and authenticated separately.
+
+Install the Python package in an isolated environment:
+
+```bash
+pipx install joe-orchestrator
+```
+
+Then open a terminal in a project and run:
+
+```bash
+joe
+```
+
+Joe opens the local Web interface on `127.0.0.1:8765`. On Linux and macOS,
+`tmux` can keep the server alive after the terminal or remote connection closes.
+
+Check the local installation without consuming provider quota:
+
+```bash
+joe doctor
+```
+
+Use `joe doctor --live` only when you intentionally want Joe to send one short
+request to every installed provider.
+
+### Supported provider CLIs
+
+| Provider | Command expected by Joe |
 | --- | --- |
 | OpenAI Codex | `codex` |
 | Claude Code | `claude` |
@@ -65,57 +118,81 @@ third-party CLIs update.
 | GitHub Copilot CLI | `copilot` |
 | Cursor CLI | `cursor-agent` |
 
-Joe never stores provider passwords. Availability, models, quotas, and network
-controls depend on what each installed CLI exposes.
+Joe discovers the models and options exposed by the installed CLIs whenever
+possible. Availability, quota precision, tool access, and model controls still
+depend on each provider.
 
-## Installation
+## The Web control room
 
-Once the first public release is available, install Joe in an isolated
-environment:
+The Web interface is Joe's primary product surface. It includes:
 
-```bash
-pipx install joe-orchestrator
-joe doctor
+- persistent projects, subprojects, conversations, and full-text search;
+- conversation-specific agent, workflow, model, effort, and permission choices;
+- streaming activity without exposing private chain-of-thought;
+- active, queued, completed, blocked, and interrupted task states;
+- structured approval prompts for broader access or sensitive operations;
+- Markdown, tables, code blocks, and mathematical formula rendering;
+- Git summaries, file-level diffs, isolated worktrees, and explicit integration;
+- project and shared skills, files, quota status, and provider diagnostics;
+- English and French interface text stored as a per-browser preference.
+
+Several conversations can run concurrently. A conversation owns at most one
+active run; later prompts can wait in its queue.
+
+## Projects, context, and Git
+
+Joe maintains compact project context under `.agentflow/` so that a different
+provider can continue the work without receiving the entire transcript every
+time:
+
+```text
+.agentflow/
+├── project.md       # stable context and conventions
+├── session.md       # current objective, decisions, and affected files
+├── handoff.md       # compact handoff for the next provider
+├── config.yaml      # project settings
+└── runs/            # complete execution records
 ```
 
-Until then, install the current repository build:
+Conversation data, approvals, pending tasks, local backups, and provider logs
+remain local and are excluded from project Git by default.
 
-```bash
-pipx install git+https://github.com/felixquinton1/joe.git
-joe doctor
-```
+For modifying tasks, projects can use an isolated Git worktree and a
+`joe/<task-id>` branch. Joe keeps the main checkout untouched, presents the
+diff, and lets you integrate or discard the result explicitly. If integration
+conflicts, resolution is limited to three agent passes; otherwise the worktree
+is preserved for human review. Joe never applies a silent “last writer wins”
+policy.
 
-For development:
+Automatic commit and push behavior is configured per project. Keep it disabled
+when you want selective rejection to remain available.
 
-```bash
-git clone https://github.com/felixquinton1/joe.git
-cd joe
-python -m pip install -e .
-pytest -q
-```
+## Permissions and privacy
 
-`joe doctor` checks local configuration without sending prompts. Use
-`joe doctor --live` only when you deliberately want a short real request sent
-to every installed provider.
+Joe binds to localhost by default and pairs the browser with a local secret
+stored outside the project. It supports `viewer`, `operator`, and `maintainer`
+capability ceilings. Provider fallbacks preserve the same or a stricter
+permission level and cannot silently grant broader access.
 
-## Quick start
+Joe limits project work to the configured root and explicit additional roots.
+Network access follows the provider's native controls; currently only Codex
+exposes a switch Joe can enforce. The interface states this limitation rather
+than claiming to sandbox providers that do not support it.
 
-Open a terminal in the project Joe should work on and run:
+Prompts and selected project context are sent to the provider CLI chosen for
+each stage. The provider's terms, retention policies, quotas, and charges still
+apply. See [SECURITY.md](SECURITY.md) for Joe's security model and vulnerability
+reporting process.
 
-```bash
-joe
-```
+## Optional terminal usage
 
-Joe starts the local Web interface on `127.0.0.1:8765`. When `tmux` is
-available, the server runs in a detached `joe-8765` session.
-
-You can also send a one-shot request or use the full terminal interface:
+The Web interface is the default, but the same orchestrator can be used from a
+terminal:
 
 ```bash
 joe "Explain the current architecture"
-joe "Add an option to disable Gamma loss"
 joe --agent claude "Review the proposed API"
-joe --mode consensus "Choose between these two architectures"
+joe --mode consensus "Compare these two designs"
 joe cli
 ```
 
@@ -123,68 +200,21 @@ Useful lifecycle commands:
 
 ```bash
 joe url          # reopen an authenticated Web session
-joe restart      # restart the current Joe Web server
+joe restart      # restart Joe Web
 joe stop         # stop the current instance
 joe kill         # stop all Joe tmux instances
-joe auth rotate  # revoke browser sessions and rotate the local secret
+joe auth rotate  # rotate the local browser/API secret
 ```
 
-Run `joe --help` and `joe web --help` for the complete command reference.
+## VS Code companion
 
-## Workflows
+The repository contains a small VS Code companion under
+[`vscode-extension/`](vscode-extension/). It starts, opens, refreshes, restarts,
+and stops Joe on the current local or Remote-SSH host. It deliberately opens
+the same Web control room instead of maintaining a second, divergent interface.
 
-Joe selects a workflow automatically unless you override it.
-
-| Workflow | Behavior | Typical use |
-| --- | --- | --- |
-| **FAST** | One provider call | Questions and small, focused changes |
-| **REVIEW** | Primary execution, independent read-only review, at most one correction pass | Meaningful implementations |
-| **CONSENSUS** | Two independent proposals, two cross-reviews, one final synthesis | Important or difficult-to-reverse decisions |
-
-Independent consensus stages run in parallel where possible. A provider failure
-is surfaced explicitly; incomplete synthesis output is rejected and routed to
-an available fallback instead of being published as a final answer.
-
-![A consensus in progress: two independent proposals are complete and the two cross-reviews are still running](https://raw.githubusercontent.com/felixquinton1/joe/main/docs/assets/joe-consensus-running.png)
-
-*A consensus under way. Each stage names the provider, model, and effort that
-actually ran; the live panel shows the tools the current agent is using.*
-
-![The same consensus once the arbiter has published its synthesis](https://raw.githubusercontent.com/felixquinton1/joe/main/docs/assets/joe-consensus.png)
-
-*The same run once the arbiter has synthesized. Proposals and cross-reviews
-stay one click away, and the synthesis states what it could not verify.*
-
-Routing starts with deterministic local rules. For ambiguous requests, Joe may
-use one fast, bounded classifier call to select the intent, workflow, provider,
-model tier, and reasoning effort. Explicit user choices always take precedence,
-and the classifier cannot grant broader permissions.
-
-## Web interface
-
-Joe Web is the main control room. It provides:
-
-- persistent projects, subprojects, and conversations;
-- per-conversation provider, workflow, model, effort, and permission choices;
-- streaming provider activity without exposing private chain-of-thought;
-- active and completed task states, queued prompts, and cancellation;
-- structured approvals for operations that need broader access;
-- Markdown and mathematical formula rendering;
-- Git change summaries, file-level diffs, and explicit integration controls;
-- project files, shared skills, search, quotas, and provider diagnostics;
-- autonomous plans with bounded steps, retries, schedules, and resource limits.
-
-Several conversations can run concurrently. One conversation owns at most one
-active run, while additional prompts can wait in its queue.
-
-### VS Code
-
-The extension in [`vscode-extension/`](vscode-extension/) is intentionally a
-small launcher for Joe Web. It can start, open, refresh, restart, and stop the
-server in the current VS Code or Remote-SSH host. Conversations and model
-controls remain in the Web UI so Joe has only one rich interface to maintain.
-
-Build the extension locally with:
+The extension is currently distributed from the source repository rather than
+the VS Code Marketplace. To build it locally:
 
 ```bash
 cd vscode-extension
@@ -193,167 +223,30 @@ npm test
 npm run package
 ```
 
-## Permissions and security
+## Project status
 
-Joe binds to localhost by default and authenticates browser and API clients
-with a local secret stored outside the project. Opening Joe through the CLI or
-VS Code pairs the browser without placing the secret in server logs.
+Joe is an alpha project for local, single-user workflows. The Python package
+and public Git repository are the first distribution targets. Provider CLIs
+are third-party tools and can introduce breaking behavior when they update.
 
-The server supports three capability ceilings:
+CI runs the Python suite on Python 3.10 and 3.12, performs installation checks
+on Linux, macOS, and Windows, validates the Web assets, and tests the VS Code
+companion.
 
-```bash
-joe web --profile viewer
-joe web --profile operator
-joe web --profile maintainer
-```
-
-- **viewer** reads projects, conversations, and results;
-- **operator** can run allowed tasks;
-- **maintainer** can manage projects and approve full-access operations.
-
-Analysis and consensus are read-only by default. Modifying requests inherit the
-selected project policy. Provider fallbacks preserve the same or a stricter
-permission level; switching providers never silently grants more access.
-
-Joe restricts providers to the configured project root and explicit additional
-roots. Network access can only be controlled when the provider exposes a native
-switch—currently Codex. Joe reports this limitation instead of claiming to
-sandbox providers that cannot be sandboxed through their CLI.
-
-Remote binds require `--allow-remote` and remain authenticated. Prefer a local
-bind with SSH or VS Code port forwarding:
+For development:
 
 ```bash
-joe web --no-browser
-ssh -L 8765:127.0.0.1:8765 user@server
-```
-
-See [SECURITY.md](SECURITY.md) for vulnerability reporting and the supported
-security model.
-
-## Tasks, worktrees, and Git
-
-Every request creates a durable task linked to its conversation. Tasks record
-their state, provider, model, run, and delivery result without replacing the
-chat history.
-
-Projects may isolate modifying tasks in Git worktrees. Joe then creates a
-`joe/<task-id>` branch, keeps the main checkout untouched, and offers three
-explicit actions when work finishes:
-
-- inspect the diff;
-- integrate the branch;
-- discard the isolated worktree.
-
-If the base branch advanced, Joe rebases before integration. Conflict
-resolution is bounded to three agent passes. Failed resolution is reported to
-the user and the worktree is preserved—Joe never applies a silent
-"last writer wins" policy.
-
-Automatic commit and push behavior is configured per project. Keep it disabled
-when you want file-level rejection to remain available.
-
-## Context and storage
-
-Joe creates a small `.agentflow/` directory in each project:
-
-```text
-.agentflow/
-├── project.md       # stable project context
-├── session.md       # current objective and decisions
-├── handoff.md       # compact provider handoff
-├── config.yaml      # project settings
-└── runs/            # full execution records
-```
-
-Active context is bounded and rewritten rather than allowed to grow forever.
-Long conversations can be compacted in the background while their complete
-history remains available.
-
-Local conversation data, pending tasks, approvals, and backups are excluded
-from project Git by default. Conversation writes are mirrored under
-`$XDG_DATA_HOME/joe/backups/` (normally `~/.local/share/joe/backups/`). Run-log
-retention is bounded by age, count, and total size.
-
-## Skills and project instructions
-
-Project skills live under `.agentflow/skills/` and are shared with every
-provider through Joe's context layer. Global skills can be reused across
-projects. Existing provider skills can be imported from the UI or CLI:
-
-```bash
-joe skills list -C /path/to/project
-joe skills import /path/to/SKILL.md -C /path/to/project
-```
-
-Joe also supports creating a skill from a natural-language request in the Web
-interface.
-
-## Autonomous work
-
-Joe can schedule a bounded sequence of steps, wait for provider quota resets,
-run tests, inspect results, and continue later. Autonomous execution is
-experimental. Configure a preferred provider, time window, maximum model calls,
-maximum steps, retry policy, and stop conditions before leaving it unattended.
-
-Unknown quota is never treated as guaranteed capacity. If a required provider
-cannot continue and no suitable fallback exists, the task waits rather than
-fabricating progress. A published reset time is used directly; otherwise Joe
-rechecks with a bounded backoff.
-
-Autonomous experiments use a durable attempt identifier and process manifest.
-After a server restart, Joe reattaches to a still-running local process, reuses
-an already completed result, or resumes from a compatible checkpoint. It never
-launches the same experiment attempt twice. A lost step without a recoverable
-checkpoint returns to planning, and repeated recovery failures stop for human
-review instead of looping indefinitely. Time spent waiting for quota does not
-consume the campaign's active-time budget.
-
-Experiment commands receive `JOE_AUTONOMOUS_ATTEMPT_ID` as an idempotency key
-for remote submissions and `JOE_AUTONOMOUS_OUTPUT_DIR` for attempt-local
-artifacts. Integrations that submit external work should store and verify this
-key before repeating a submission.
-
-## Data and privacy
-
-Joe sends prompts and selected context to the provider CLI chosen for each
-stage. Provider terms, retention policies, quotas, and charges still apply.
-Full stdout and stderr are stored locally in run logs and redacted for known
-secret patterns before display. Do not place credentials in prompts, project
-instructions, or committed `.agentflow` files.
-
-## Development
-
-Run the local validation suite with:
-
-```bash
+git clone https://github.com/felixquinton1/joe.git
+cd joe
+python -m pip install -e ".[dev]"
 pytest -q
-node --check src/joe/web_assets/app.js
-node --check src/joe/web_assets/app_auth.js
-node --check src/joe/web_assets/app_automation.js
-node --check src/joe/web_assets/app_conversations.js
-node --check src/joe/web_assets/app_usage.js
-node --check src/joe/web_assets/i18n.js
-node --check src/joe/web_assets/markdown.js
-
-cd vscode-extension
-npm ci
-npm run check
-npm test
+node --test tests/test_web_assets.mjs
 ```
 
-The normal test suite uses doubles and does not consume provider quota. Live CLI
-smokes are opt-in:
-
-```bash
-JOE_LIVE_SMOKE=1 pytest -q tests/test_live_cli_smoke.py
-```
-
-Architecture and behavior references:
+Documentation:
 
 - [User guide](docs/user-guide.md)
 - [HTTP and SSE API contract](docs/api-contract.md)
-- [VS Code integration plan](docs/vscode-extension-action-plan.md)
 - [Contributing guide](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
 - [Release guide](docs/releasing.md)
