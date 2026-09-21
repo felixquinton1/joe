@@ -16,6 +16,11 @@ provider activity.
 Joe runs on your machine and uses the provider accounts and CLIs you already
 have. It is not an AI provider, proxy, or billing service.
 
+![Joe Web: conversations on the left, provider and workflow controls on top, live agent activity on the right](https://raw.githubusercontent.com/felixquinton1/joe/main/docs/assets/joe-overview.png)
+
+*One entry point per project. The provider, workflow, model, effort, and
+permission controls stay visible above the conversation.*
+
 > [!IMPORTANT]
 > Joe can launch commands and edit files through the selected provider. Review
 > project roots, permissions, autonomous limits, and Git changes before relying
@@ -139,6 +144,16 @@ Joe selects a workflow automatically unless you override it.
 Independent consensus stages run in parallel where possible. A provider failure
 is surfaced explicitly; incomplete synthesis output is rejected and routed to
 an available fallback instead of being published as a final answer.
+
+![A consensus in progress: two independent proposals are complete and the two cross-reviews are still running](https://raw.githubusercontent.com/felixquinton1/joe/main/docs/assets/joe-consensus-running.png)
+
+*A consensus under way. Each stage names the provider, model, and effort that
+actually ran; the live panel shows the tools the current agent is using.*
+
+![The same consensus once the arbiter has published its synthesis](https://raw.githubusercontent.com/felixquinton1/joe/main/docs/assets/joe-consensus.png)
+
+*The same run once the arbiter has synthesized. Proposals and cross-reviews
+stay one click away, and the synthesis states what it could not verify.*
 
 Routing starts with deterministic local rules. For ambiguous requests, Joe may
 use one fast, bounded classifier call to select the intent, workflow, provider,
