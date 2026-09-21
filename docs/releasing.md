@@ -17,6 +17,29 @@ public or publishing packages.
 6. Add this repository as a trusted publisher on TestPyPI and PyPI, targeting
    `.github/workflows/release.yml` and the matching environment.
 
+## Make the repository public
+
+Branch protection is unavailable on a private repository under the free plan,
+so these settings can only be applied once the repository is public. Apply them
+immediately after flipping the switch, in the same session.
+
+```bash
+gh repo edit felixquinton1/joe --visibility public --accept-visibility-change-consequences
+
+gh api -X PUT repos/felixquinton1/joe/branches/main/protection \
+  --input .github/branch-protection.json
+
+gh api -X PUT repos/felixquinton1/joe/private-vulnerability-reporting
+```
+
+The protection keeps the owner able to push to `main` directly
+(`enforce_admins: false`); it is everyone else that must open a pull request,
+obtain the code owner's review, and pass CI. Set `enforce_admins` to `true` to
+route the owner's own changes through pull requests as well.
+
+Making the repository public also activates CodeQL, whose workflow skips
+private repositories by design.
+
 ## Validate a release candidate locally
 
 ```bash
