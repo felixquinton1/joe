@@ -1387,3 +1387,27 @@ def test_the_server_answers_on_both_loopback_families(tmp_path):
             companion.server_close()
     finally:
         server.server_close()
+
+
+def test_every_agent_answer_is_rendered_through_the_question_aware_path():
+    """Les boutons s'affichaient, puis le JSON brut prenait leur place.
+
+    Un seul chemin de rendu connaissait le bloc `joe:question`. Celui de
+    l'historique, qui repasse sur la même bulle une seconde plus tard, en
+    refaisait un bloc de code. Le contenu d'un message d'agent se rend donc
+    toujours par `renderAnswer`.
+    """
+    import re
+
+    assets = Path(__file__).resolve().parent.parent / "src" / "joe" / "web_assets"
+    renders = []
+    for path in sorted(assets.glob("*.js")):
+        source = path.read_text(encoding="utf-8")
+        for match in re.finditer(
+            r"(render\w+)\(\s*[\w.?]+\s*,\s*(?:message|completed)\.content\s*\)",
+            source,
+        ):
+            renders.append((path.name, match.group(1)))
+
+    assert renders, "le rendu des messages d'agent doit être visible dans les assets"
+    assert all(name == "renderAnswer" for _, name in renders), renders

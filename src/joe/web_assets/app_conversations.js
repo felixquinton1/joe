@@ -5,7 +5,7 @@ window.createJoeConversations = function createJoeConversations({
   closeMobilePanels,
   clearConversation,
   addMessage,
-  renderMarkdown,
+  renderAnswer,
   renderGitReport,
   renderHistoricalRunSummary,
   attachPlanControls,
@@ -393,7 +393,7 @@ window.createJoeConversations = function createJoeConversations({
           { suppressScroll: true }
         );
         renderHistoricalRunSummary(message, bubble);
-        renderMarkdown(bubble, message.content);
+        renderAnswer(bubble, message.content);
         if (message.git_report) renderGitReport(message.git_report, message.run_id);
         lastAssistantBubble = bubble;
       }
@@ -504,7 +504,7 @@ window.createJoeConversations = function createJoeConversations({
         if (existing) {
           bubble = existing.querySelector(".bubble");
           renderHistoricalRunSummary(message, bubble);
-          renderMarkdown(bubble, message.content);
+          renderAnswer(bubble, message.content);
           if (message.git_report) renderGitReport(message.git_report, message.run_id);
           existing.dataset.historyIndex = String(index);
           existing.dataset.runId = message.run_id;
@@ -512,7 +512,7 @@ window.createJoeConversations = function createJoeConversations({
         }
         bubble = addMessage(tr("joe_summary"), "", "assistant", { suppressScroll: true });
         renderHistoricalRunSummary(message, bubble);
-        renderMarkdown(bubble, message.content);
+        renderAnswer(bubble, message.content);
         if (message.git_report) renderGitReport(message.git_report, message.run_id);
       }
       const wrapper = bubble.closest(".message");

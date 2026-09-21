@@ -1269,7 +1269,10 @@ function updateWorkflowFallback(provider, fallback) {
   closeMobilePanels,
   clearConversation,
   addMessage,
-  renderMarkdown,
+  // Une réponse d'agent se rend toujours par `renderAnswer` : elle peut se
+  // terminer sur une question, et `renderMarkdown` seul en ferait un bloc de
+  // code JSON à la place des boutons.
+  renderAnswer,
   renderGitReport,
   renderHistoricalRunSummary,
   attachPlanControls,
@@ -1792,7 +1795,7 @@ async function reconcileRun(conversationId, previousRunId, attempt = 0) {
       if (completed) {
         if (local?.bubble) {
           renderHistoricalRunSummary(completed, local.bubble);
-          renderMarkdown(local.bubble, completed.content);
+          renderAnswer(local.bubble, completed.content);
           if (completed.git_report) {
             renderGitReport(completed.git_report, completed.run_id);
           }
