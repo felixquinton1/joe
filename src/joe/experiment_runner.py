@@ -119,7 +119,7 @@ def run_experiment(
             creationflags=(
                 subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
             ),
-            start_new_session=os.name != "nt",
+            start_new_session=os.name != "nt", encoding="utf-8", errors="replace"
         )
         _write_json(manifest_path, {
             "version": 1, "id": experiment_id, "status": "running",
@@ -281,7 +281,7 @@ def _pid_alive(pid: int) -> bool:
     if os.name == "nt":
         result = subprocess.run(
             ["tasklist", "/FI", f"PID eq {pid}"], capture_output=True,
-            text=True, check=False,
+            text=True, check=False, encoding="utf-8", errors="replace"
         )
         return str(pid) in result.stdout
     try:
@@ -308,7 +308,7 @@ def _terminate_process_tree(process: subprocess.Popen[Any]) -> None:
     if os.name == "nt":
         subprocess.run(
             ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-            capture_output=True, text=True, check=False,
+            capture_output=True, text=True, check=False, encoding="utf-8", errors="replace"
         )
     else:
         try:

@@ -179,7 +179,7 @@ def _git_commit(workspace: Path) -> str | None:
     try:
         result = subprocess.run(
             ["git", "-C", str(workspace), "rev-parse", "HEAD"],
-            capture_output=True, text=True, check=False, timeout=10,
+            capture_output=True, text=True, check=False, timeout=10, encoding="utf-8", errors="replace"
         )
         return result.stdout.strip() if result.returncode == 0 else None
     except (OSError, subprocess.TimeoutExpired):
@@ -1097,7 +1097,7 @@ class RunManager:
         review_path = self.orchestrator.memory.runs / f"{run_id}.reject.json"
         if not rejection and run_id.replace("-", "").isalnum():
             try:
-                rejection = json.loads(review_path.read_text())
+                rejection = json.loads(review_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 rejection = None
         if not rejection:
@@ -1371,13 +1371,13 @@ class RunManager:
         for arguments, requirement in checks:
             result = subprocess.run(
                 ["git", "-C", str(workspace), *arguments],
-                capture_output=True, text=True, check=False,
+                capture_output=True, text=True, check=False, encoding="utf-8", errors="replace"
             )
             if result.returncode:
                 raise ValueError(f"Autonomous exige {requirement} avant de démarrer.")
         dirty = subprocess.run(
             ["git", "-C", str(workspace), "status", "--porcelain"],
-            capture_output=True, text=True, check=False,
+            capture_output=True, text=True, check=False, encoding="utf-8", errors="replace"
         )
         if dirty.stdout.strip():
             raise ValueError(
@@ -2419,7 +2419,7 @@ class RunManager:
                         [
                             f"\n## {item['name']}",
                             "```",
-                            path.read_text(errors="replace"),
+                            path.read_text(errors="replace", encoding="utf-8"),
                             "```",
                         ]
                     )
@@ -2529,7 +2529,7 @@ class RunManager:
 
     def _read_pending(self) -> dict[str, dict[str, Any]]:
         try:
-            payload = json.loads(self.pending_path.read_text())
+            payload = json.loads(self.pending_path.read_text(encoding="utf-8"))
             return payload if isinstance(payload, dict) else {}
         except (OSError, json.JSONDecodeError):
             return {}
@@ -2558,7 +2558,7 @@ class RunManager:
         items = []
         for path in sorted(self.orchestrator.memory.runs.glob("*.json"), reverse=True):
             try:
-                payload = json.loads(path.read_text())
+                payload = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 continue
             items.append(
@@ -2576,7 +2576,7 @@ class RunManager:
             return None
         path = self.orchestrator.memory.runs / f"{run_id}.json"
         try:
-            return json.loads(path.read_text())
+            return json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return None
 
