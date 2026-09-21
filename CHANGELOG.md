@@ -6,6 +6,15 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.2] — 2026-09-21
+
+### Fixed
+
+- Removed screenshot embeds that could not render while the source repository
+  remained private.
+
+## [1.1.1] — 2026-09-21
+
 ### Added
 
 - Durable autonomous recovery across quota windows and server restarts.

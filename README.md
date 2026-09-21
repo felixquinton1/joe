@@ -15,8 +15,6 @@ shows what is happening as it runs.
 It uses the CLI subscriptions you already have. Joe is not an AI provider,
 proxy, or additional billing service.
 
-![Joe Web interface with conversations, model controls, and live agent activity](https://raw.githubusercontent.com/felixquinton1/joe/main/docs/assets/joe-overview.png)
-
 ## What Joe brings together
 
 - **One visual workspace** for projects, conversations, tasks, approvals, Git
@@ -48,13 +46,9 @@ Consensus is not a black box. Joe exposes each independent proposal and
 cross-review as it completes, with the real provider, model, and effort used
 for every stage.
 
-![A consensus in progress with independent proposals and cross-reviews](https://raw.githubusercontent.com/felixquinton1/joe/main/docs/assets/joe-consensus-running.png)
-
 The synthesis is produced only after the available opinions and reviews have
 finished. If a provider fails or reaches a quota, Joe reports the degradation
 and uses an eligible fallback instead of pretending that every stage ran.
-
-![A completed consensus with its final synthesis](https://raw.githubusercontent.com/felixquinton1/joe/main/docs/assets/joe-consensus.png)
 
 ## Autonomous work
 
