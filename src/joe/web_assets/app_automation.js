@@ -9,12 +9,14 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     scheduled: "scheduled", completed: "done", cancelled: "cancelled", blocked: "blocked",
     paused: "paused", planning: "planning", research: "research", researching: "research",
     experimenting: "experimenting", evaluating: "evaluating", running: "running",
+    waiting_quota: "waiting_quota",
     failed: "failed", crashed: "crashed", timed_out: "timed_out", unverified: "unverified",
     comparable: "comparable_status"
   }[value] ? tr({
     scheduled: "scheduled", completed: "done", cancelled: "cancelled", blocked: "blocked",
     paused: "paused", planning: "planning", research: "research", researching: "research",
     experimenting: "experimenting", evaluating: "evaluating", running: "running",
+    waiting_quota: "waiting_quota",
     failed: "failed", crashed: "crashed", timed_out: "timed_out", unverified: "unverified",
     comparable: "comparable_status"
   }[value]) : value);
@@ -108,6 +110,14 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
     if (campaign.manual_hold) {
       return { active: false, text: tr("manual_pause_activity") };
     }
+    if (campaign.status === "waiting_quota") {
+      return {
+        active: false,
+        text: campaign.next_start_at
+          ? tr("autonomous_quota_resume", { when: formatDate(campaign.next_start_at) })
+          : tr("waiting_quota")
+      };
+    }
     const activeStep = [...(campaign.history || [])].reverse().find(
       event => event.kind === "agent_step" && event.status === "running"
     );
@@ -167,6 +177,7 @@ window.createAutomationModule = ({ state, $, fetcher }) => {
       return `${tr("experiment")} · ${command} · ${statusLabel(event.status)} · ${event.duration_seconds || "?"} s${metrics ? ` · ${metrics}` : ""}`;
     }
     if (event.kind === "paused") return `${tr("planned_pause")} · ${tr("resume")} ${formatDate(event.next_start_at)}`;
+    if (event.kind === "server_recovery") return `${tr("server_recovery")} · ${statusLabel(event.phase)}`;
     return `${statusLabel(event.kind) || tr("event")} · ${statusLabel(event.status) || tr("recorded")}`;
   }
 

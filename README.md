@@ -269,8 +269,22 @@ experimental. Configure a preferred provider, time window, maximum model calls,
 maximum steps, retry policy, and stop conditions before leaving it unattended.
 
 Unknown quota is never treated as guaranteed capacity. If a required provider
-cannot continue and no suitable fallback exists, the task waits or stops rather
-than fabricating progress.
+cannot continue and no suitable fallback exists, the task waits rather than
+fabricating progress. A published reset time is used directly; otherwise Joe
+rechecks with a bounded backoff.
+
+Autonomous experiments use a durable attempt identifier and process manifest.
+After a server restart, Joe reattaches to a still-running local process, reuses
+an already completed result, or resumes from a compatible checkpoint. It never
+launches the same experiment attempt twice. A lost step without a recoverable
+checkpoint returns to planning, and repeated recovery failures stop for human
+review instead of looping indefinitely. Time spent waiting for quota does not
+consume the campaign's active-time budget.
+
+Experiment commands receive `JOE_AUTONOMOUS_ATTEMPT_ID` as an idempotency key
+for remote submissions and `JOE_AUTONOMOUS_OUTPUT_DIR` for attempt-local
+artifacts. Integrations that submit external work should store and verify this
+key before repeating a submission.
 
 ## Data and privacy
 

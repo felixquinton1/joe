@@ -1,3 +1,4 @@
+import json
 import sys
 import threading
 import time
@@ -9,8 +10,12 @@ import pytest
 
 from joe.autonomous import AutonomousStore, build_autonomous_skill
 from joe.autonomous_schedule import normalize_schedule, schedule_state
-from joe.experiment_runner import run_experiment, validate_experiment_command
-from joe.web_runs import RunManager, _autonomous_metric_value
+from joe.experiment_runner import (
+    recover_experiment,
+    run_experiment,
+    validate_experiment_command,
+)
+from joe.web_runs import RunManager, _autonomous_metric_value, _quota_backoff
 
 
 def campaign_values():
@@ -32,6 +37,92 @@ def test_autonomous_store_is_durable(tmp_path: Path):
     restored = AutonomousStore(tmp_path).get(campaign["id"])
     assert restored["status"] == "scheduled"
     assert restored["history"][0]["kind"] == "experiment"
+    assert restored["recovery_policy"]["quota"] == "wait_until_reset"
+    assert restored["recovery_policy"]["max_step_restarts"] == 3
+
+
+def test_experiment_attempt_id_is_idempotent(tmp_path: Path):
+    script = tmp_path / "once.py"
+    script.write_text(
+        "from pathlib import Path\n"
+        "import json, os\n"
+        "counter = Path('counter.txt')\n"
+        "counter.write_text(str(int(counter.read_text()) + 1) if counter.exists() else '1')\n"
+        "Path('metrics.json').write_text(json.dumps({'score': 1.0, 'attempt': os.environ['JOE_AUTONOMOUS_ATTEMPT_ID']}))\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "runs"
+
+    first = run_experiment(
+        [sys.executable, str(script)], tmp_path, output,
+        experiment_id="stable-attempt",
+    )
+    second = run_experiment(
+        [sys.executable, str(script)], tmp_path, output,
+        experiment_id="stable-attempt",
+    )
+
+    assert first == second
+    assert (tmp_path / "counter.txt").read_text() == "1"
+    assert first["metrics"]["attempt"] == "stable-attempt"
+
+
+def test_dead_experiment_recovers_checkpoint_without_relaunch(tmp_path: Path):
+    output = tmp_path / "runs" / "interrupted"
+    output.mkdir(parents=True)
+    (output / "execution.json").write_text(json.dumps({
+        "version": 1, "id": "interrupted", "status": "running",
+        "pid": 999_999_999, "started_at": 1,
+    }))
+    checkpoint = tmp_path / "checkpoints" / "latest.pt"
+    checkpoint.parent.mkdir()
+    checkpoint.write_text("checkpoint")
+
+    recovered = recover_experiment(
+        tmp_path, tmp_path / "runs", "interrupted",
+        checkpoint_path="checkpoints/latest.pt",
+    )
+
+    assert recovered is not None
+    assert recovered["status"] == "interrupted"
+    assert recovered["checkpoint_available"] is True
+    assert recovered["recovered_after_restart"] is True
+
+
+def test_unknown_quota_reset_uses_bounded_backoff():
+    assert _quota_backoff(0, now=1_000) == 1_300
+    assert _quota_backoff(20, now=1_000) == 4_600
+
+
+def test_server_recovery_restarts_missing_agent_step_with_same_id(
+    tmp_path: Path, monkeypatch,
+):
+    monkeypatch.setenv("JOE_DISABLE_BACKGROUND_WORKERS", "1")
+    manager = RunManager(tmp_path)
+    conversation = manager.conversations.create()
+    campaign = manager.autonomous.create(**(
+        campaign_values() | {"conversation_id": conversation["id"]}
+    ))
+    manager.autonomous.transition(campaign["id"], "ready", "prepared")
+    manager.autonomous.transition(
+        campaign["id"], "implementing", "step_started",
+        current_run_id="durable-run",
+    )
+    manager.tasks.create(
+        "durable-run", "Continue safely", conversation["id"], "free",
+        workspace=tmp_path, base_workspace=tmp_path, isolated=False,
+    )
+    calls = []
+    monkeypatch.setattr(manager, "start", lambda *args, **kwargs: calls.append((args, kwargs)))
+
+    manager._recover_autonomous_after_restart()
+
+    assert len(calls) == 1
+    assert calls[0][1]["run_id"] == "durable-run"
+    assert calls[0][1]["resumed"] is True
+    restored = manager.autonomous.get(campaign["id"])
+    assert restored["recovery_attempts"] == 1
+    assert restored["history"][-1]["kind"] == "server_recovery"
 
 
 def test_terminal_campaign_can_be_deleted_with_its_private_skill(tmp_path: Path):

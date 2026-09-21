@@ -22,7 +22,11 @@ from .autonomous_builder import build_campaign_payload
 from .autonomous_schedule import schedule_state
 from .autonomous_scale import default_model_calls, scale_audit
 from .autonomous_resources import normalize_resource_policy
-from .experiment_runner import run_experiment, validate_experiment_command
+from .experiment_runner import (
+    recover_experiment,
+    run_experiment,
+    validate_experiment_command,
+)
 from .conversations import ConversationStore, FREE_PROJECT_ID, _ai_access
 from .documents import extract_document_text
 from .files import FileLibrary
@@ -51,6 +55,13 @@ from .worktrees import Worktree, WorktreeError, WorktreeManager
 def _autonomous_metric_value(metrics: dict[str, Any], name: str) -> float | None:
     """Resolve common aggregate metric envelopes without project-specific code."""
     return metric_value(metrics, name)
+
+
+def _quota_backoff(defer_count: int, now: float | None = None) -> float:
+    """Conservative retry when a provider exposes no reset timestamp."""
+    timestamp = time.time() if now is None else now
+    delay = min(3600, 300 * (2 ** min(max(0, defer_count), 4)))
+    return timestamp + delay
 
 
 @dataclass(frozen=True)
@@ -263,6 +274,7 @@ class RunManager:
         self.compacting: set[str] = set()
         self.pending_path = self.orchestrator.memory.root / "pending_runs.json"
         self._recover_pending()
+        self._recover_autonomous_after_restart()
         self._automation_stop = threading.Event()
         if os.environ.get("JOE_DISABLE_BACKGROUND_WORKERS") != "1":
             threading.Thread(target=self._automation_loop, daemon=True).start()
@@ -805,8 +817,9 @@ class RunManager:
                     retry_at = quota_admission.get("retry_at")
                     if (
                         self._project_uses_quota_automation(run.conversation_id)
-                        and isinstance(retry_at, (int, float))
                     ):
+                        if not isinstance(retry_at, (int, float)):
+                            retry_at = _quota_backoff(run.defer_count)
                         run.defer_count += 1
                         self._wait_for_quota_window(
                             run,
@@ -917,16 +930,17 @@ class RunManager:
                     threshold=8,
                     now=time.time(),
                 )
-                if retry_at is not None:
-                    run.defer_count += 1
-                    self._wait_for_quota_window(
-                        run,
-                        retry_at,
-                        "Quota atteint pendant l’exécution ; reprise au prochain reset",
-                    )
-                    return self._execute(
-                        run, agent, mode, None, None, execution_mode, None
-                    )
+                if retry_at is None:
+                    retry_at = _quota_backoff(run.defer_count)
+                run.defer_count += 1
+                self._wait_for_quota_window(
+                    run,
+                    retry_at,
+                    "Quota atteint pendant l’exécution ; reprise automatique différée",
+                )
+                return self._execute(
+                    run, agent, mode, None, None, execution_mode, None
+                )
             git_report = self._capture_git_report(run)
             self._update_task_git(run, git_report)
             if run.cancel_event.is_set():
@@ -1260,7 +1274,72 @@ class RunManager:
 
     def list_autonomous(self) -> list[dict[str, Any]]:
         campaigns = self.autonomous.list()
-        return [{**campaign, "analysis": analyze_campaign(campaign)} for campaign in campaigns]
+        result = []
+        for campaign in campaigns:
+            visible = dict(campaign)
+            run_id = visible.get("current_run_id")
+            task = self.tasks.get(str(run_id)) if run_id else None
+            if task and task.get("status") == "waiting_quota":
+                visible.update({
+                    "status": "waiting_quota",
+                    "next_start_at": task.get("scheduled_for"),
+                    "wait_reason": task.get("wait_reason"),
+                })
+            result.append({**visible, "analysis": analyze_campaign(campaign)})
+        return result
+
+    def _recover_autonomous_after_restart(self) -> None:
+        """Reconnect durable campaigns to their run without duplicating work."""
+        for campaign in self.autonomous.list():
+            if campaign.get("status") in TERMINAL_STATUSES or campaign.get("manual_hold"):
+                continue
+            campaign_id = str(campaign["id"])
+            self.autonomous.add_event(campaign_id, "server_recovery", {
+                "phase": campaign.get("phase"),
+                "state": infer_state(campaign).value,
+                "current_run_id": campaign.get("current_run_id"),
+                "current_experiment_id": campaign.get("current_experiment_id"),
+            })
+            run_id = campaign.get("current_run_id")
+            if not run_id or self.get_run(str(run_id)) is not None:
+                continue
+            task = self.tasks.get(str(run_id))
+            if not task or task.get("status") not in {"running", "waiting_quota"}:
+                continue
+            # Normally pending_runs.json already recreated this run. This
+            # fallback closes the small crash window between TaskStore.create
+            # and the atomic pending-run write, while retaining the same run id
+            # and worktree.
+            attempts = int(campaign.get("recovery_attempts", 0))
+            maximum = int(
+                (campaign.get("recovery_policy") or {}).get("max_step_restarts", 3)
+            )
+            if attempts >= maximum:
+                self.autonomous.transition(
+                    campaign_id, AutonomousState.BLOCKED,
+                    "recovery_attempt_limit_reached", current_run_id=None,
+                    error=(
+                        "La même étape a été perdue plusieurs fois. "
+                        "Une validation humaine est nécessaire avant de la relancer."
+                    ),
+                )
+                continue
+            try:
+                self.autonomous.update(
+                    campaign_id, recovery_attempts=attempts + 1
+                )
+                self.start(
+                    str(task.get("request") or "Reprendre la tâche autonome"),
+                    str(campaign["conversation_id"]),
+                    task.get("provider"), task.get("mode"), task.get("model"),
+                    None, str(campaign.get("execution_mode") or "workspace-write"),
+                    run_id=str(run_id), resumed=True,
+                    not_before=task.get("scheduled_for"),
+                    defer_count=int(task.get("attempt", 0)),
+                    record_user_message=False,
+                )
+            except ActiveConversationError:
+                pass
 
     def create_autonomous(self, payload: dict[str, Any]) -> dict[str, Any]:
         conversation_id = str(payload.get("conversation_id", ""))
@@ -1465,6 +1544,20 @@ class RunManager:
                     continue
                 self._pause_autonomous(campaign, now, window.get("next_start"))
                 continue
+            current_run_id = campaign.get("current_run_id")
+            current_task = self.tasks.get(str(current_run_id)) if current_run_id else None
+            if current_task and current_task.get("status") == "waiting_quota":
+                elapsed = float(campaign.get("active_elapsed_seconds", 0))
+                if campaign.get("active_window_started_at") is not None:
+                    elapsed += max(
+                        0.0, now - float(campaign["active_window_started_at"])
+                    )
+                self.autonomous.update(
+                    campaign["id"], active_elapsed_seconds=elapsed,
+                    active_window_started_at=None,
+                    next_start_at=current_task.get("scheduled_for"),
+                )
+                continue
             if campaign.get("active_window_started_at") is None:
                 timing = {
                     "started_at": campaign.get("started_at") or now,
@@ -1556,7 +1649,7 @@ class RunManager:
                     self.autonomous.transition(
                         campaign["id"], AutonomousState.READY, "agent_step_completed",
                         phase=next_phase,
-                        current_run_id=None, error=None,
+                        current_run_id=None, error=None, recovery_attempts=0,
                     )
                     continue
             phase = campaign.get("phase", "research")
@@ -1745,11 +1838,13 @@ class RunManager:
 
     def _start_autonomous_experiment(self, campaign: dict[str, Any]) -> None:
         campaign_id = str(campaign["id"])
+        experiment_id = str(campaign.get("current_experiment_id") or uuid.uuid4().hex)
         self._autonomous_experiments.add(campaign_id)
         cancel_event = threading.Event()
         self._autonomous_experiment_cancels[campaign_id] = cancel_event
         self.autonomous.transition(
-            campaign_id, AutonomousState.EXPERIMENTING, "experiment_started"
+            campaign_id, AutonomousState.EXPERIMENTING, "experiment_started",
+            current_experiment_id=experiment_id,
         )
         command = list(campaign.get("command") or [])
         self.conversations.append_message(
@@ -1765,6 +1860,10 @@ class RunManager:
         def execute() -> None:
             try:
                 workspace, _, _, _ = self._project_scope(str(campaign["conversation_id"]))
+                output_root = (
+                    self.orchestrator.memory.root / "autonomous" /
+                    campaign_id / "experiments"
+                )
                 history = campaign.get("history") or []
                 previous = next(
                     (item for item in reversed(history) if item.get("kind") == "experiment"),
@@ -1786,16 +1885,34 @@ class RunManager:
                         0.0, time.time() - float(campaign.get("active_window_started_at") or time.time())
                     )
                     limits.append(max(5, int(budget - used)))
-                result = run_experiment(
-                    command, workspace,
-                    self.orchestrator.memory.root / "autonomous" / campaign_id / "experiments",
-                    working_directory=str(campaign.get("working_directory", ".")),
-                    metrics_path=str(campaign.get("metrics_path", "metrics.json")),
-                    timeout_seconds=max(5, min(limits)), cancel_event=cancel_event,
-                    stop_signal_path=str(campaign.get("stop_signal_path", "artifacts/STOP_REQUESTED")),
-                    stop_grace_seconds=int(campaign.get("stop_grace_seconds", 30)),
-                    checkpoint_path=str(campaign.get("checkpoint_path", "")),
-                )
+                manifest = output_root / experiment_id / "execution.json"
+                if manifest.exists():
+                    result = recover_experiment(
+                        workspace, output_root, experiment_id,
+                        working_directory=str(campaign.get("working_directory", ".")),
+                        metrics_path=str(campaign.get("metrics_path", "metrics.json")),
+                        checkpoint_path=str(campaign.get("checkpoint_path", "")),
+                    )
+                    while result is None and not cancel_event.wait(2):
+                        result = recover_experiment(
+                            workspace, output_root, experiment_id,
+                            working_directory=str(campaign.get("working_directory", ".")),
+                            metrics_path=str(campaign.get("metrics_path", "metrics.json")),
+                            checkpoint_path=str(campaign.get("checkpoint_path", "")),
+                        )
+                    if result is None:
+                        return
+                else:
+                    result = run_experiment(
+                        command, workspace, output_root,
+                        working_directory=str(campaign.get("working_directory", ".")),
+                        metrics_path=str(campaign.get("metrics_path", "metrics.json")),
+                        timeout_seconds=max(5, min(limits)), cancel_event=cancel_event,
+                        stop_signal_path=str(campaign.get("stop_signal_path", "artifacts/STOP_REQUESTED")),
+                        stop_grace_seconds=int(campaign.get("stop_grace_seconds", 30)),
+                        checkpoint_path=str(campaign.get("checkpoint_path", "")),
+                        experiment_id=experiment_id,
+                    )
                 result["command"] = command
                 result["working_directory"] = str(campaign.get("working_directory", "."))
                 result["iteration"] = int(campaign.get("iteration", 0))
@@ -1814,7 +1931,12 @@ class RunManager:
                 )
                 result["checkpoint"] = _checkpoint_manifest(workspace, campaign, result)
                 result["checkpoint_available"] = bool(result["checkpoint"]["resume_ready"])
-                self.autonomous.add_event(campaign_id, "experiment", result)
+                already_recorded = any(
+                    event.get("kind") == "experiment" and event.get("id") == result["id"]
+                    for event in (self.autonomous.get(campaign_id) or {}).get("history", [])
+                )
+                if not already_recorded:
+                    self.autonomous.add_event(campaign_id, "experiment", result)
                 current = self.autonomous.get(campaign_id) or {}
                 if current.get("manual_hold"):
                     return

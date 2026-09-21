@@ -170,6 +170,14 @@ class AutonomousStore:
             "active_window_started_at": None,
             "next_start_at": None,
             "manual_hold": False,
+            "recovery_policy": {
+                "quota": "wait_until_reset",
+                "technical_failure": "retry_from_checkpoint",
+                "experiment": "reattach_or_resume_checkpoint",
+                "external_actions": "verify_before_repeat",
+                "max_step_restarts": 3,
+            },
+            "recovery_attempts": 0,
             "best_metric": None,
             "history": [],
             "error": None,
@@ -211,6 +219,7 @@ class AutonomousStore:
             "max_iterations", "resume_count", "resumed_at",
             "state", "state_history",
             "manual_hold",
+            "recovery_attempts",
             "plateau_refresh_iteration",
         }
         with self.lock:
@@ -264,6 +273,7 @@ class AutonomousStore:
                 "preflight", "resource_policy",
                 "token_budget",
                 "manual_hold",
+                "recovery_attempts",
                 "plateau_refresh_iteration",
             }
             item.update({key: value for key, value in changes.items() if key in allowed})

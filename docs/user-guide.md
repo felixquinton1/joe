@@ -170,9 +170,10 @@ le run, puis « Terminée » jusqu’à sa prochaine ouverture.
 
 L’option projet « Reprendre automatiquement après un reset de quota » est
 activée par défaut. Si aucun fournisseur adapté ne dispose d’une réserve
-suffisante et qu’une heure de reset est connue, la tâche passe en « En attente
-du quota ». Joe conserve le prompt, les pièces jointes, le worktree et le nombre
-de tentatives, puis réactualise les quotas à l’heure prévue.
+suffisante, la tâche passe en « En attente du quota ». Joe conserve le prompt,
+les pièces jointes, le worktree et le nombre de tentatives, puis réactualise les
+quotas à l’heure prévue. Quand la CLI ne publie aucune heure, Joe réessaie avec
+un délai progressif borné entre cinq minutes et une heure.
 
 Si la nouvelle fenêtre reste insuffisante, la tâche attend la suivante. Si un
 quota est atteint au milieu d’un long travail, les changements déjà présents
@@ -186,6 +187,24 @@ reste prioritaire et est tentée immédiatement.
 Les autorisations en attente restent visibles dans ce même panneau après un
 rechargement. Elles peuvent être acceptées ou refusées plus tard ; une
 autorisation acceptée ne vaut que pour la demande enregistrée.
+
+Une campagne **Autonomous** possède en plus une identité de tentative et un
+manifeste de processus durables. Après un redémarrage du serveur, Joe :
+
+- se rattache à l’expérience locale si son processus vit encore ;
+- réutilise un résultat déjà écrit sans relancer la commande ;
+- reprend un checkpoint compatible avec la commande de reprise configurée ;
+- revient à la planification si aucun checkpoint fiable n’existe ;
+- bloque après trois pertes répétées de la même étape au lieu de boucler.
+
+Le temps passé à attendre un quota n’est pas déduit du budget actif. Le journal
+de campagne signale chaque récupération et l’interface affiche la prochaine
+heure de reprise connue.
+
+Les commandes d’expérience reçoivent `JOE_AUTONOMOUS_ATTEMPT_ID`, une clé
+stable à enregistrer lors d’une soumission externe (cluster, API, CI), et
+`JOE_AUTONOMOUS_OUTPUT_DIR`. Un lanceur distant doit vérifier cette clé avant de
+soumettre une seconde fois la même opération.
 
 Lorsqu’un projet active « Isoler les modifications dans un worktree Git »,
 Joe crée une branche `joe/<id>` et travaille hors du checkout principal. À la

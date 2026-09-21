@@ -173,6 +173,7 @@
       ,ai_access: "Accès de l'IA", ai_access_read_only: "Lecture seule — aucune commande", ai_access_manual: "Validation manuelle — j'autorise chaque demande", ai_access_auto: "Automatique — aucune confirmation", skill_name_placeholder: "Nom du skill · ex. conventions-python", skill_instructions_placeholder: "Instructions du skill…", new_skill_scope: "Portée du nouveau skill", skill_source_placeholder: "Chemin vers SKILL.md ou son dossier", import_skill_scope: "Portée du skill importé"
       ,approval_requested: "Autorisation demandée", refuse: "Refuser", allow: "Autoriser", proposed_plan: "Plan proposé", schedule_ellipsis: "Planifier…", allow_with_changes: "Autoriser avec modifications", joe_local_action: "Action locale Joe"
       ,day_short: "j"
+      ,autonomous_quota_resume: "Quota indisponible · reprise automatique {when}", server_recovery: "Reprise après redémarrage du serveur"
     },
     en: {
       language: "Language",
@@ -329,6 +330,7 @@
       ,ai_access: "AI access", ai_access_read_only: "Read only — no commands", ai_access_manual: "Manual approval — approve each request", ai_access_auto: "Automatic — no confirmation", skill_name_placeholder: "Skill name · e.g. python-conventions", skill_instructions_placeholder: "Skill instructions…", new_skill_scope: "New skill scope", skill_source_placeholder: "Path to SKILL.md or its folder", import_skill_scope: "Imported skill scope"
       ,approval_requested: "Approval requested", refuse: "Refuse", allow: "Allow", proposed_plan: "Proposed plan", schedule_ellipsis: "Schedule…", allow_with_changes: "Allow with changes", joe_local_action: "Local Joe action"
       ,day_short: "d"
+      ,autonomous_quota_resume: "Quota unavailable · automatic resume {when}", server_recovery: "Recovery after server restart"
     }
   };
 

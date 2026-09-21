@@ -42,11 +42,25 @@ def run_experiment(
     timeout_seconds: int = 600, cancel_event: threading.Event | None = None,
     stop_signal_path: str = "artifacts/STOP_REQUESTED", stop_grace_seconds: int = 30,
     checkpoint_path: str = "",
+    experiment_id: str | None = None,
 ) -> dict[str, Any]:
-    """Run one isolated, observable experiment without invoking a shell."""
-    experiment_id = uuid.uuid4().hex
+    """Run one isolated, observable and recoverable experiment.
+
+    ``experiment_id`` is a durable idempotency key. Reusing it after a Joe
+    restart returns the completed result, monitors the still-running process,
+    or reconstructs an interrupted result; it never starts the command twice.
+    """
+    experiment_id = experiment_id or uuid.uuid4().hex
     output = output_root / experiment_id
     output.mkdir(parents=True, exist_ok=True)
+    result_path = output / "result.json"
+    manifest_path = output / "execution.json"
+    recovered = _recover_existing(
+        experiment_id, result_path, manifest_path, workspace,
+        working_directory, metrics_path, checkpoint_path, output,
+    )
+    if recovered is not None:
+        return recovered
     cwd = (workspace / working_directory).resolve()
     if workspace.resolve() not in (cwd, *cwd.parents):
         raise ValueError("Le dossier d'expérience doit rester dans le projet.")
@@ -79,21 +93,40 @@ def run_experiment(
             "checkpoint_available": _checkpoint_available(cwd, checkpoint_path),
             "failure_signature": f"missing-entrypoint:{validation_error}",
         }
-        (output / "result.json").write_text(
-            json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        _write_json(result_path, result)
+        _write_json(manifest_path, {
+            "version": 1, "id": experiment_id, "status": "finished",
+            "result": str(result_path), "finished_at": time.time(),
+        })
         return result
+    _write_json(manifest_path, {
+        "version": 1, "id": experiment_id, "status": "starting",
+        "command": command, "started_at": started,
+        "working_directory": working_directory,
+        "metrics_path": metrics_path, "checkpoint_path": checkpoint_path,
+    })
     with stdout_path.open("w", encoding="utf-8") as stdout_file, stderr_path.open(
         "w", encoding="utf-8"
     ) as stderr_file:
+        environment = os.environ.copy()
+        environment.update({
+            "JOE_AUTONOMOUS_ATTEMPT_ID": experiment_id,
+            "JOE_AUTONOMOUS_OUTPUT_DIR": str(output),
+        })
         process = subprocess.Popen(
             command, cwd=cwd, stdout=stdout_file, stderr=stderr_file,
-            text=True, shell=False,
+            text=True, shell=False, env=environment,
             creationflags=(
                 subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
             ),
             start_new_session=os.name != "nt",
         )
+        _write_json(manifest_path, {
+            "version": 1, "id": experiment_id, "status": "running",
+            "pid": process.pid, "command": command, "started_at": started,
+            "working_directory": working_directory,
+            "metrics_path": metrics_path, "checkpoint_path": checkpoint_path,
+        })
         deadline = time.monotonic() + timeout_seconds
         while process.poll() is None:
             interrupted = cancel_event is not None and cancel_event.is_set()
@@ -147,8 +180,125 @@ def run_experiment(
     }
     if status == "crashed":
         result["failure_signature"] = _failure_signature(exit_code, stderr, error)
-    (output / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    _write_json(result_path, result)
+    _write_json(manifest_path, {
+        "version": 1, "id": experiment_id, "status": "finished",
+        "pid": process.pid, "result": str(result_path),
+        "started_at": started, "finished_at": time.time(),
+    })
     return result
+
+
+def recover_experiment(
+    workspace: Path,
+    output_root: Path,
+    experiment_id: str,
+    *,
+    working_directory: str = ".",
+    metrics_path: str = "metrics.json",
+    checkpoint_path: str = "",
+) -> dict[str, Any] | None:
+    """Recover a durable experiment without launching another process.
+
+    ``None`` means the original process is still alive and can be monitored on
+    the next scheduler pass.
+    """
+    output = output_root / experiment_id
+    return _recover_existing(
+        experiment_id, output / "result.json", output / "execution.json",
+        workspace, working_directory, metrics_path, checkpoint_path, output,
+    )
+
+
+def _recover_existing(
+    experiment_id: str,
+    result_path: Path,
+    manifest_path: Path,
+    workspace: Path,
+    working_directory: str,
+    metrics_path: str,
+    checkpoint_path: str,
+    output: Path,
+) -> dict[str, Any] | None:
+    try:
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        result = None
+    if isinstance(result, dict):
+        return result
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(manifest, dict):
+        return None
+    pid = manifest.get("pid")
+    if manifest.get("status") == "running" and isinstance(pid, int) and _pid_alive(pid):
+        return None
+
+    cwd = (workspace / working_directory).resolve()
+    candidate = (cwd / metrics_path).resolve()
+    metrics: dict[str, Any] = {}
+    if candidate.exists():
+        try:
+            payload = json.loads(candidate.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                metrics = payload
+        except (OSError, json.JSONDecodeError):
+            pass
+    stdout_path, stderr_path = output / "stdout.log", output / "stderr.log"
+    stdout = stdout_path.read_text(encoding="utf-8", errors="replace") if stdout_path.exists() else ""
+    stderr = stderr_path.read_text(encoding="utf-8", errors="replace") if stderr_path.exists() else ""
+    if not metrics:
+        metrics = _metrics_from_stdout(stdout)
+    checkpoint_available = _checkpoint_available(cwd, checkpoint_path)
+    completed = bool(metrics) and metrics.get("status") != "crashed"
+    status = "completed" if completed else ("interrupted" if checkpoint_available else "crashed")
+    error = None if completed else (
+        "Processus interrompu avec checkpoint récupérable."
+        if checkpoint_available else
+        "Processus perdu lors du redémarrage de Joe, sans résultat ni checkpoint récupérable."
+    )
+    result = {
+        "id": experiment_id, "status": status, "exit_code": None,
+        "duration_seconds": round(max(0.0, time.time() - float(manifest.get("started_at", time.time()))), 3),
+        "metrics": metrics, "stdout_tail": stdout[-4000:],
+        "stderr_tail": stderr[-4000:], "error": error,
+        "artifacts": str(output), "checkpoint_available": checkpoint_available,
+        "recovered_after_restart": True,
+    }
+    _write_json(result_path, result)
+    _write_json(manifest_path, {
+        **manifest, "status": "recovered", "finished_at": time.time(),
+        "result": str(result_path),
+    })
+    return result
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        result = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}"], capture_output=True,
+            text=True, check=False,
+        )
+        return str(pid) in result.stdout
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    os.replace(temporary, path)
 
 
 def _terminate_process_tree(process: subprocess.Popen[Any]) -> None:
