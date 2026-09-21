@@ -1,6 +1,7 @@
 import http.client
 import json
 import threading
+from pathlib import Path
 
 from conftest import build_test_server
 import time
@@ -43,6 +44,22 @@ def test_the_server_listens_on_the_ipv6_loopback_too():
             assert server.address_family == family
         finally:
             server.server_close()
+
+
+def test_the_interface_names_the_directory_it_reads_its_history_from():
+    """Joe lit son historique dans le dossier d'où il a été lancé.
+
+    Relancé ailleurs, il ouvre un autre journal et les conversations semblent
+    perdues alors qu'elles sont intactes. L'interface doit donc nommer ce
+    dossier au lieu de laisser croire à une disparition.
+    """
+    assets = Path(__file__).resolve().parent.parent / "src" / "joe" / "web_assets"
+    page = (assets / "index.html").read_text(encoding="utf-8")
+    app = (assets / "app.js").read_text(encoding="utf-8")
+
+    assert 'id="workspace"' in page
+    assert 'workspace.title = t("workspace_root"' in app
+    assert "status.project" in app
 
 
 def test_web_status_and_assets(tmp_path, monkeypatch):
