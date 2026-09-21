@@ -1,5 +1,6 @@
 import http.client
 import json
+import pytest
 import threading
 from pathlib import Path
 
@@ -1355,3 +1356,34 @@ def test_run_language_instruction_covers_all_workflow_stages():
     assert "plans, reviews, consensus stages" in english
     assert "Réponds à l’utilisateur en français" in french
     assert "étapes de consensus" in french
+
+
+def test_the_server_answers_on_both_loopback_families(tmp_path):
+    """`localhost` se résout tantôt en IPv4, tantôt en IPv6.
+
+    Une socket ne sert qu'une famille : la moitié des accès restait sans
+    réponse, et le navigateur tournait indéfiniment au lieu d'échouer.
+    """
+    import socket
+
+    from joe.web_server import _loopback_companion
+
+    server = JoeServer(("127.0.0.1", 0), Handler)
+    # `serve()` installe authentification et gestionnaire avant de dupliquer
+    # l'écoute : la doublure doit les recevoir tels quels.
+    server.auth = object()
+    server.manager = object()
+    try:
+        companion = _loopback_companion(server, "127.0.0.1", 0)
+        if companion is None:
+            pytest.skip("Pas de pile IPv6 sur cette machine")
+        try:
+            assert companion.address_family == socket.AF_INET6
+            # Les deux écoutes partagent le même état : même authentification,
+            # même historique, quel que soit le chemin emprunté.
+            assert companion.auth is server.auth
+            assert companion.manager is server.manager
+        finally:
+            companion.server_close()
+    finally:
+        server.server_close()

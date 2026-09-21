@@ -4,6 +4,7 @@ import ipaddress
 import json
 import mimetypes
 import socket
+import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
@@ -1002,7 +1003,34 @@ def serve(
     server = JoeServer((host, port), Handler)
     server.auth = LocalAuth.enabled_for(profile)
     server.manager = RunManager(project, profile=profile)
+    companion = _loopback_companion(server, host, port)
+    if companion is not None:
+        threading.Thread(target=companion.serve_forever, daemon=True).start()
     server.serve_forever()
+
+
+def _loopback_companion(
+    server: JoeServer, host: str, port: int
+) -> JoeServer | None:
+    """Also listen on the sibling loopback family, sharing the same state.
+
+    Une socket ne sert qu'une famille d'adresses. `localhost` se résolvant
+    tantôt en IPv4, tantôt en IPv6 — un transfert de port VS Code choisit
+    l'une ou l'autre —, la moitié des accès restait sans réponse : le
+    navigateur tournait indéfiniment au lieu d'échouer franchement.
+    """
+    siblings = {"127.0.0.1": "::1", "localhost": "::1", "::1": "127.0.0.1"}
+    sibling = siblings.get(host.strip().strip("[]"))
+    if sibling is None:
+        return None
+    try:
+        companion = JoeServer((sibling, port), Handler)
+    except OSError:
+        # Pile absente ou adresse déjà servie : l'écoute principale suffit.
+        return None
+    companion.auth = server.auth
+    companion.manager = server.manager
+    return companion
 
 
 
