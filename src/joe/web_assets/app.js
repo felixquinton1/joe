@@ -57,6 +57,11 @@ function applyLanguage(value) {
   }));
 }
 
+// Journal servi au dernier passage. Joe peut être relancé depuis un autre
+// dossier : la page afficherait alors un autre historique sans prévenir, et
+// toute action sur une conversation de l'ancien échouerait en « introuvable ».
+let servedStore = null;
+
 async function loadStatus() {
   const status = await fetch("/api/status").then(response => response.json());
   updateProviderMenu(status.provider_catalog || status.providers || []);
@@ -73,6 +78,15 @@ async function loadStatus() {
   } else {
     workspace.textContent = "";
     workspace.removeAttribute("title");
+  }
+  if (status.conversation_store) {
+    if (servedStore && status.conversation_store !== servedStore) {
+      const banner = $("restart-warning");
+      banner.textContent = t("store_changed", { path: status.project || "" });
+      banner.classList.remove("hidden");
+      if (loadConversations) await loadConversations(false).catch(() => {});
+    }
+    servedStore = status.conversation_store;
   }
   if (status.version !== APP_VERSION) {
     const warning = $("restart-warning");
@@ -2025,7 +2039,8 @@ setInterval(() => loadTasks().catch(() => {}), 10000);
 setInterval(() => {
   Promise.all([
     automation.load(),
-    refreshActiveConversation()
+    refreshActiveConversation(),
+    loadStatus()
   ]).catch(() => {});
 }, 5000);
 setupPanelResizers();

@@ -62,6 +62,25 @@ def test_the_interface_names_the_directory_it_reads_its_history_from():
     assert "status.project" in app
 
 
+def test_the_page_notices_when_the_server_serves_another_history():
+    """Joe peut être relancé depuis un autre dossier, page ouverte.
+
+    L'historique affiché change alors sans prévenir, et toute action sur une
+    conversation de l'ancien échoue en « introuvable » : c'est ce qui ressemble
+    à une suppression bloquée puis à un projet renommé.
+    """
+    app = (
+        Path(__file__).resolve().parent.parent
+        / "src" / "joe" / "web_assets" / "app.js"
+    ).read_text(encoding="utf-8")
+
+    assert "servedStore" in app
+    assert 'status.conversation_store !== servedStore' in app
+    assert 't("store_changed"' in app
+    # La comparaison n'a de valeur que si le statut est relu régulièrement.
+    assert "loadStatus()" in app.split("setInterval")[-1]
+
+
 def test_web_status_and_assets(tmp_path, monkeypatch):
     usage_calls = []
     monkeypatch.setattr(
