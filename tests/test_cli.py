@@ -141,3 +141,23 @@ def test_stop_targets_only_the_requested_joe_port(monkeypatch, capsys):
     assert _stop(["--port", "9000"]) == 0
     assert calls == [["tmux", "kill-session", "-t", "joe-9000"]]
     assert "port 9000" in capsys.readouterr().out
+
+
+def test_joe_relaunches_itself_not_another_installation(monkeypatch, tmp_path):
+    """La session tmux doit exécuter le Joe invoqué, pas un homonyme du PATH.
+
+    `shutil.which("joe")` renvoyait la première installation du PATH : sur une
+    machine qui en porte plusieurs, le serveur tournait avec un autre code que
+    celui lancé, et changeait de dossier de travail sans qu'on le voie.
+    """
+    from joe.cli import _self_command
+
+    script = tmp_path / "joe"
+    script.write_text("", encoding="utf-8")
+    monkeypatch.setattr("sys.argv", [str(script), "web"])
+    assert _self_command() == [str(script)]
+
+    # Invoqué autrement (python -m), on repasse par le module, jamais par PATH.
+    monkeypatch.setattr("sys.argv", ["-c"])
+    command = _self_command()
+    assert command[1:] == ["-m", "joe.cli"]

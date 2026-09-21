@@ -257,6 +257,14 @@ def _web(argv: list[str]) -> int:
     return 0
 
 
+def _self_command() -> list[str]:
+    """Command that re-runs this very Joe, whatever installation it comes from."""
+    script = Path(sys.argv[0]).resolve() if sys.argv and sys.argv[0] else None
+    if script and script.is_file() and script.name.startswith("joe"):
+        return [str(script)]
+    return [sys.executable, "-m", "joe.cli"]
+
+
 def _tmux_web(args: argparse.Namespace, url: str) -> int:
     session = f"joe-{args.port}"
     exists = subprocess.run(
@@ -266,12 +274,11 @@ def _tmux_web(args: argparse.Namespace, url: str) -> int:
         check=False,
     ).returncode == 0
     if not exists:
-        executable = shutil.which("joe")
-        if not executable:
-            print("joe: exécutable introuvable", file=sys.stderr)
-            return 1
+        # Se relancer soi-même, et non le premier `joe` du PATH : sur une
+        # machine qui porte plusieurs installations, la session tmux exécutait
+        # un autre Joe que celui invoqué, avec son propre code.
         command = [
-            executable,
+            *_self_command(),
             "web",
             "-C",
             str(args.project.resolve()),
