@@ -398,7 +398,9 @@ class Handler(BaseHTTPRequestHandler):
         if payload is None:
             return
         self._json(
-            self.server.manager.conversations.create(payload.get("project_id")),
+            self.server.manager.conversations.create(
+                payload.get("project_id"), payload.get("title")
+            ),
             HTTPStatus.CREATED,
         )
 

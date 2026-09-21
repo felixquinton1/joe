@@ -52,6 +52,20 @@ DEFAULT_SETTINGS = {
 DEFAULT_PREFERENCES = {"agent": "", "mode": ""}
 DEFAULT_PROJECT_ID = "main"
 FREE_PROJECT_ID = "free"
+
+# Le titre par défaut est écrit par l'interface, dans sa langue. Le serveur
+# doit reconnaître ces deux formes pour savoir qu'une conversation n'a pas
+# encore de nom et la titrer au premier message.
+DEFAULT_CONVERSATION_TITLE = "New conversation"
+# Noms semés par le serveur, qui ignore la langue de l'interface : ils sont
+# stockés en anglais, et traduits à l'affichage tant que l'utilisateur ne
+# les a pas renommés.
+FREE_PROJECT_NAME = "Scratchpad"
+MAIN_PROJECT_NAME = "Main project"
+IMPORTED_HISTORY_TITLE = "Imported history"
+UNTITLED_CONVERSATION_TITLES = frozenset(
+    {DEFAULT_CONVERSATION_TITLE, "Nouvelle conversation"}
+)
 CURRENT_SCHEMA_VERSION = 11
 
 
@@ -87,7 +101,7 @@ class ConversationStore:
                 "projects": [
                     {
                         "id": FREE_PROJECT_ID,
-                        "name": "Conversation libre",
+                        "name": FREE_PROJECT_NAME,
                         "context": "",
                         "collapsed": False,
                         "position": 0,
@@ -95,7 +109,7 @@ class ConversationStore:
                     },
                     {
                         "id": DEFAULT_PROJECT_ID,
-                        "name": "Projet principal",
+                        "name": MAIN_PROJECT_NAME,
                         "context": "",
                         "position": 1,
                         "created_at": time.time(),
@@ -332,7 +346,7 @@ class ConversationStore:
                 snippet = haystack[start:position + len(needle) + 180].replace("\n", " ")
                 results.append({
                     "conversation_id": conversation["id"],
-                    "title": conversation.get("title", "Nouvelle conversation"),
+                    "title": conversation.get("title", DEFAULT_CONVERSATION_TITLE),
                     "project_id": conversation.get("project_id"),
                     "project": projects.get(conversation.get("project_id"), {}).get("name", ""),
                     "updated_at": conversation.get("updated_at", 0),
@@ -421,7 +435,9 @@ class ConversationStore:
         with self.lock:
             return self._find(self._read(), conversation_id)
 
-    def create(self, project_id: str | None = None) -> dict[str, Any]:
+    def create(
+        self, project_id: str | None = None, title: str | None = None
+    ) -> dict[str, Any]:
         now = time.time()
         with self.lock:
             payload = self._read()
@@ -429,7 +445,8 @@ class ConversationStore:
             settings.update(payload["preferences"])
             conversation = {
                 "id": uuid.uuid4().hex,
-                "title": "Nouvelle conversation",
+                "title": str(title or "").strip()[:64]
+                or DEFAULT_CONVERSATION_TITLE,
                 "pinned": False,
                 "project_id": project_id or FREE_PROJECT_ID,
                 "created_at": now,
@@ -549,7 +566,10 @@ class ConversationStore:
             if role == "assistant":
                 conversation["unread_completion"] = True
             conversation["last_call_at"] = message["at"]
-            if role == "user" and conversation["title"] == "Nouvelle conversation":
+            if (
+                role == "user"
+                and conversation["title"] in UNTITLED_CONVERSATION_TITLES
+            ):
                 conversation["title"] = content.strip().splitlines()[0][:64]
             conversation["updated_at"] = time.time()
             self._write(payload)
@@ -703,7 +723,7 @@ class ConversationStore:
         now = time.time()
         return [{
             "id": uuid.uuid4().hex,
-            "title": "Historique importé",
+            "title": IMPORTED_HISTORY_TITLE,
             "pinned": False,
             "project_id": DEFAULT_PROJECT_ID,
             "created_at": messages[0]["at"],
@@ -740,7 +760,7 @@ class ConversationStore:
             [
                 {
                     "id": DEFAULT_PROJECT_ID,
-                    "name": "Projet principal",
+                    "name": MAIN_PROJECT_NAME,
                     "context": "",
                     "created_at": time.time(),
                 }
@@ -752,7 +772,7 @@ class ConversationStore:
             payload["projects"].append(
                 {
                     "id": FREE_PROJECT_ID,
-                    "name": "Conversation libre",
+                    "name": FREE_PROJECT_NAME,
                     "context": "",
                     "workspace_root": "",
                     "additional_roots": [],

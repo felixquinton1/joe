@@ -96,6 +96,21 @@ window.createJoeConversations = function createJoeConversations({
     }
   }
 
+  // Les noms semés par le serveur ne connaissent pas la langue de l'interface.
+  // Tant que l'utilisateur ne les a pas renommés, on les affiche traduits, y
+  // compris les anciens noms français d'une installation antérieure.
+  const SEEDED_PROJECT_NAMES = {
+    "Scratchpad": "project_scratchpad",
+    "Conversation libre": "project_scratchpad",
+    "Main project": "project_main",
+    "Projet principal": "project_main"
+  };
+
+  function projectLabel(project) {
+    const key = SEEDED_PROJECT_NAMES[project.name];
+    return key ? tr(key) : project.name;
+  }
+
   function renderConversations() {
     const target = $("conversations");
     target.replaceChildren();
@@ -112,7 +127,7 @@ window.createJoeConversations = function createJoeConversations({
       projectDrag.ondragstart = event => beginDrag(event, "project", project.id);
       header.appendChild(projectDrag);
       const projectName = document.createElement("strong");
-      projectName.textContent = project.name;
+      projectName.textContent = projectLabel(project);
       header.appendChild(projectName);
       const projectActions = document.createElement("div");
       const collapse = smallButton(
@@ -546,7 +561,10 @@ window.createJoeConversations = function createJoeConversations({
     const conversation = await fetcher("/api/conversations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project_id: projectId })
+      // Le titre part dans la langue de l'interface : le serveur ne peut
+      // pas la deviner, et écrivait donc « Nouvelle conversation » en
+      // français jusque dans une interface anglaise.
+      body: JSON.stringify({ project_id: projectId, title: tr("new_conversation") })
     }).then(response => response.json());
     if (select) {
       await loadConversations(false);

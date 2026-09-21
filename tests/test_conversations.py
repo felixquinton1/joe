@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from joe.conversations import CURRENT_SCHEMA_VERSION, ConversationStore
+from joe.conversations import DEFAULT_CONVERSATION_TITLE, FREE_PROJECT_NAME, IMPORTED_HISTORY_TITLE, MAIN_PROJECT_NAME, CURRENT_SCHEMA_VERSION, ConversationStore
 from conftest import assert_mode
 
 
@@ -93,7 +93,7 @@ def test_unscoped_conversations_use_the_free_project(tmp_path):
     conversation = store.create()
 
     assert conversation["project_id"] == "free"
-    assert store.get_project("free")["name"] == "Conversation libre"
+    assert store.get_project("free")["name"] == FREE_PROJECT_NAME
 
 
 def test_global_preferences_apply_only_to_new_conversations(tmp_path):
@@ -366,7 +366,7 @@ def test_old_runs_are_imported_once(tmp_path):
     conversations = store.list()
 
     assert len(conversations) == 1
-    assert conversations[0]["title"] == "Historique importé"
+    assert conversations[0]["title"] == IMPORTED_HISTORY_TITLE
     assert len(conversations[0]["messages"]) == 2
 
 
@@ -516,3 +516,30 @@ def test_permanent_project_delete_requires_trash(tmp_path):
     assert store.get(conversation["id"]) is None
     with pytest.raises(ValueError):
         store.trash_project("main")
+
+
+def test_the_server_never_seeds_a_french_name_into_the_data(tmp_path):
+    """Le serveur ignore la langue de l'interface.
+
+    Un nom écrit en français y arrivait tel quel dans une interface anglaise :
+    « Nouvelle conversation » comme titre, « Conversation libre » comme projet.
+    Les valeurs semées sont donc neutres, et l'interface les traduit.
+    """
+    store = ConversationStore(tmp_path / "state.json", tmp_path / "runs")
+    conversation = store.create()
+
+    assert conversation["title"] == DEFAULT_CONVERSATION_TITLE
+    assert store.get_project("free")["name"] == FREE_PROJECT_NAME
+    assert not any(
+        accent in (conversation["title"] + FREE_PROJECT_NAME + MAIN_PROJECT_NAME)
+        for accent in "éèêàùç"
+    )
+
+    # L'interface fournit le titre dans sa langue, et il est conservé.
+    french = store.create(title="Nouvelle conversation")
+    assert french["title"] == "Nouvelle conversation"
+
+    # Les deux formes valent « sans titre » : le premier message renomme.
+    for item in (conversation, french):
+        store.append_message(item["id"], "user", "Compare deux options")
+        assert store.get(item["id"])["title"] == "Compare deux options"
