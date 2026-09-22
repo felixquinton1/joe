@@ -6,7 +6,7 @@ account information.
 
 Current interface screenshots, all 1600×915 and framed identically:
 
-- `joe-overview.png` — the Web interface at rest, used at the top of the README;
+- `joe-overview.png` — the Web interface at rest;
 - `joe-consensus-running.png` — a consensus with its proposals complete and its
   cross-reviews still running;
 - `joe-consensus.png` — the same run once the arbiter has published its
@@ -26,6 +26,9 @@ When a real capture shows an absolute path — the provider activity panel print
 the paths an agent touched — blur that line rather than dropping the panel. The
 tool names carry the information; the paths do not.
 
-The README loads these through `raw.githubusercontent.com` rather than by
-relative path: it also serves as the PyPI description, where a relative image
-resolves against pypi.org and does not render.
+The README does not embed them today, and that is deliberate. A relative path
+does not render on PyPI, which serves the same file as the project
+description, while an absolute `raw.githubusercontent.com` link returns 404
+while the repository is private — the README showed broken images either way.
+These files stay here as release media. Embed them only once the repository is
+public, and check both renderings before doing so.
