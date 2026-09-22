@@ -91,10 +91,17 @@ def test_doctor_tells_a_newcomer_how_to_install_what_is_missing(tmp_path, monkey
     assert "not found" in text
     assert "installé" not in text and "Stockage" not in text
     # Chaque absence est suivie de quoi faire, commande et page officielle.
+    # La commande est celle de la plateforme : l'affirmer en dur ferait passer
+    # le test pour un echec la ou le produit a justement raison.
+    import os
+
+    from joe.provider_registry import get_provider_names, install_hint
+
     assert "Install Claude:" in text
-    assert "curl -fsSL https://claude.ai/install.sh | bash" in text
-    assert "https://code.claude.com/docs" in text
-    assert "npm install -g @openai/codex" in text
+    for name in get_provider_names():
+        hint = install_hint(name, windows=os.name == "nt")
+        assert hint["command"] in text, name
+        assert hint["homepage"] in text, name
 
 
 def test_doctor_names_a_binary_it_could_not_confirm(tmp_path, monkeypatch):
