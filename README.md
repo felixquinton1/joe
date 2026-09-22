@@ -124,6 +124,19 @@ page for whatever is missing, with the Windows variant where it differs. The
 same list lives in the Web interface under **Options → Preferences → Manage AI
 CLIs**, where each detected CLI can also be switched off so Joe leaves it alone.
 
+Joe runs each CLI in a single non-interactive call, which decides what carries
+through. `@file` references work, and so do your own commands under
+`.claude/commands/`. Commands that drive an interactive session — `/compact`,
+`/clear`, `/login` — have no session to act on; Joe says so instead of showing
+an empty answer.
+
+MCP servers need no setup in Joe: it passes no MCP options, so each CLI loads
+its own configuration and MCP tool calls appear in the activity panel. Access
+level decides whether a tool can run — a tool that asks for approval cannot get
+it in a non-interactive call, so pre-authorise it in the CLI's own
+configuration or grant full access. See the
+[user guide](docs/user-guide.md) for the detail.
+
 Joe discovers the models and options exposed by the installed CLIs whenever
 possible. Availability, quota precision, tool access, and model controls still
 depend on each provider.

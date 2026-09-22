@@ -35,6 +35,11 @@ All notable changes to Joe are documented here. The format follows
 
 ### Fixed
 
+- An empty provider answer now says why. A command that drives an interactive
+  session returns neither an answer nor an error through a non-interactive
+  call, so the conversation showed an empty bubble that looked like a failure.
+  Nothing is refused upfront: custom commands do work, and rejecting `/review`
+  or `/init` on the strength of their name would have broken them.
 - Cursor is detected again. Its CLI is now installed as `agent`, and Joe looked
   only for `cursor-agent`, so no current installation was ever found. Joe tries
   both, and verifies that a binary found under the generic name really is the

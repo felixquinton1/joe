@@ -1627,3 +1627,44 @@ def test_loading_capabilities_late_does_not_erase_the_chosen_model():
     menus = app.split("function updateCapabilityMenus(")[1].split("\n}")[0]
     assert 'const previous = $("model").value' in menus
     assert '$("model").value = previous' in menus
+
+
+def test_a_session_command_explains_itself_instead_of_answering_nothing():
+    """`/compact` ne renvoie ni reponse ni erreur : juste le vide.
+
+    Joe lance les CLI en un seul appel non interactif, donc une commande qui
+    pilote une session n'a aucune session sur laquelle agir. Une bulle vide
+    ressemble a une panne.
+    """
+    from joe.web_runs import _empty_answer_note, _leading_slash_command
+
+    assert _leading_slash_command("/compact") == "compact"
+    assert _leading_slash_command("  /clear now") == "clear"
+    assert _leading_slash_command("explique /compact") == ""
+
+    note = _empty_answer_note("/compact", "en")
+    assert "`/compact` produced no output" in note
+    assert "@file" in note and ".claude/commands/" in note
+
+    french = _empty_answer_note("/compact", "fr")
+    assert "n'a produit aucune sortie" in french
+
+    # Une reponse vide sans commande reste expliquee, sobrement.
+    plain = _empty_answer_note("Corrige le tri", "en")
+    assert "empty answer" in plain
+    assert "/" not in plain.split("Nothing")[0]
+
+
+def test_a_custom_command_is_never_refused_on_the_strength_of_its_name():
+    """Une commande personnalisee fonctionne vraiment, elle.
+
+    Refuser `/review` ou `/init` au pretexte du nom aurait casse ce qui
+    marche : rien n'est bloque en amont, on explique ce qu'on a observe.
+    """
+    from joe.web_runs import _empty_answer_note
+
+    # L'explication n'apparait que si la sortie est vide ; la reconnaissance
+    # du nom ne conditionne aucun blocage.
+    note = _empty_answer_note("/review", "en")
+    assert "produced no output" in note
+    assert "does work" in note

@@ -4,8 +4,9 @@ Joe relie une interface locale aux CLI Codex, Claude Code, Gemini, Copilot et
 Cursor déjà installées et authentifiées sur la machine. Il ne demande ni ne
 stocke leurs mots de passe.
 
-Pour Cursor, la CLI attendue est `cursor-agent`, sans fenêtre : la commande
-`cursor` lance l’éditeur et ne convient pas. Joe la pilote sur ses options
+Pour Cursor, la CLI attendue s’installe sous le nom `agent`, sans fenêtre : la
+commande `cursor` lance l’éditeur et ne convient pas. Joe accepte aussi
+l’ancien nom `cursor-agent`, conservé par compatibilité. Joe la pilote sur ses options
 documentées et n’en lit pas le quota restant ; un quota épuisé reste détecté
 au moment du run, et la demande bascule sur un autre fournisseur.
 
@@ -232,6 +233,42 @@ l’envoi.
 La recherche de la colonne de gauche couvre les conversations, les tâches et
 les noms de fichiers de tous les projets. Les résultats restent entièrement
 locaux.
+
+## Outils des CLI : `@`, commandes et serveurs MCP
+
+Joe lance chaque CLI en **un seul appel non interactif**. Cette contrainte
+explique tout ce qui suit : ce qui est une instruction au modèle traverse, ce
+qui pilote une session n’a rien à piloter.
+
+| Ce que tu écris | Effet |
+| --- | --- |
+| `@fichier` | fonctionne, deux fois même : Joe joint le fichier de la bibliothèque du projet, et la CLI développe de son côté les chemins qu’elle reconnaît |
+| `/ma-commande` définie dans `.claude/commands/` | fonctionne : la CLI l’exécute avant d’appeler le modèle |
+| `/compact`, `/clear`, `/login`, `/model` | sans effet : aucune session à piloter. La CLI ne renvoie ni réponse ni erreur, et Joe explique ce vide plutôt que d’afficher une bulle vide |
+
+Pour compacter un historique, utilise la compaction de conversation de Joe, qui
+travaille sur l’historique qu’il détient lui-même.
+
+### Serveurs MCP et outils externes
+
+Joe ne passe **aucune option MCP** aux CLI : la configuration de chacune
+s’applique exactement comme hors de Joe. Un serveur déclaré pour Claude Code
+dans `.mcp.json` ou dans ses réglages, ou pour Codex dans `~/.codex/config.toml`,
+est donc disponible pendant un run. Les appels d’outils MCP apparaissent dans le
+panneau d’activité, au même titre que les commandes shell.
+
+C’est le niveau d’accès qui décide si l’outil peut réellement s’exécuter, et il
+faut le savoir avant de compter sur une base de données externe :
+
+- **Lecture seule** : un outil MCP qui ne fait que lire fonctionne.
+- **Écriture projet** : un outil qui demande une approbation ne l’obtiendra
+  pas. Un appel non interactif n’offre aucun canal de réponse, donc la demande
+  est refusée sans que rien ne l’explique. Pré-autorise l’outil dans la
+  configuration de la CLI si tu veux l’utiliser à ce niveau.
+- **Accès complet** : tout est pré-autorisé, y compris les outils MCP.
+
+Les identifiants de connexion à une base restent dans la configuration du
+serveur MCP, jamais dans Joe : il ne les voit pas et ne les enregistre pas.
 
 ## Capacités et sécurité
 

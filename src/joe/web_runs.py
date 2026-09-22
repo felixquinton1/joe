@@ -33,7 +33,7 @@ from .files import FileLibrary
 from .git_review import GitSnapshot, reject, snapshot
 from .models import Intent, Mode, Route
 from .orchestrator import OrchestrationError, Orchestrator
-from .prompt_language import question_rules
+from .prompt_language import normalize as normalize_language, question_rules
 from .providers import _access_level
 from .router import _routing_text
 from .routing import resolve_route
@@ -904,6 +904,7 @@ class RunManager:
                     cancel_event=run.cancel_event,
                     on_event=lambda event: self._emit_run_event(run, event),
                 )
+            response = response or _empty_answer_note(run.request, language)
             git_report = self._capture_git_report(run)
             self._update_task_git(run, git_report)
             self._deliver_if_enabled(run, git_report)
@@ -2920,6 +2921,53 @@ def _heavy_words(request: str) -> bool:
     for separator in (",", ".", ";", ":", "!", "?", "(", ")", "\n"):
         text = text.replace(separator, " ")
     return bool(set(text.split()) & _HEAVY_MARKERS)
+
+
+# Une commande de session — `/compact`, `/clear`, `/login` — pilote une session
+# interactive. Joe lance les CLI en un coup, sans session : il n'y a rien à
+# piloter, et la CLI ne renvoie alors ni réponse ni erreur. Juste le vide, qui
+# ressemble à une panne.
+#
+# Rien n'est bloqué en amont : une commande personnalisée fonctionne, elle,
+# parfaitement, et refuser `/review` ou `/init` au prétexte du nom aurait cassé
+# ce qui marche. On explique donc ce qu'on a observé, pas ce qu'on avait prédit.
+def _leading_slash_command(request: str) -> str:
+    stripped = request.strip()
+    if not stripped.startswith("/"):
+        return ""
+    name = stripped.split()[0][1:].split(":")[0]
+    return name if name and name.replace("-", "").replace("_", "").isalnum() else ""
+
+
+def _empty_answer_note(request: str, language: str) -> str:
+    """Dire pourquoi la réponse est vide, plutôt que de rendre une bulle vide."""
+    command = _leading_slash_command(request)
+    english = normalize_language(language) == "en"
+    if not command:
+        return (
+            "The provider returned an empty answer. Nothing was applied."
+            if english
+            else "Le fournisseur n'a renvoyé aucune réponse. Rien n'a été appliqué."
+        )
+    if english:
+        return (
+            f"`/{command}` produced no output. Joe runs provider CLIs in a "
+            "single non-interactive call, so commands that drive an "
+            "interactive session — clearing history, signing in, switching "
+            "model — have no session to act on.\n\n"
+            "What does work: `@file` references, which the CLI expands, and "
+            "your own commands under `.claude/commands/`. For history, use "
+            "Joe's own conversation compaction instead."
+        )
+    return (
+        f"`/{command}` n'a produit aucune sortie. Joe lance les CLI en un seul "
+        "appel non interactif : les commandes qui pilotent une session — vider "
+        "l'historique, se connecter, changer de modèle — n'ont aucune session "
+        "sur laquelle agir.\n\n"
+        "Ce qui fonctionne en revanche : les références `@fichier`, que la CLI "
+        "développe, et tes propres commandes sous `.claude/commands/`. Pour "
+        "l'historique, utilise la compaction de conversation de Joe."
+    )
 
 
 def _complex_request(request: str, route: Route) -> bool:
