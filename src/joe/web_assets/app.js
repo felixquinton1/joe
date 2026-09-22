@@ -101,12 +101,11 @@ function annotateNetworkControl(controlled) {
   }
 }
 
-function updateProviderMenu(providers) {
-  const selected = $("agent").value;
-  // Une CLI absente reste visible mais inchoisissable : la masquer ferait
-  // croire que Joe ne la connaît pas, et la proposer mènerait à un choix qui
-  // ne peut pas aboutir. Le panneau des CLI dit comment l'installer.
-  const items = providers.map(provider => {
+// Une CLI absente reste visible mais inchoisissable : la masquer ferait croire
+// que Joe ne la connaît pas, et la proposer mènerait à un choix qui ne peut pas
+// aboutir. Le panneau des CLI dit comment l'installer.
+function providerMenuItems(providers, selected) {
+  return providers.map(provider => {
     const item = typeof provider === "string"
       ? { id: provider, label: capitalize(provider) }
       : { ...provider };
@@ -116,6 +115,12 @@ function updateProviderMenu(providers) {
     }
     return item;
   });
+}
+
+function updateProviderMenu(providers) {
+  const selected = $("agent").value;
+  state.providerCatalog = providers;
+  const items = providerMenuItems(providers, selected);
   setOptions(
     $("agent"),
     [{ id: "", label: t("automatic") }, ...items]
@@ -625,6 +630,21 @@ function providerRow(provider, interactive) {
     row.appendChild(choice);
   }
   const install = provider.install || {};
+  // Trouver le binaire ne dit rien du compte. Joe ne peut pas le savoir sans
+  // lancer la CLI, alors il le dit : une CLI détectée reste inutilisable tant
+  // qu'on ne s'y est pas connecté, et l'erreur au premier run n'explique rien.
+  if (provider.installed && install.sign_in) {
+    const signIn = document.createElement("div");
+    signIn.className = `provider-signin${provider.auth_failed ? " failed" : ""}`;
+    const note = document.createElement("small");
+    note.textContent = t(
+      provider.auth_failed ? "provider_sign_in_failed" : "provider_sign_in_once"
+    );
+    const code = document.createElement("code");
+    code.textContent = install.sign_in;
+    signIn.append(note, code, copyButton(() => install.sign_in));
+    row.appendChild(signIn);
+  }
   if (!provider.installed && (install.command || install.homepage)) {
     const help = document.createElement("div");
     help.className = "provider-install";
@@ -700,9 +720,27 @@ async function setProviderEnabled(provider, enabled) {
   await fetchDoctor($("providers-list"), { interactive: true });
 }
 
-async function openProviders() {
-  $("providers-dialog").showModal();
-  await fetchDoctor($("providers-list"), { interactive: true });
+// Les onglets des paramètres. Le contenu d'un onglet ne se charge qu'à son
+// ouverture : le diagnostic des CLI lance des processus, inutile de le faire
+// pour qui vient changer son workflow par défaut.
+function showSettingsPane(name) {
+  for (const tab of document.querySelectorAll(".settings-tab")) {
+    const active = tab.dataset.pane === name;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", String(active));
+  }
+  for (const pane of document.querySelectorAll(".settings-pane")) {
+    pane.classList.toggle("hidden", pane.dataset.pane !== name);
+  }
+  // « Enregistrer » ne concerne que les réglages a saisir ; les CLI
+  // s'enregistrent au clic, et le projet a sa propre fenêtre.
+  $("save-preferences").classList.toggle("hidden", name !== "conversations");
+  if (name === "providers") fetchDoctor($("providers-list"), { interactive: true });
+}
+
+function openSettings(pane = "conversations") {
+  $("preferences-dialog").showModal();
+  showSettingsPane(pane);
 }
 
 async function loadDoctor() {
@@ -989,11 +1027,18 @@ async function openPreferences() {
   const preferences = await joeFetch("/api/preferences").then(
     response => response.json()
   );
+  // La liste des agents etait ecrite dans le document : Cursor y manquait, et
+  // rien n'y disait ce qui est installe. Elle vient du catalogue, comme celle
+  // du menu principal.
+  setOptions($("preference-agent"), [
+    { id: "", label: t("automatic_recommended") },
+    ...providerMenuItems(state.providerCatalog || [], preferences.agent || "")
+  ]);
   $("preference-agent").value = preferences.agent || "";
   $("preference-mode").value = preferences.mode || "";
   refreshSelectMenu($("preference-agent"));
   refreshSelectMenu($("preference-mode"));
-  $("preferences-dialog").showModal();
+  openSettings("conversations");
 }
 
 async function savePreferences(event) {
@@ -2089,16 +2134,22 @@ $("recheck-onboarding").onclick = event => {
   fetchDoctor($("doctor-status"), { interactive: true });
 };
 
-$("open-providers").onclick = () => {
-  $("preferences-dialog").close();
-  openProviders();
-};
-$("refresh-providers").onclick = event => {
-  // Le bouton vit dans un `<form method="dialog">` : sans cela il fermerait
-  // le panneau au lieu de le recharger.
-  event.preventDefault();
-  fetchDoctor($("providers-list"), { interactive: true });
-};
+for (const tab of document.querySelectorAll(".settings-tab")) {
+  tab.onclick = event => {
+    event.preventDefault();
+    showSettingsPane(tab.dataset.pane);
+  };
+}
+
+// On installe une CLI dans un terminal, cette fenêtre ouverte : au retour, la
+// liste doit déjà être à jour. Un bouton « actualiser » demandait à
+// l'utilisateur de se souvenir d'une étape que la fenêtre peut faire seule.
+window.addEventListener("focus", () => {
+  const pane = document.querySelector('.settings-pane[data-pane="providers"]');
+  if ($("preferences-dialog").open && pane && !pane.classList.contains("hidden")) {
+    fetchDoctor($("providers-list"), { interactive: true });
+  }
+});
 
 $("open-project-skills").onclick = () => {
   const conversation = state.conversations.find(
@@ -2111,8 +2162,18 @@ $("open-project-skills").onclick = () => {
     window.alert(t("select_project_conversation"));
     return;
   }
+  // Ouvrir une seconde fenêtre sans retour laissait l'utilisateur dans une
+  // impasse : il fallait tout refermer pour revenir aux paramètres.
+  state.cameFromSettings = true;
   $("preferences-dialog").close();
   openProject(project);
+};
+
+$("back-to-settings").onclick = event => {
+  event.preventDefault();
+  state.cameFromSettings = false;
+  $("project-dialog").close();
+  openSettings("project");
 };
 $("save-preferences").onclick = savePreferences;
 for (const button of document.querySelectorAll("[data-language]")) {

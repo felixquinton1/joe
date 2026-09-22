@@ -116,6 +116,7 @@
   <dialog id="project-dialog" class="project-dialog">
     <form method="dialog">
       <span class="eyebrow" data-i18n="shared_context">Contexte partagé</span>
+      <button id="back-to-settings" class="dialog-back hidden" type="button" data-i18n="back_to_settings">← Retour aux paramètres</button>
       <h2 id="project-dialog-title" data-i18n="project">Projet</h2>
       <fieldset class="dialog-section">
         <legend data-i18n="general">Général</legend>
@@ -227,44 +228,47 @@
       <div class="dialog-actions"><button value="cancel" data-i18n="close">Fermer</button></div>
     </form>
   </dialog>
-  <dialog id="preferences-dialog" class="project-dialog preferences-dialog">
+  <dialog id="preferences-dialog" class="project-dialog settings-dialog">
     <form method="dialog">
       <span class="eyebrow" data-i18n="preferences">Préférences</span>
-      <h2 data-i18n="defaults_title">Réglages des nouvelles conversations</h2>
-      <p data-i18n="defaults_intro">Ces choix servent de point de départ. Chaque conversation peut ensuite conserver ses propres réglages.</p>
-      <label><span data-i18n="preferred_agent">Agent principal</span>
-        <select id="preference-agent">
-          <option value="" data-i18n="automatic_recommended">Automatique — recommandé</option>
-          <option value="codex">Codex</option><option value="claude">Claude</option>
-          <option value="gemini">Gemini</option><option value="copilot">Copilot</option>
-        </select>
-        <small data-i18n="preferred_agent_help">Joe privilégie cet agent, puis utilise un fallback si nécessaire.</small>
-      </label>
-      <label><span data-i18n="default_workflow">Workflow par défaut</span>
-        <select id="preference-mode">
-          <option value="" data-i18n="automatic_recommended">Automatique — recommandé</option>
-          <option value="fast">FAST</option><option value="review">REVIEW</option>
-          <option value="consensus">CONSENSUS</option>
-        </select>
-        <small data-i18n="default_workflow_help">En automatique, Joe adapte le nombre d’agents à la demande.</small>
-      </label>
-      <button id="open-project-skills" class="subtle-action" type="button" data-i18n="manage_active_project_skills">Gérer les skills du projet actif</button>
-      <button id="open-providers" class="subtle-action" type="button" data-i18n="manage_providers">Gérer les CLI d’IA</button>
-      <div class="dialog-actions">
-        <button value="cancel" data-i18n="cancel">Annuler</button>
-        <button id="save-preferences" value="default" data-i18n="save">Enregistrer</button>
+      <h2 data-i18n="settings_title">Paramètres</h2>
+      <div class="settings-layout">
+        <nav class="settings-tabs" role="tablist" aria-label="Paramètres">
+          <button type="button" class="settings-tab active" data-pane="conversations" role="tab" aria-selected="true" data-i18n="tab_conversations">Conversations</button>
+          <button type="button" class="settings-tab" data-pane="providers" role="tab" aria-selected="false" data-i18n="tab_providers">CLI d’IA</button>
+          <button type="button" class="settings-tab" data-pane="project" role="tab" aria-selected="false" data-i18n="tab_project">Projet et skills</button>
+        </nav>
+        <div class="settings-panes">
+          <section class="settings-pane" data-pane="conversations" role="tabpanel">
+            <p class="settings-intro" data-i18n="defaults_intro">Ces choix servent de point de départ. Chaque conversation peut ensuite conserver ses propres réglages.</p>
+            <label><span data-i18n="preferred_agent">Agent principal</span>
+              <select id="preference-agent">
+                <option value="" data-i18n="automatic_recommended">Automatique — recommandé</option>
+              </select>
+              <small data-i18n="preferred_agent_help">Joe privilégie cet agent, puis utilise un fallback si nécessaire.</small>
+            </label>
+            <label><span data-i18n="default_workflow">Workflow par défaut</span>
+              <select id="preference-mode">
+                <option value="" data-i18n="automatic_recommended">Automatique — recommandé</option>
+                <option value="fast">FAST</option><option value="review">REVIEW</option>
+                <option value="consensus">CONSENSUS</option>
+              </select>
+              <small data-i18n="default_workflow_help">En automatique, Joe adapte le nombre d’agents à la demande.</small>
+            </label>
+          </section>
+          <section class="settings-pane hidden" data-pane="providers" role="tabpanel">
+            <p class="settings-intro" data-i18n="providers_intro">Joe n’envoie une demande qu’aux CLI qu’il trouve sur cette machine. Installe celles que tu veux, décoche celles que Joe doit laisser tranquilles.</p>
+            <div id="providers-list" class="providers-list"><small data-i18n="diagnostic_running">Diagnostic en cours…</small></div>
+          </section>
+          <section class="settings-pane hidden" data-pane="project" role="tabpanel">
+            <p class="settings-intro" data-i18n="project_settings_intro">Le contexte, les permissions, la livraison Git et les skills appartiennent à chaque projet.</p>
+            <button id="open-project-skills" class="subtle-action" type="button" data-i18n="open_active_project">Ouvrir les réglages du projet actif</button>
+          </section>
+        </div>
       </div>
-    </form>
-  </dialog>
-  <dialog id="providers-dialog" class="project-dialog providers-dialog">
-    <form method="dialog">
-      <span class="eyebrow" data-i18n="providers">Fournisseurs</span>
-      <h2 data-i18n="providers_title">CLI d’IA disponibles</h2>
-      <p data-i18n="providers_intro">Joe n’envoie une demande qu’aux CLI qu’il trouve sur cette machine. Installe celles que tu veux, décoche celles que Joe doit laisser tranquilles.</p>
-      <div id="providers-list" class="providers-list"><small data-i18n="diagnostic_running">Diagnostic en cours…</small></div>
       <div class="dialog-actions">
-        <button id="refresh-providers" class="subtle-action" type="button" data-i18n="refresh">Actualiser</button>
-        <button value="default" data-i18n="close">Fermer</button>
+        <button value="cancel" data-i18n="close">Fermer</button>
+        <button id="save-preferences" value="default" data-i18n="save">Enregistrer</button>
       </div>
     </form>
   </dialog>

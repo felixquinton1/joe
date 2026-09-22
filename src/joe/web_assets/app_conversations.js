@@ -664,6 +664,9 @@ window.createJoeConversations = function createJoeConversations({
 
   function openProject(project) {
     state.editingProjectId = project.id;
+    // Le retour ne s'affiche que s'il a un sens : la fenêtre s'ouvre aussi
+    // depuis la barre latérale, où « revenir aux paramètres » ne veut rien dire.
+    $("back-to-settings").classList.toggle("hidden", !state.cameFromSettings);
     $("project-dialog-title").textContent = tr("edit_project");
     $("save-project").textContent = tr("save");
     $("project-name").value = project.name;

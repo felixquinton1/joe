@@ -1471,13 +1471,41 @@ def test_the_interface_offers_one_permanent_place_to_manage_cli():
     page = (assets / "index.html").read_text(encoding="utf-8")
     app = (assets / "app.js").read_text(encoding="utf-8")
 
-    assert 'id="providers-dialog"' in page
-    assert 'id="open-providers"' in page
-    assert 'data-i18n="manage_providers"' in page
+    # Les CLI sont un onglet des paramètres, pas une fenêtre de plus : deux
+    # boutons ouvraient chacun leur dialogue, sans retour possible.
+    assert 'data-pane="providers"' in page
+    assert 'data-i18n="tab_providers"' in page
+    assert 'id="providers-dialog"' not in page
     # Un seul rendu, appelé par les deux écrans.
     assert app.count("function renderProviders(") == 1
     assert 'fetchDoctor($("providers-list")' in app
     assert 'fetchDoctor($("doctor-status")' in app
+
+
+def test_a_settings_tab_that_opens_a_window_offers_a_way_back():
+    """Ouvrir une seconde fenêtre sans retour laisse dans une impasse."""
+    assets = Path(__file__).resolve().parent.parent / "src" / "joe" / "web_assets"
+    page = (assets / "index.html").read_text(encoding="utf-8")
+    app = (assets / "app.js").read_text(encoding="utf-8")
+
+    assert 'id="back-to-settings"' in page
+    assert 'openSettings("project")' in app
+
+
+def test_the_cli_list_refreshes_when_the_window_regains_focus():
+    """On installe une CLI dans un terminal, la fenêtre ouverte.
+
+    Demander en plus de cliquer « actualiser » fait reposer sur l'utilisateur
+    une étape que la fenêtre peut faire seule.
+    """
+    app = (
+        Path(__file__).resolve().parent.parent
+        / "src" / "joe" / "web_assets" / "app.js"
+    ).read_text(encoding="utf-8")
+
+    focus = app.split('window.addEventListener("focus"')[1][:400]
+    assert 'fetchDoctor($("providers-list")' in focus
+    assert '$("preferences-dialog").open' in focus
 
 
 def test_the_agent_menu_never_offers_a_cli_joe_cannot_run():
@@ -1511,3 +1539,14 @@ def test_an_empty_conversation_keeps_explaining_what_to_do():
     assert 'data-i18n="empty_title"' in page and 'data-i18n="empty_text"' in page
     assert 'tr("empty_title")' in conversations
     assert 'tr("empty_text")' in conversations
+
+
+def test_the_panel_explains_that_a_detected_cli_still_needs_an_account():
+    """Cursor apparaissait utilisable alors qu'aucun compte n'y etait connecte."""
+    app = (
+        Path(__file__).resolve().parent.parent
+        / "src" / "joe" / "web_assets" / "app.js"
+    ).read_text(encoding="utf-8")
+
+    assert "provider.installed && install.sign_in" in app
+    assert 'provider.auth_failed ? "provider_sign_in_failed" : "provider_sign_in_once"' in app

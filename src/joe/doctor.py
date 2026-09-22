@@ -8,6 +8,7 @@ from .maintenance import provider_audit
 from .models import Intent
 from .provider_registry import get_provider_spec
 from .provider_choice import disabled_providers
+from .provider_health import recent_failure
 from .provider_registry import install_hint
 from .providers import (
     Provider,
@@ -61,6 +62,11 @@ def doctor_report(
             "version": versions.get(name),
             "usage": usage.get(name),
             "runtime_issue": runtime_issue,
+            # Trouver le binaire ne dit rien du compte : une CLI installée mais
+            # jamais connectée echoue au premier run, avec une erreur que rien
+            # ne rattache a sa cause. Joe ne peut pas le savoir sans la lancer,
+            # mais il retient un refus d'authentification deja rencontre.
+            "auth_failed": (recent_failure(name) or ("", 0))[0] == "authentication",
             "install": install_hint(name, windows=windows),
         }
         if live and executable and not runtime_issue:

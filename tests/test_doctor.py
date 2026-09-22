@@ -123,3 +123,47 @@ def test_doctor_names_a_binary_it_could_not_confirm(tmp_path, monkeypatch):
     assert cursor["installed"] is False
     assert cursor["unconfirmed"] == "/venv/bin/agent"
     assert "unconfirmed · found /venv/bin/agent" in format_doctor(report)
+
+
+def test_a_detected_cli_still_says_it_needs_a_sign_in(tmp_path, monkeypatch):
+    """Trouver le binaire ne dit rien du compte.
+
+    Une CLI installee mais jamais connectee se presente comme utilisable, se
+    laisse choisir, puis echoue au premier run avec une erreur que rien ne
+    rattache a sa cause.
+    """
+    monkeypatch.setattr("joe.doctor.usage_status", lambda force=False: [])
+    monkeypatch.setattr("joe.doctor.provider_audit", lambda: [])
+    monkeypatch.setattr(
+        "joe.doctor.resolve_executable", lambda name, **kwargs: f"/usr/bin/{name}"
+    )
+    monkeypatch.setattr("joe.doctor.recent_failure", lambda name: None)
+
+    report = doctor_report(tmp_path)
+    cursor = next(
+        item for item in report["providers"] if item["provider"] == "cursor-agent"
+    )
+
+    assert cursor["installed"] is True
+    assert cursor["auth_failed"] is False
+    # La commande de connexion accompagne aussi une CLI presente.
+    assert cursor["install"]["sign_in"] == "agent login"
+
+
+def test_a_refused_sign_in_is_reported_where_the_choice_is_made(tmp_path, monkeypatch):
+    """Joe ne peut pas deviner l'etat du compte, mais il retient un refus."""
+    monkeypatch.setattr("joe.doctor.usage_status", lambda force=False: [])
+    monkeypatch.setattr("joe.doctor.provider_audit", lambda: [])
+    monkeypatch.setattr(
+        "joe.doctor.resolve_executable", lambda name, **kwargs: f"/usr/bin/{name}"
+    )
+    monkeypatch.setattr(
+        "joe.doctor.recent_failure",
+        lambda name: ("authentication", 120) if name == "claude" else None,
+    )
+
+    report = doctor_report(tmp_path)
+    states = {item["provider"]: item["auth_failed"] for item in report["providers"]}
+
+    assert states["claude"] is True
+    assert states["codex"] is False

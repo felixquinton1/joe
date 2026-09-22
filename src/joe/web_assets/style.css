@@ -955,7 +955,19 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 .doctor-status p.ok span { color: var(--green); }
 .doctor-status p.error span { color: var(--danger); }
 .doctor-status p.muted span { color: var(--muted); }
-.providers-dialog form { max-height: 70vh; }
+.settings-dialog form { gap: 12px; max-height: 74vh; }
+.settings-layout { display: grid; grid-template-columns: 138px 1fr; gap: 16px; align-items: start; }
+.settings-tabs { display: grid; gap: 2px; align-content: start; padding-right: 14px; border-right: 1px solid var(--line); }
+.settings-tab { padding: 8px 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted); text-align: left; font-size: 10px; cursor: pointer; }
+.settings-tab:hover { color: var(--ink); background: #f2f0ea; }
+.settings-tab.active { color: var(--ink); background: #eceade; font-weight: 650; }
+.settings-panes { min-width: 0; max-height: 52vh; overflow-y: auto; padding-right: 2px; }
+.settings-pane { display: grid; gap: 13px; }
+.settings-pane.hidden { display: none; }
+.settings-intro { margin: 0; color: var(--muted); font-size: 9.5px; line-height: 1.55; }
+.dialog-back { justify-self: start; margin-bottom: -2px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 9.5px; cursor: pointer; }
+.dialog-back:hover { color: var(--ink); }
+.dialog-back.hidden { display: none; }
 .providers-list { display: grid; gap: 7px; max-height: 46vh; overflow: auto; padding-right: 2px; }
 .provider-row { display: grid; gap: 6px; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #faf9f5; }
 .provider-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 10px; }
@@ -973,6 +985,11 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 .provider-choice input:focus-visible + .provider-switch { outline: 2px solid var(--line-strong); outline-offset: 2px; }
 .provider-choice:hover .provider-switch { background: #d2cdbf; }
 .provider-choice:hover input:checked + .provider-switch { background: var(--green); }
+.provider-signin { display: grid; gap: 5px; padding-top: 6px; border-top: 1px solid var(--line); }
+.provider-signin small { color: var(--muted); font-size: 8.5px; line-height: 1.5; }
+.provider-signin code { display: block; overflow-x: auto; padding: 5px 7px; border-radius: 6px; background: #efece2; color: var(--ink); font-size: 9px; white-space: pre; }
+.provider-signin.failed small { color: var(--danger); }
+.provider-signin.failed code { background: #f7e9e6; }
 .provider-install { display: grid; gap: 5px; padding-top: 6px; border-top: 1px solid var(--line); }
 .provider-install code { display: block; overflow-x: auto; padding: 6px 7px; border-radius: 6px; background: var(--ink); color: #f5f4ef; font-size: 9px; white-space: pre; }
 .provider-install small { color: var(--muted); font-size: 8.5px; }
