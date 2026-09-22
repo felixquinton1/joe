@@ -1,90 +1,88 @@
 # Joe HTTP/SSE API — MVP contract
 
-> Statut : validé. Contrat client courant : `api_version: "1.2"`.
+> Status: validated. Current client contract: `api_version: "1.2"`.
 
-## Portée et compatibilité
+## Scope and compatibility
 
-Ce contrat couvre l’interface nécessaire au client Web et au futur client
-VS Code. Il ne constitue pas une API distante ou multi-utilisateur.
+This contract covers the interface the Web client and the future VS Code client
+need. It is not a remote or multi-user API.
 
-- Transport : HTTP/1.1 sur `127.0.0.1:8765` par défaut.
-- Corps structurés : JSON UTF-8.
-- Événements : Server-Sent Events (SSE).
-- Taille maximale d’un corps JSON : 1 Mio.
-- `version` identifie le paquet Joe.
-- `api_version` identifie ce contrat indépendamment du paquet.
-- Un client accepte les ajouts de champs avec la même version majeure.
-- Une suppression, un renommage ou un changement de sémantique exige une
-  nouvelle version majeure d’API.
+- Transport: HTTP/1.1 on `127.0.0.1:8765` by default.
+- Structured bodies: UTF-8 JSON.
+- Events: Server-Sent Events (SSE).
+- Maximum JSON body size: 1 MiB.
+- `version` identifies the Joe package.
+- `api_version` identifies this contract independently of the package.
+- A client accepts added fields within the same major version.
+- A removal, a rename or a change of meaning requires a new major API version.
 
-Joe 1.1 authentifie l’API locale et impose un profil de capacités. Un bind non
-local reste refusé sans option explicite.
+Joe 1.1 authenticates the local API and enforces a capability profile. A
+non-local bind stays refused without an explicit option.
 
-Joe 1.2 resserre deux points, sans ajout de route :
+Joe 1.2 tightens two points without adding a route:
 
-- `full_access_approved` dans le corps de `POST /api/runs` **n’autorise plus
-  rien**. Un accès complet exige un `approval_id` durable au statut `approved`,
-  consommé une seule fois. Le champ est ignoré s’il est encore envoyé : un
-  client qui s’en servait reçoit désormais `428` avec l’`approval_id` à faire
-  valider. Aucun client 1.x publié ne dépendait de ce champ.
-- Le téléchargement et la suppression d’une pièce jointe sont cloisonnés par
-  projet et attendent `?project={id}`. Un identifiant seul ne suffit plus à
-  sortir un fichier de son projet : la réponse est `404` en cas de
-  discordance.
+- `full_access_approved` in the body of `POST /api/runs` **no longer authorises
+  anything**. Full access requires a durable `approval_id` in the `approved`
+  state, consumed exactly once. The field is ignored if still sent: a client
+  that relied on it now receives `428` along with the `approval_id` to have
+  approved. No published 1.x client depended on that field.
+- Downloading and deleting an attachment are partitioned per project and expect
+  `?project={id}`. An identifier alone no longer takes a file out of its
+  project: a mismatch answers `404`.
 
-## Matrice des endpoints MVP
+## MVP endpoint matrix
 
-| Méthode | Endpoint | Succès | Erreurs utiles | Usage client |
+| Method | Endpoint | Success | Useful errors | Client use |
 |---|---|---:|---:|---|
-| GET | `/api/status` | 200 | — | identité, compatibilité, projet, fournisseurs |
-| POST | `/api/pair` | 200 | 401 | échange du fragment contre un cookie |
-| POST | `/api/auth/rotate` | 200 | 401, 403 | révocation et rotation du secret |
-| GET | `/api/capabilities` | 200 | — | modèles, efforts et modes d’exécution |
-| GET | `/api/usage` | 200 | — | quotas mis en cache |
-| GET | `/api/usage?force=1` | 200 | — | actualisation explicite des quotas |
-| GET | `/api/projects` | 200 | — | liste des projets |
-| GET | `/api/projects/{id}` | 200 | 404 | détail d’un projet |
-| POST | `/api/projects` | 201 | 400, 413 | création d’un projet |
-| PATCH | `/api/projects/{id}` | 200 | 400, 404, 411, 413 | modification d’un projet |
-| GET | `/api/conversations` | 200 | — | liste des conversations |
-| GET | `/api/conversations/{id}` | 200 | 404 | historique et réglages |
-| POST | `/api/conversations` | 201 | 400, 413 | création d’une conversation |
-| PATCH | `/api/conversations/{id}` | 200 | 400, 404, 411, 413 | réglages et renommage |
-| DELETE | `/api/conversations/{id}` | 200 | 404, 409 | suppression |
-| POST | `/api/runs` | 202 | 400, 409, 411, 413 | lancement d’un run |
-| GET | `/api/runs/active` | 200 | — | réconciliation après reconnexion |
-| GET | `/api/events/{run_id}` | 200 | 404 | flux SSE d’un run en mémoire |
-| POST | `/api/runs/{run_id}/cancel` | 202 | 404 | annulation |
-| GET | `/api/history` | 200 | — | liste des journaux persistants |
-| GET | `/api/history/{run_id}` | 200 | 404 | journal persistant complet |
-| GET | `/api/projects/{id}/skills` | 200 | 404 | skills du projet (avec indicateur `active` et `scope`) |
-| POST | `/api/projects/{id}/skills/import` | 201 | 400, 404 | import d’un skill partagé par tous les fournisseurs |
-| POST | `/api/projects/{id}/skills/promote` | 201 | 400, 404 | promotion d’un skill du projet en skill commun |
-| GET | `/api/skills/global` | 200 | — | skills communs à tous les projets |
+| GET | `/api/status` | 200 | — | identity, compatibility, project, providers |
+| POST | `/api/pair` | 200 | 401 | exchange the fragment for a cookie |
+| POST | `/api/auth/rotate` | 200 | 401, 403 | revoke sessions and rotate the secret |
+| GET | `/api/capabilities` | 200 | — | models, efforts and execution modes |
+| GET | `/api/usage` | 200 | — | cached quotas |
+| GET | `/api/usage?force=1` | 200 | — | explicit quota refresh |
+| GET | `/api/projects` | 200 | — | project list |
+| GET | `/api/projects/{id}` | 200 | 404 | one project |
+| POST | `/api/projects` | 201 | 400, 413 | create a project |
+| PATCH | `/api/projects/{id}` | 200 | 400, 404, 411, 413 | modify a project |
+| GET | `/api/conversations` | 200 | — | conversation list |
+| GET | `/api/conversations/{id}` | 200 | 404 | history and settings |
+| POST | `/api/conversations` | 201 | 400, 413 | create a conversation |
+| PATCH | `/api/conversations/{id}` | 200 | 400, 404, 411, 413 | settings and rename |
+| DELETE | `/api/conversations/{id}` | 200 | 404, 409 | deletion |
+| POST | `/api/runs` | 202 | 400, 409, 411, 413 | start a run |
+| GET | `/api/runs/active` | 200 | — | reconciliation after a reconnection |
+| GET | `/api/events/{run_id}` | 200 | 404 | SSE stream of an in-memory run |
+| POST | `/api/runs/{run_id}/cancel` | 202 | 404 | cancellation |
+| GET | `/api/history` | 200 | — | list of persistent logs |
+| GET | `/api/history/{run_id}` | 200 | 404 | one full persistent log |
+| GET | `/api/projects/{id}/skills` | 200 | 404 | project skills (with the `active` flag and `scope`) |
+| POST | `/api/projects/{id}/skills/import` | 201 | 400, 404 | import a skill shared by every provider |
+| POST | `/api/projects/{id}/skills/promote` | 201 | 400, 404 | promote a project skill to a shared one |
+| GET | `/api/skills/global` | 200 | — | skills shared across every project |
 
-Les endpoints de revue Git (`reject`) restent utilisés par le client Web mais
-ne font pas partie du premier client VS Code en lecture seule.
+The Git review endpoints (`reject`) are still used by the Web client but are
+not part of the first, read-only VS Code client.
 
-### Tâches durables
+### Durable tasks
 
-| Méthode | Route | Rôle | Résultat |
+| Method | Route | Role | Result |
 |---|---|---|---|
-| `GET` | `/api/tasks` | viewer | Tâches récentes |
-| `GET` | `/api/tasks/{id}/diff` | viewer | Diff du worktree |
-| `POST` | `/api/tasks/{id}/integrate` | maintainer | Intégration asynchrone acceptée (`202`) |
-| `DELETE` | `/api/tasks/{id}` | maintainer | Tâche et worktree supprimés |
+| `GET` | `/api/tasks` | viewer | Recent tasks |
+| `GET` | `/api/tasks/{id}/diff` | viewer | Worktree diff |
+| `POST` | `/api/tasks/{id}/integrate` | maintainer | Asynchronous integration accepted (`202`) |
+| `DELETE` | `/api/tasks/{id}` | maintainer | Task and worktree deleted |
 
-## Schémas minimaux
+## Minimal schemas
 
-### Statut
+### Status
 
-`GET /api/status` renvoie au minimum :
+`GET /api/status` returns at least:
 
 ```json
 {
   "version": "0.x.y",
   "api_version": "1.2",
-  "project": "/chemin/du/projet",
+  "project": "/path/to/project",
   "providers": ["codex", "claude", "gemini", "copilot"],
   "provider_catalog": [{"id": "codex", "label": "Codex"}],
   "modes": ["fast", "review", "consensus"],
@@ -92,59 +90,59 @@ ne font pas partie du premier client VS Code en lecture seule.
 }
 ```
 
-Le client vérifie la version majeure de `api_version` avant toute mutation.
+The client checks the major version of `api_version` before any mutation.
 
-`network_control_providers` énumère les fournisseurs dont la commande varie
-réellement selon le réglage « Accès Web » du projet ou de la conversation. Les
-autres CLI n’exposent aucun commutateur d’egress : le réglage ne les contraint
-pas, et un client doit le dire à l’utilisateur plutôt que de présenter une
-garantie globale.
+`network_control_providers` lists the providers whose command genuinely varies
+with the project's or conversation's "Web access" setting. The other CLIs
+expose no egress switch: the setting does not constrain them, and a client
+should say so to the user rather than presenting a blanket guarantee.
 
-## Authentification et rôles
+## Authentication and roles
 
-`GET /api/status` et les fichiers statiques restent publics pour le diagnostic
-et l’ouverture de Joe Web, mais ne distribuent aucun secret. La CLI ouvre une
-URL dont le fragment contient le jeton; la page l’échange une fois via
-`POST /api/pair` contre un cookie `HttpOnly`, `SameSite=Strict` valable 30
-jours, puis efface le fragment de l’historique. Les autres endpoints exigent ce cookie ou
-`Authorization: Bearer <jeton>`.
+`GET /api/status` and the static files stay public, for diagnostics and for
+opening Joe Web, but distribute no secret. The CLI opens a URL whose fragment
+carries the token; the page exchanges it once through `POST /api/pair` for an
+`HttpOnly`, `SameSite=Strict` cookie valid for 30 days, then clears the
+fragment from history. Every other endpoint requires that cookie or
+`Authorization: Bearer <token>`.
 
-Le jeton est généré dans le répertoire de données utilisateur avec des
-permissions `0600`; il n’est jamais placé dans le projet ou dans Git.
+The token is generated in the user data directory with `0600` permissions; it
+is never placed in the project or in Git.
 
-| Profil | Capacités |
+| Profile | Capabilities |
 |---|---|
-| `viewer` | quotas en cache, conversations, historique, événements, **lecture** des projets |
-| `operator` | capacités `viewer`, conversations et runs ordinaires |
-| `maintainer` | capacités `operator`, mutation des projets, rejet Git et accès projet complet |
+| `viewer` | cached quotas, conversations, history, events, **reading** projects |
+| `operator` | `viewer` capabilities, conversations and ordinary runs |
+| `maintainer` | `operator` capabilities, project mutation, Git rejection and full project access |
 
-Une requête non authentifiée reçoit `401`; un jeton valide mais insuffisant
-reçoit `403`. La confirmation ponctuelle `428` d’un accès complet reste requise
-pour un `maintainer`.
+An unauthenticated request receives `401`; a valid but insufficient token
+receives `403`. The one-off `428` confirmation for full access remains required
+even for a `maintainer`.
 
-`GET /api/projects` est accessible dès `viewer` : Joe Web en a besoin pour se
-rendre, et le restreindre rendait l’interface inutilisable sous
-`--profile viewer` ou `--profile operator`. Toute **mutation** de projet reste
-réservée à `maintainer`.
+`GET /api/projects` is available from `viewer` upwards: Joe Web needs it to
+render, and restricting it made the interface unusable under
+`--profile viewer` or `--profile operator`. Every project **mutation** stays
+reserved to `maintainer`.
 
-L’actualisation active des quotas (`GET /api/usage?force=1`) exige
-`maintainer`, parce qu’elle lance un sous-processus fournisseur.
+Actively refreshing quotas (`GET /api/usage?force=1`) requires `maintainer`,
+because it starts a provider subprocess.
 
-Un `viewer` peut écrire le seul champ `unread_completion` d’une conversation :
-acquitter un état lu n’est pas une mutation de contenu. Tout autre champ d’un
-`PATCH /api/conversations/{id}` exige `operator` et répond `403` sinon.
+A `viewer` may write the single `unread_completion` field of a conversation:
+acknowledging a read state is not a content mutation. Any other field in a
+`PATCH /api/conversations/{id}` requires `operator` and answers `403`
+otherwise.
 
-`POST /api/auth/rotate`, réservé à `maintainer`, remplace atomiquement le secret
-du serveur et révoque immédiatement cookies et Bearers antérieurs.
+`POST /api/auth/rotate`, reserved to `maintainer`, atomically replaces the
+server secret and immediately revokes earlier cookies and Bearer tokens.
 
-### Lancement
+### Starting a run
 
-`POST /api/runs` accepte :
+`POST /api/runs` accepts:
 
 ```json
 {
-  "request": "Demande utilisateur",
-  "conversation_id": "identifiant",
+  "request": "User request",
+  "conversation_id": "identifier",
   "agent": "codex",
   "mode": "review",
   "model": "gpt-5.6-sol",
@@ -153,94 +151,93 @@ du serveur et révoque immédiatement cookies et Bearers antérieurs.
 }
 ```
 
-Seuls `request` et `conversation_id` sont obligatoires. Les valeurs absentes
-utilisent le routage et les réglages de conversation. Le succès renvoie
-`{"run_id": "…"}` avec HTTP 202.
+Only `request` and `conversation_id` are mandatory. Absent values fall back to
+routing and to the conversation settings. Success returns `{"run_id": "…"}`
+with HTTP 202.
 
-Le mode historique `danger-full-access` demande une confirmation HTTP 428, mais
-ne désactive pas le sandbox du fournisseur. Une fois confirmé, il donne un
-accès complet limité à la racine du projet de la conversation et aux racines
-additionnelles explicitement configurées pour ce même projet.
+The legacy `danger-full-access` mode asks for an HTTP 428 confirmation, but
+does not disable the provider's sandbox. Once confirmed, it grants full access
+limited to the conversation's project root and to the additional roots
+explicitly configured for that same project.
 
-La confirmation passe obligatoirement par une approbation durable. Le `428`
-renvoie `{"approval": "full-access", "approval_id": "…"}` ; le client fait
-valider cette approbation (`PATCH /api/approvals/{id}` avec
-`{"decision": "approved"}`, réservé à `maintainer`), puis relance le même
-`request` en joignant `approval_id`. L’approbation est alors consommée et ne
-peut pas être rejouée : un second lancement identique produit un nouveau `428`.
-Aucun champ du corps de la requête ne peut se substituer à ce cycle.
+Confirmation always goes through a durable approval. The `428` returns
+`{"approval": "full-access", "approval_id": "…"}`; the client has that approval
+granted (`PATCH /api/approvals/{id}` with `{"decision": "approved"}`, reserved
+to `maintainer`), then resubmits the same `request` with `approval_id`
+attached. The approval is then consumed and cannot be replayed: an identical
+second launch produces a new `428`. No request-body field can substitute for
+that cycle.
 
-Deux lancements simultanés pour une même conversation produisent exactement un
-HTTP 202 et un HTTP 409. Le rejet ne persiste aucun second message utilisateur.
+Two simultaneous launches for the same conversation produce exactly one HTTP
+202 and one HTTP 409. The rejection persists no second user message.
 
-## Erreurs
+## Errors
 
-Les erreurs de validation JSON renvoient un objet `{"error": "…"}` :
+JSON validation errors return an `{"error": "…"}` object:
 
-- 400 : JSON invalide, valeur ou identifiant invalide ;
-- 409 : conversation occupée ou opération incompatible avec l’état courant ;
-- 411 : en-tête `Content-Length` absent quand un corps est requis ;
-- 413 : corps supérieur à 1 Mio.
+- 400: invalid JSON, invalid value or invalid identifier;
+- 409: conversation busy, or operation incompatible with the current state;
+- 411: missing `Content-Length` header when a body is required;
+- 413: body larger than 1 MiB.
 
-Certains endpoints historiques renvoient encore `null` ou un booléen à 404.
-Le client doit donc décider d’abord avec le code HTTP et ne jamais déduire un
-succès de la seule forme du corps. Une uniformisation future des corps 404 sera
-additive dans la version 1.x si les champs existants sont conservés.
+Some legacy endpoints still return `null` or a boolean with a 404. A client must
+therefore decide from the HTTP code first, and never infer success from the
+shape of the body alone. A future harmonisation of 404 bodies will be additive
+within 1.x as long as the existing fields are kept.
 
-## Contrat SSE
+## SSE contract
 
-`GET /api/events/{run_id}` renvoie `text/event-stream`.
+`GET /api/events/{run_id}` returns `text/event-stream`.
 
-Chaque événement contient :
+Every event contains:
 
 ```text
 id: 2
 data: {"event_id":2,"at":1785310000.0,"type":"complete",...}
 ```
 
-Garanties :
+Guarantees:
 
-- `event_id` commence à 1 et croît de façon monotone pour un run ;
-- l’identifiant SSE et `data.event_id` sont identiques ;
-- `Last-Event-ID: N` reprend strictement après `N` ;
-- `?after=N` fournit la même sémantique pour les clients ne contrôlant pas
-  l’en-tête SSE ;
-- les keepalives sont des commentaires `: keepalive` et ne modifient pas le
-  curseur ;
-- le flux se ferme après le dernier événement d’un run terminé ;
-- un run absent de la mémoire renvoie 404.
+- `event_id` starts at 1 and increases monotonically within a run;
+- the SSE id and `data.event_id` are identical;
+- `Last-Event-ID: N` resumes strictly after `N`;
+- `?after=N` provides the same semantics for clients that cannot control the
+  SSE header;
+- keepalives are `: keepalive` comments and do not move the cursor;
+- the stream closes after the last event of a finished run;
+- a run absent from memory returns 404.
 
-## Réconciliation
+## Reconciliation
 
-Après une coupure, le client suit cet ordre :
+After an interruption, the client follows this order:
 
-1. appeler `/api/runs/active` ;
-2. si le run est actif, reprendre le SSE après le dernier `event_id` reçu ;
-3. si le run est terminé mais encore en mémoire, reprendre le SSE de la même
-   manière jusqu’à fermeture ;
-4. s’il n’est plus en mémoire, reconstruire l’affichage depuis la conversation
-   puis `/api/history/{run_id}` ;
-5. ne jamais relancer automatiquement une mutation pour recréer un flux perdu.
+1. call `/api/runs/active`;
+2. if the run is active, resume the SSE after the last `event_id` received;
+3. if the run has finished but is still in memory, resume the SSE the same way
+   until it closes;
+4. if it is no longer in memory, rebuild the display from the conversation then
+   from `/api/history/{run_id}`;
+5. never automatically replay a mutation to recreate a lost stream.
 
-## Preuves de contrat
+## Contract evidence
 
-Les tests dédiés dans `tests/test_api_contract.py` verrouillent :
+The dedicated tests in `tests/test_api_contract.py` lock down:
 
-- identité et version indépendante ;
-- erreurs JSON et taille maximale ;
-- réservation atomique avec HTTP 409 ;
-- identité des curseurs `Last-Event-ID` et `after`.
+- identity and independent versioning;
+- JSON errors and maximum size;
+- atomic reservation with HTTP 409;
+- identical behaviour of the `Last-Event-ID` and `after` cursors.
 
-Les tests fonctionnels plus détaillés restent dans `tests/test_web.py`.
+The more detailed functional tests stay in `tests/test_web.py`.
 
-## Automatisations (API 1.3)
+## Automations (API 1.3)
 
-- `GET /api/automations` liste les plans séquentiels persistants ;
-- `POST /api/automations` crée un plan avec `conversation_id`, `steps`,
-  `scheduled_for`, `mode`, `execution_mode`, `max_retries` et
-  `auto_integrate` ;
-- `POST /api/automations/{id}/cancel` annule le plan et son run actif.
+- `GET /api/automations` lists persistent sequential plans;
+- `POST /api/automations` creates a plan with `conversation_id`, `steps`,
+  `scheduled_for`, `mode`, `execution_mode`, `max_retries` and
+  `auto_integrate`;
+- `POST /api/automations/{id}/cancel` cancels the plan and its active run.
 
-Les mutations exigent le profil `maintainer`. `execution_mode` est limité à
-`read-only` et `workspace-write` : un plan autonome ne peut pas approuver son
-propre accès complet.
+Mutations require the `maintainer` profile. `execution_mode` is limited to
+`read-only` and `workspace-write`: an autonomous plan cannot approve its own
+full access.

@@ -19,6 +19,9 @@ All notable changes to Joe are documented here. The format follows
 
 ### Changed
 
+- The user guide and the HTTP/SSE API contract are written in English, like the
+  rest of the public surface. The README linked to them as "User guide" and
+  "API contract" while both were still French.
 - The routing tier now decides which model runs. It was resolved by position in
   the provider's list, so `standard` returned the middle entry — on the Claude
   catalog, the most expensive model of the six, dearer than the one returned

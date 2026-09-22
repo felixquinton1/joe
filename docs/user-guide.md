@@ -1,32 +1,33 @@
-# Guide d’utilisation de Joe
+# Joe user guide
 
-Joe relie une interface locale aux CLI Codex, Claude Code, Gemini, Copilot et
-Cursor déjà installées et authentifiées sur la machine. Il ne demande ni ne
-stocke leurs mots de passe.
+Joe connects a local interface to the Codex, Claude Code, Gemini, Copilot and
+Cursor CLIs already installed and authenticated on the machine. It never asks
+for or stores their passwords.
 
-Pour Cursor, la CLI attendue s’installe sous le nom `agent`, sans fenêtre : la
-commande `cursor` lance l’éditeur et ne convient pas. Joe accepte aussi
-l’ancien nom `cursor-agent`, conservé par compatibilité. Joe la pilote sur ses options
-documentées et n’en lit pas le quota restant ; un quota épuisé reste détecté
-au moment du run, et la demande bascule sur un autre fournisseur.
+The Cursor CLI installs under the name `agent`, with no window: the `cursor`
+command launches the editor and is not suitable. Joe also accepts the older
+name `cursor-agent`, kept for compatibility. Joe drives it through its
+documented options and cannot read its remaining quota; an exhausted quota is
+still detected when the run starts, and the request falls back to another
+provider.
 
-Le sélecteur de modèles n’est rempli que pour les CLI qui publient leur
-catalogue : Codex l’expose, celui de Claude est tenu à jour dans Joe. Gemini et
-Copilot n’offrent aucune liste et ne proposent donc que « auto », qui laisse la
-CLI choisir ; le modèle voulu s’impose dans les réglages du projet.
+The model selector is populated only for CLIs that publish their catalogue:
+Codex exposes one, and Claude's is maintained inside Joe. Gemini and Copilot
+offer no list and therefore only propose `auto`, which lets the CLI choose; the
+model you want can be imposed in the project settings.
 
 ## Installation
 
-Joe nécessite Python 3.10 ou plus. `pipx` est recommandé, car il isole les
-dépendances tout en rendant la commande `joe` disponible partout.
+Joe requires Python 3.10 or newer. `pipx` is recommended: it isolates the
+dependencies while making the `joe` command available everywhere.
 
-Depuis le dépôt GitHub :
+From the GitHub repository:
 
 ```bash
 pipx install git+https://github.com/felixquinton1/joe.git
 ```
 
-Pour développer Joe :
+To work on Joe itself:
 
 ```bash
 git clone https://github.com/felixquinton1/joe.git
@@ -34,338 +35,334 @@ cd joe
 python -m pip install -e .
 ```
 
-Le paquet Python est indépendant de la plateforme. Linux, macOS et Windows
-utilisent les mêmes commandes. `tmux` améliore le fonctionnement détaché sous
-Linux et macOS ; sans `tmux`, notamment sous Windows, `joe web` reste au premier
-plan et se ferme avec son terminal.
+The Python package is platform-independent. Linux, macOS and Windows use the
+same commands. `tmux` improves detached operation on Linux and macOS; without
+it — notably on Windows — `joe web` stays in the foreground and closes with its
+terminal.
 
-Vérifier l’installation :
+Check the installation:
 
 ```bash
 joe --version
 joe doctor
 ```
 
-Les CLI des agents restent des prérequis séparés. `joe doctor --live` les
-contacte réellement et peut consommer un petit quota ; la commande simple
-`joe doctor` ne lance pas de demande.
+The provider CLIs remain separate prerequisites. `joe doctor --live` actually
+contacts them and may consume a small amount of quota; plain `joe doctor` sends
+no request.
 
-## Trois façons d’utiliser Joe
+## Three ways to use Joe
 
 ### Terminal
 
-Une demande unique :
+A single request:
 
 ```bash
-joe "Analyse ce projet sans modifier les fichiers"
-joe --agent claude --mode review "Vérifie ce changement"
-printf "Résume ce dépôt" | joe -C /chemin/du/projet
+joe "Review this project without modifying any file"
+joe --agent claude --mode review "Check this change"
+printf "Summarise this repository" | joe -C /path/to/project
 ```
 
-Une session entièrement en ligne de commande :
+A fully command-line session:
 
 ```bash
 joe cli
 ```
 
-`joe chat` est un alias conservé. `/exit` quitte la session. `--dry-run`
-affiche le routage choisi sans appeler d’agent.
+`joe chat` is a kept alias. `/exit` leaves the session. `--dry-run` prints the
+chosen route without calling any agent.
 
-### Routage hybride
+### Hybrid routing
 
-Les commandes locales certaines restent déterministes et n’appellent aucun
-modèle. Pour une demande naturelle suffisamment ambiguë, Joe peut demander à
-un modèle léger déjà disponible de retourner une classification JSON bornée :
-intention, complexité, workflow, fournisseur, niveau de modèle et effort.
+Local commands that are certain stay deterministic and call no model. For a
+natural request that is genuinely ambiguous, Joe can ask a light model already
+available to return a bounded JSON classification: intent, complexity,
+workflow, provider, model tier and effort.
 
-Le classificateur est choisi selon les quotas connus, la disponibilité, les
-échecs récents et sa latence observée. Il dispose de six secondes, ne tente
-pas plusieurs fournisseurs en chaîne et revient au routeur local en cas
-d’échec. Les niveaux `light`, `standard`, `strong` et `long-context` sont
-ensuite traduits vers le catalogue réellement publié par chaque CLI.
+The classifier is chosen from known quotas, availability, recent failures and
+observed latency. It gets six seconds, does not chain several providers, and
+falls back to the local router on failure. The `light`, `standard`, `strong`
+and `long-context` tiers are then resolved against the catalogue each CLI
+actually publishes.
 
-La classification ne peut ni accorder une permission, ni diminuer une
-intention d’écriture détectée localement, ni imposer un consensus pour une
-tâche simple. Un agent, un modèle, un effort ou un workflow choisi
-explicitement par l’utilisateur reste prioritaire. Le mécanisme peut être
-désactivé avec `JOE_DISABLE_LLM_ROUTER=1`.
+Classification can neither grant a permission, nor reduce a write intent
+detected locally, nor impose a consensus on a simple task. An agent, model,
+effort or workflow chosen explicitly by the user always takes precedence. The
+mechanism can be disabled with `JOE_DISABLE_LLM_ROUTER=1`.
 
-### Interface Web
+### Web interface
 
-Joe Web démarre par défaut avec le profil privé `maintainer`. Une instance
-volontairement limitée se lance avec `joe web --profile viewer` ou
-`joe web --profile operator`. Le navigateur local est authentifié
-automatiquement lorsqu’il est ouvert par `joe` ou l’extension VS Code. Une URL
-saisie directement ne reçoit jamais le secret : relance `joe` pour appairer un
-nouveau navigateur. Le secret reste hors du projet et ne doit pas être copié
-dans un dépôt.
+Joe Web starts by default with the private `maintainer` profile. A deliberately
+limited instance starts with `joe web --profile viewer` or
+`joe web --profile operator`. The local browser is authenticated automatically
+when opened by `joe` or by the VS Code extension. A URL typed by hand never
+receives the secret: run `joe` again to pair a new browser. The secret lives
+outside the project and must not be copied into a repository.
 
-Sous `--profile viewer` ou `--profile operator`, l’interface reste utilisable :
-la lecture des projets est autorisée, mais les mutations de projet et
-l’actualisation active des quotas répondent `403` avec un message explicite.
+Under `--profile viewer` or `--profile operator` the interface stays usable:
+reading projects is allowed, but project mutations and active quota refreshes
+answer `403` with an explicit message.
 
-Le réglage « Accès Web », par projet ou par conversation, ne contraint que les
-fournisseurs qui exposent un commutateur réseau — aujourd’hui Codex seul. Les
-CLI Claude, Gemini et Copilot n’offrent aucune option équivalente : le décocher
-ne leur retire pas l’accès réseau. L’interface affiche cette portée réelle sous
-la case, à partir du champ `network_control_providers` de `GET /api/status`.
+The "Web access" setting, per project or per conversation, constrains only the
+providers that expose a network switch — today Codex alone. The Claude, Gemini
+and Copilot CLIs offer no equivalent option: unticking it does not remove their
+network access. The interface states this real scope under the checkbox, from
+the `network_control_providers` field of `GET /api/status`.
 
-Pour réappairer un navigateur après suppression des cookies :
+To pair a browser again after clearing cookies:
 
 ```bash
 joe url
 ```
 
-`joe url --print` affiche le lien sensible uniquement lorsqu’il faut le
-transmettre manuellement à un navigateur sur la même machine. En cas de doute
-sur une fuite locale, `joe auth rotate` renouvelle immédiatement le secret,
-révoque les anciennes sessions et ouvre un nouvel appairage.
+`joe url --print` shows the sensitive link only when it has to be passed by
+hand to a browser on the same machine. If you suspect a local leak,
+`joe auth rotate` renews the secret immediately, revokes older sessions and
+opens a fresh pairing.
 
-Le profil limite les actions acceptées par une instance donnée. Les instances
-du même compte système partagent toutefois le même secret : `--profile viewer`
-réduit les risques de fausse manœuvre, mais ne constitue pas une délégation à
-un autre utilisateur.
+The profile limits the actions a given instance accepts. Instances belonging to
+the same system account do share the same secret, however: `--profile viewer`
+reduces the risk of a slip, but is not a delegation to another user.
 
-Depuis le projet à traiter :
+From the project you want to work on:
 
 ```bash
 joe web
 ```
 
-Joe écoute uniquement sur `127.0.0.1:8765` par défaut. Sous Linux ou macOS,
-`joe` ouvre directement cette interface et utilise `tmux` lorsqu’il est
-disponible. Pour garder le serveur dans le terminal :
+Joe listens only on `127.0.0.1:8765` by default. On Linux and macOS, `joe`
+opens that interface directly and uses `tmux` when available. To keep the
+server in the terminal:
 
 ```bash
 joe web --foreground
 ```
 
-### VS Code et Remote-SSH
+### VS Code and Remote-SSH
 
-Installer le fichier `.vsix` dans la fenêtre VS Code qui contient le workspace.
-Sous Remote-SSH, il faut choisir « Install in SSH » : l’extension et
-`127.0.0.1:8765` se trouvent alors sur l’hôte distant.
+Install the `.vsix` file in the VS Code window that holds the workspace. Under
+Remote-SSH, choose "Install in SSH": the extension and `127.0.0.1:8765` are
+then both on the remote host.
 
-La vue Joe sert de lanceur pour l’interface Web : démarrer, ouvrir, actualiser,
-redémarrer et arrêter l’instance du port courant. En Remote-SSH, « Ouvrir »
-utilise automatiquement le port forwarding de VS Code. Les conversations,
-prompts et résultats restent exclusivement dans Joe Web.
+The Joe view acts as a launcher for the Web interface: start, open, refresh,
+restart and stop the instance on the current port. Under Remote-SSH, "Open"
+uses VS Code's port forwarding automatically. Conversations, prompts and
+results stay exclusively in Joe Web.
 
-Le zoom natif de VS Code s’applique à la vue Joe :
+VS Code's native zoom applies to the Joe view:
 
-- Windows/Linux : `Ctrl++`, `Ctrl+-`, `Ctrl+0` ;
-- macOS : `Cmd++`, `Cmd+-`, `Cmd+0` ;
-- palette : `Joe: Zoomer`, `Joe: Dézoomer`, `Joe: Réinitialiser le zoom`.
+- Windows/Linux: `Ctrl++`, `Ctrl+-`, `Ctrl+0`;
+- macOS: `Cmd++`, `Cmd+-`, `Cmd+0`;
+- command palette: `Joe: Zoom in`, `Joe: Zoom out`, `Joe: Reset zoom`.
 
-## Tâches et worktrees
+## Tasks and worktrees
 
-Chaque run crée une tâche durable visible dans le panneau de suivi. Elle
-conserve son état, son fournisseur, son modèle et le résumé de ses
-modifications sans dupliquer la conversation.
+Every run creates a durable task, visible in the tracking panel. It keeps its
+state, provider, model and a summary of its changes without duplicating the
+conversation.
 
-Le panneau montre aussi le pipeline compact « Demande → Réalisation →
-Validation → Diff → Livraison ». Une conversation affiche « En cours » pendant
-le run, puis « Terminée » jusqu’à sa prochaine ouverture.
+The panel also shows the compact pipeline "Request → Implementation →
+Validation → Diff → Delivery". A conversation reads "Running" during the run,
+then "Done" until it is next opened.
 
-### Reprise automatique après un quota
+### Automatic resumption after a quota reset
 
-L’option projet « Reprendre automatiquement après un reset de quota » est
-activée par défaut. Si aucun fournisseur adapté ne dispose d’une réserve
-suffisante, la tâche passe en « En attente du quota ». Joe conserve le prompt,
-les pièces jointes, le worktree et le nombre de tentatives, puis réactualise les
-quotas à l’heure prévue. Quand la CLI ne publie aucune heure, Joe réessaie avec
-un délai progressif borné entre cinq minutes et une heure.
+The project option "Resume automatically after a quota reset" is on by default.
+If no suitable provider has enough headroom, the task moves to "Waiting for
+quota". Joe keeps the prompt, the attachments, the worktree and the attempt
+count, then refreshes the quotas at the expected time. When the CLI publishes
+no time, Joe retries with a progressive delay bounded between five minutes and
+one hour.
 
-Si la nouvelle fenêtre reste insuffisante, la tâche attend la suivante. Si un
-quota est atteint au milieu d’un long travail, les changements déjà présents
-dans le worktree sont conservés et la demande reprend en tenant compte de cet
-état. Une attente peut être annulée avec le bouton d’interruption habituel.
+If the new window is still not enough, the task waits for the next one. If a
+quota is reached in the middle of long work, the changes already present in the
+worktree are kept and the request resumes taking that state into account. A
+wait can be cancelled with the usual stop button.
 
-Joe continue de choisir un autre fournisseur lorsqu’il peut terminer la tâche
-sans sacrifier le workflow demandé. Une sélection explicite d’agent ou de mode
-reste prioritaire et est tentée immédiatement.
+Joe still picks another provider when that lets it finish the task without
+sacrificing the requested workflow. An explicit agent or mode selection takes
+precedence and is attempted immediately.
 
-Les autorisations en attente restent visibles dans ce même panneau après un
-rechargement. Elles peuvent être acceptées ou refusées plus tard ; une
-autorisation acceptée ne vaut que pour la demande enregistrée.
+Pending approvals stay visible in the same panel after a reload. They can be
+accepted or refused later; an accepted approval covers only the request it was
+recorded for.
 
-Une campagne **Autonomous** possède en plus une identité de tentative et un
-manifeste de processus durables. Après un redémarrage du serveur, Joe :
+An **Autonomous** campaign additionally carries a durable attempt identity and
+process manifest. After a server restart, Joe:
 
-- se rattache à l’expérience locale si son processus vit encore ;
-- réutilise un résultat déjà écrit sans relancer la commande ;
-- reprend un checkpoint compatible avec la commande de reprise configurée ;
-- revient à la planification si aucun checkpoint fiable n’existe ;
-- bloque après trois pertes répétées de la même étape au lieu de boucler.
+- reattaches to the local experiment if its process is still alive;
+- reuses a result already written instead of running the command again;
+- resumes from a checkpoint compatible with the configured resume command;
+- returns to planning when no reliable checkpoint exists;
+- stops after three repeated losses of the same step instead of looping.
 
-Le temps passé à attendre un quota n’est pas déduit du budget actif. Le journal
-de campagne signale chaque récupération et l’interface affiche la prochaine
-heure de reprise connue.
+Time spent waiting for a quota is not deducted from the active budget. The
+campaign log reports every recovery, and the interface shows the next known
+resume time.
 
-Les commandes d’expérience reçoivent `JOE_AUTONOMOUS_ATTEMPT_ID`, une clé
-stable à enregistrer lors d’une soumission externe (cluster, API, CI), et
-`JOE_AUTONOMOUS_OUTPUT_DIR`. Un lanceur distant doit vérifier cette clé avant de
-soumettre une seconde fois la même opération.
+Experiment commands receive `JOE_AUTONOMOUS_ATTEMPT_ID`, a stable key to record
+when submitting externally (cluster, API, CI), and
+`JOE_AUTONOMOUS_OUTPUT_DIR`. A remote launcher must check that key before
+submitting the same operation twice.
 
-Lorsqu’un projet active « Isoler les modifications dans un worktree Git »,
-Joe crée une branche `joe/<id>` et travaille hors du checkout principal. À la
-fin du run :
+When a project enables "Isolate changes in a Git worktree", Joe creates a
+`joe/<id>` branch and works outside the main checkout. At the end of the run:
 
-- **Voir le diff** affiche les fichiers et le patch ;
-- **Intégrer** committe les changements puis fusionne la branche, uniquement
-  si le dépôt principal est propre ;
-- **Supprimer** abandonne explicitement le worktree et sa branche.
+- **View diff** shows the files and the patch;
+- **Integrate** commits the changes then merges the branch, only if the main
+  repository is clean;
+- **Delete** explicitly discards the worktree and its branch.
 
-Si la branche principale a avancé, Joe rebase d’abord la tâche. Un conflit
-déclenche une résolution bornée par l’agent de la tâche, avec conservation des
-deux objectifs et tests ciblés demandés. Si la résolution échoue ou laisse des
-marqueurs, le rebase est annulé et le worktree reste disponible pour examen et
-nouvelle tentative.
+If the main branch has moved on, Joe rebases the task first. A conflict
+triggers a bounded resolution by the task's agent, preserving both objectives
+and running the targeted tests it was asked for. If resolution fails or leaves
+markers, the rebase is aborted and the worktree stays available for review and
+another attempt.
 
-## Fichiers et recherche
+## Files and search
 
-Le bouton `+` ou un glisser-déposer sur le compositeur ajoute un fichier à la
-bibliothèque du projet. Le menu **Outils** permet de le joindre à une demande,
-de l’ouvrir ou de le supprimer. `@nom-du-fichier` joint également le fichier
-correspondant. Joe affiche les pièces jointes réellement transmises avant
-l’envoi.
+The `+` button, or dragging onto the composer, adds a file to the project
+library. The **Tools** menu attaches it to a request, opens it or deletes it.
+`@file-name` also attaches the matching file. Joe shows the attachments
+actually sent before you submit.
 
-La recherche de la colonne de gauche couvre les conversations, les tâches et
-les noms de fichiers de tous les projets. Les résultats restent entièrement
-locaux.
+When a mentioned file also exists in the project, Joe does not inject its
+library copy: the CLI reads the live original instead. The library copy is a
+snapshot taken when it was imported, so sending both would hand the model two
+versions of the same file with no way to tell which one is current.
 
-## Outils des CLI : `@`, commandes et serveurs MCP
+The search box in the left column covers conversations, tasks and file names
+across every project. Results stay entirely local.
 
-Joe lance chaque CLI en **un seul appel non interactif**. Cette contrainte
-explique tout ce qui suit : ce qui est une instruction au modèle traverse, ce
-qui pilote une session n’a rien à piloter.
+## CLI features: `@`, commands and MCP servers
 
-| Ce que tu écris | Effet |
+Joe runs each CLI in **a single non-interactive call**. That constraint
+explains everything below: what is an instruction to the model carries through,
+what drives a session has nothing to drive.
+
+| What you type | Effect |
 | --- | --- |
-| `@fichier` | fonctionne, deux fois même : Joe joint le fichier de la bibliothèque du projet, et la CLI développe de son côté les chemins qu’elle reconnaît |
-| `/ma-commande` définie dans `.claude/commands/` | fonctionne : la CLI l’exécute avant d’appeler le modèle |
-| `/compact`, `/clear`, `/login`, `/model` | sans effet : aucune session à piloter. La CLI ne renvoie ni réponse ni erreur, et Joe explique ce vide plutôt que d’afficher une bulle vide |
+| `@file` | works: the CLI expands the paths it recognises |
+| `/my-command` defined in `.claude/commands/` | works: the CLI runs it before calling the model |
+| `/compact`, `/clear`, `/login`, `/model` | no effect: there is no session to drive. The CLI returns neither an answer nor an error, and Joe explains that emptiness rather than showing a blank bubble |
 
-Pour compacter un historique, utilise la compaction de conversation de Joe, qui
-travaille sur l’historique qu’il détient lui-même.
+To compact a history, use Joe's own conversation compaction, which works on the
+history Joe holds itself.
 
-### Serveurs MCP et outils externes
+### MCP servers and external tools
 
-Joe ne passe **aucune option MCP** aux CLI : la configuration de chacune
-s’applique exactement comme hors de Joe. Un serveur déclaré pour Claude Code
-dans `.mcp.json` ou dans ses réglages, ou pour Codex dans `~/.codex/config.toml`,
-est donc disponible pendant un run. Les appels d’outils MCP apparaissent dans le
-panneau d’activité, au même titre que les commandes shell.
+Joe passes **no MCP options** to the CLIs: each one's configuration applies
+exactly as it does outside Joe. A server declared for Claude Code in
+`.mcp.json` or in its settings, or for Codex in `~/.codex/config.toml`, is
+therefore available during a run. MCP tool calls appear in the activity panel,
+just like shell commands.
 
-Reste la permission, et c’est là qu’il faut être précis avant de compter sur une
-base externe. Un outil MCP demande **toujours** une autorisation explicite, même
-pour lire. Un appel non interactif n’offre aucun canal pour la donner : la
-demande est donc refusée. Mesuré sur les trois niveaux :
+Permission is the remaining question, and it deserves precision before relying
+on an external database. An MCP tool **always** asks for explicit
+authorisation, even to read. A non-interactive call offers no channel to give
+it, so the request is refused. Measured across the three levels:
 
-| Niveau d’accès du projet | Outil MCP |
+| Project access level | MCP tool |
 | --- | --- |
-| Lecture seule | refusé — « requested permissions […] but you haven’t granted it » |
-| Écriture projet | refusé, pour la même raison |
-| **Accès complet** | **fonctionne** |
+| Read-only | refused — "requested permissions […] but you haven't granted it" |
+| Project write | refused, for the same reason |
+| **Full access** | **works** |
 
-Autrement dit : aujourd’hui, un outil MCP ne s’exécute sous Joe qu’en accès
-complet. Ce n’est pas une limite de Joe mais du mode non interactif, et elle
-vaut aussi quand on appelle la CLI soi-même de cette façon.
+In other words: today an MCP tool only runs under Joe with full access. That is
+not a limitation of Joe but of non-interactive mode, and it applies just as
+much when you call the CLI that way yourself.
 
-Pour l’utiliser à un niveau plus étroit, coche **« Autoriser les outils MCP
-déjà configurés dans les CLI »** dans les réglages du projet. Joe interroge
-alors la CLI pour connaître ses serveurs et les pré-autorise, ce qui permet de
-lire une base sans passer en accès complet.
+To use one at a narrower level, tick **"Allow the MCP tools already configured
+in the CLIs"** in the project settings. Joe then asks the CLI which servers it
+knows and pre-authorises them, which lets a read-only run reach a database
+without switching to full access.
 
-Ce réglage est désactivé par défaut, et c’est volontaire : un outil MCP agit
-hors du projet — base de données, réseau, service externe. « Je peux modifier
-ce projet » ne vaut pas « je peux agir au-dehors », donc l’élargissement reste
-une décision explicite, par projet.
+That setting is off by default, deliberately: an MCP tool acts outside the
+project — database, network, external service. "I may modify this project" does
+not amount to "I may act outside it", so widening that stays an explicit
+decision, project by project.
 
-Deux limites à connaître. Un serveur déclaré dans le `.mcp.json` du projet
-reste « en attente d’approbation » jusqu’à ce que tu lances la CLI une fois de
-manière interactive pour l’approuver ; ceux ajoutés par `claude mcp add` sont
-déjà approuvés. Et seul Claude Code expose un inventaire interrogeable : chez
-les autres fournisseurs, le réglage reste sans effet.
+Two limits worth knowing. A server declared in the project's `.mcp.json` stays
+"pending approval" until you run the CLI interactively once to approve it;
+those added with `claude mcp add` are already approved. And only Claude Code
+exposes a queryable inventory: with the other providers the setting has no
+effect.
 
-Les identifiants de connexion à une base restent dans la configuration du
-serveur MCP, jamais dans Joe : il ne les voit pas et ne les enregistre pas.
+Database credentials stay in the MCP server's own configuration, never in Joe:
+it neither sees nor records them.
 
-## Capacités et sécurité
+## Capabilities and security
 
-L’extension publique adopte des valeurs prudentes :
+The public extension takes cautious defaults:
 
-- `Joe: Allow Workspace Writes` est désactivé : les demandes envoyées depuis
-  VS Code imposent la lecture seule ;
-- `Joe: Enable Maintenance Actions` est désactivé : le redémarrage du serveur
-  est masqué et refusé ;
-- les workspaces non approuvés ne peuvent ni créer une conversation ni envoyer
-  une demande.
+- `Joe: Allow Workspace Writes` is disabled: requests sent from VS Code are
+  forced to read-only;
+- `Joe: Enable Maintenance Actions` is disabled: restarting the server is
+  hidden and refused;
+- unapproved workspaces can neither create a conversation nor send a request.
 
-Ces réglages évitent les actions accidentelles, mais ne constituent pas une
-autorisation forte : un utilisateur ayant accès au même compte système et à
-l’API locale peut les contourner. Les profils publics réellement restreints
-devront être appliqués par le serveur Joe.
+These settings prevent accidental actions, but they are not a strong
+authorisation: a user with access to the same system account and to the local
+API can bypass them. Genuinely restricted public profiles have to be enforced
+by the Joe server.
 
-Lorsqu’un projet ou une conversation demande `danger-full-access`, Joe suspend
-le lancement et affiche une confirmation « Autoriser une fois ». Sans cette
-confirmation, aucun run n’est créé et aucun message n’est ajouté à
-l’historique. Après validation, Codex, Claude ou Gemini reçoit son mode complet
-réel pour ce run seulement. Cette confirmation au niveau du run fonctionne dans
-Joe Web et VS Code ; les demandes commande par commande propres à chaque CLI
-restent un chantier ultérieur.
+When a project or a conversation requests `danger-full-access`, Joe suspends
+the launch and shows an "Allow once" confirmation. Without it, no run is
+created and no message is added to the history. Once confirmed, Codex, Claude
+or Gemini receives its real full mode for that run only. This run-level
+confirmation works in Joe Web and VS Code; the per-command prompts specific to
+each CLI remain future work.
 
-Joe ne doit pas être exposé directement sur Internet. Le bind non local est
-refusé sans `--allow-remote`, et cette option est réservée à un environnement
-réseau déjà protégé.
+Joe must not be exposed directly on the Internet. A non-local bind is refused
+without `--allow-remote`, and that option is reserved for a network environment
+that is already protected.
 
-## Commandes utiles
+## Useful commands
 
 ```bash
 joe --help
-joe doctor [-C /projet]
-joe web --foreground [-C /projet]
-joe restart [-C /projet]
+joe doctor [-C /project]
+joe web --foreground [-C /project]
+joe restart [-C /project]
 joe stop [--port 8765]
 joe kill
 joe sync
 ```
 
-`restart` et `kill` automatisent uniquement les serveurs gérés par `tmux`.
-Fermer une interface cliente n’efface pas les conversations.
+`restart` and `kill` only automate servers managed by `tmux`. Closing a client
+interface does not erase any conversation.
 
-## Dépannage rapide
+## Quick troubleshooting
 
-- « Serveur inaccessible » : lancer `joe web` sur la même machine que
-  l’extension.
-- Remote-SSH affiche le mauvais projet : vérifier que l’extension est installée
-  côté SSH et que Joe a été lancé sur cet hôte.
-- Les conversations ne sont pas listées dans VS Code : c’est volontaire,
-  utilise « Joe: Ouvrir l’interface Web ».
-- Port occupé : choisir un autre `--port` et reporter la même URL dans
+- "Server unreachable": run `joe web` on the same machine as the extension.
+- Remote-SSH shows the wrong project: check that the extension is installed on
+  the SSH side and that Joe was started on that host.
+- Conversations are not listed in VS Code: that is deliberate, use
+  "Joe: Open Web interface".
+- Port already in use: pick another `--port` and mirror the same URL in
   `Joe: Server Url`.
-- Agent absent : installer/authentifier sa CLI, puis relancer `joe doctor`.
+- Missing agent: install and authenticate its CLI, then run `joe doctor` again.
 
-Les conversations et journaux appartiennent au projet ciblé, jamais au paquet
-Python ni à l’extension.
+Conversations and logs belong to the target project, never to the Python
+package or to the extension.
 
-## Plans autonomes et quotas
+## Autonomous plans and quotas
 
-Le bouton horloge du panneau d’activité ouvre les **Plans autonomes**. Il
-permet de choisir une conversation, une heure de départ et une suite d’étapes
-simples (une par ligne). Joe exécute une seule étape à la fois, conserve son
-état après redémarrage et attend un reset de quota connu au lieu d’abandonner.
+The clock button in the activity panel opens **Autonomous plans**. It lets you
+pick a conversation, a start time and a sequence of simple steps (one per
+line). Joe runs a single step at a time, keeps its state across restarts, and
+waits for a known quota reset instead of giving up.
 
-La section **IA réservée** est un réglage du projet. En mode automatique, Joe
-équilibre les fournisseurs selon la tâche et les réserves connues. Si Claude,
-Codex, Gemini ou Copilot est réservé, Joe en fait l’agent principal des
-nouvelles demandes automatiques du projet et attend sa prochaine fenêtre
-connue lorsqu’elle est insuffisante. Les workflows REVIEW et CONSENSUS peuvent
-toujours appeler un autre agent pour la relecture. Un agent choisi explicitement
-dans une conversation reste un choix ponctuel et prioritaire.
+The **Reserved AI** section is a project setting. In automatic mode, Joe
+balances providers according to the task and the known headroom. If Claude,
+Codex, Gemini or Copilot is reserved, Joe makes it the primary agent for the
+project's new automatic requests and waits for its next known window when that
+headroom is insufficient. The REVIEW and CONSENSUS workflows may still call
+another agent for the review. An agent chosen explicitly in a conversation
+stays a one-off, higher-priority choice.
 
-Un plan est volontairement borné à 24 étapes et 5 corrections par étape. Il
-s’arrête sur conflit Git, permission manquante ou validation humaine requise.
-L’accès complet n’est jamais accordé à un plan autonome. L’intégration des
-worktrees peut être automatique, mais commit et push restent régis par les
-réglages de livraison du projet.
+A plan is deliberately bounded to 24 steps and 5 corrections per step. It stops
+on a Git conflict, a missing permission or a required human validation. Full
+access is never granted to an autonomous plan. Worktree integration can be
+automatic, but commit and push remain governed by the project's delivery
+settings.
