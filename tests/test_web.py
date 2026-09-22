@@ -1591,3 +1591,39 @@ def test_the_heavy_markers_work_in_both_languages():
         assert _heavy_words(request) is True
     assert _heavy_words("comment ça marche ?") is False
     assert _heavy_words("how does this work?") is False
+
+
+def test_a_periodic_refresh_never_resets_the_chosen_agent():
+    """Le statut est relu toutes les cinq secondes.
+
+    Reconstruire le menu a chaque fois remettait la selection a zero puis la
+    restaurait — mais le menu visible, lui, restait sur « Automatique ».
+    """
+    app = (
+        Path(__file__).resolve().parent.parent
+        / "src" / "joe" / "web_assets" / "app.js"
+    ).read_text(encoding="utf-8")
+
+    menu = app.split("function updateProviderMenu(")[1].split("\n}")[0]
+    # On ne reconstruit que si le catalogue ou la langue ont change.
+    assert "state.providerCatalogSignature" in menu
+    # Et la valeur restauree doit atteindre le menu visible.
+    assert menu.index('$("agent").value = selected') < menu.index(
+        'refreshSelectMenu($("agent"))'
+    )
+
+
+def test_loading_capabilities_late_does_not_erase_the_chosen_model():
+    """Les capacites sont chargees en parallele de la conversation.
+
+    Elles arrivaient souvent apres elle et remettaient le modele sur
+    « defaut du fournisseur », quel que soit le choix enregistre.
+    """
+    app = (
+        Path(__file__).resolve().parent.parent
+        / "src" / "joe" / "web_assets" / "app.js"
+    ).read_text(encoding="utf-8")
+
+    menus = app.split("function updateCapabilityMenus(")[1].split("\n}")[0]
+    assert 'const previous = $("model").value' in menus
+    assert '$("model").value = previous' in menus

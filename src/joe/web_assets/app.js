@@ -118,16 +118,28 @@ function providerMenuItems(providers, selected) {
 }
 
 function updateProviderMenu(providers) {
-  const selected = $("agent").value;
+  // Le statut est relu toutes les cinq secondes. Reconstruire le menu a chaque
+  // fois remettait la sélection à zéro puis la restaurait — mais le menu
+  // visible, lui, restait sur « Automatique ». On ne reconstruit donc que
+  // lorsque le catalogue ou la langue ont réellement changé.
+  const signature = `${language}|${JSON.stringify(providers)}`;
+  if (signature === state.providerCatalogSignature) return;
+  state.providerCatalogSignature = signature;
   state.providerCatalog = providers;
-  const items = providerMenuItems(providers, selected);
+  const selected = $("agent").value;
   setOptions(
     $("agent"),
-    [{ id: "", label: t("automatic") }, ...items]
+    [{ id: "", label: t("automatic") }, ...providerMenuItems(providers, selected)]
   );
   if ([...$("agent").options].some(option => option.value === selected)) {
     $("agent").value = selected;
   }
+  // `setOptions` a rafraîchi le menu visible avant que la valeur ne soit
+  // remise : sans ce second passage, l'affichage contredit la sélection.
+  refreshSelectMenu($("agent"));
+  // Le modèle dépend de l'agent : si la reconstruction a perdu la sélection,
+  // la liste des modèles doit suivre au lieu de rester sur l'ancienne.
+  if ($("agent").value !== selected) updateCapabilityMenus();
 }
 
 async function loadTasks() {
@@ -961,6 +973,11 @@ function renderGitReport(report, runId) {
 function updateCapabilityMenus() {
   const provider = $("agent").value;
   const capability = state.capabilities[provider];
+  // Reconstruire la liste efface la sélection. Les capacités sont chargées en
+  // parallèle de la conversation : elles arrivaient souvent après elle et
+  // remettaient le modèle sur « défaut du fournisseur ». On garde donc le
+  // choix courant tant qu'il figure dans la nouvelle liste.
+  const previous = $("model").value;
   setOptions($("model"), [{ id: "", label: t("provider_default") }]);
   setOptions($("effort"), [{ id: "", label: t("model_default") }]);
   if (!capability) {
@@ -973,6 +990,10 @@ function updateCapabilityMenus() {
   $("model").disabled = false;
   addOptions($("model"), capability.models || []);
   addOptions($("model"), [{ id: "__custom__", label: "Autre identifiant…" }]);
+  if (previous && [...$("model").options].some(option => option.value === previous)) {
+    $("model").value = previous;
+  }
+  refreshSelectMenu($("model"));
   updateEfforts();
 }
 
