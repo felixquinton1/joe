@@ -104,13 +104,25 @@ request to every installed provider.
 
 ### Supported provider CLIs
 
-| Provider | Command expected by Joe |
-| --- | --- |
-| OpenAI Codex | `codex` |
-| Claude Code | `claude` |
-| Gemini CLI | `gemini` |
-| GitHub Copilot CLI | `copilot` |
-| Cursor CLI | `cursor-agent` |
+You do not need all of them. Install the ones you want — Joe only routes to the
+CLIs it can actually run, and a CLI installed later becomes available on your
+next request with nothing to configure.
+
+| Provider | Command | Install (macOS/Linux) |
+| --- | --- | --- |
+| OpenAI Codex | `codex` | `npm install -g @openai/codex` |
+| Claude Code | `claude` | `curl -fsSL https://claude.ai/install.sh \| bash` |
+| Gemini CLI | `gemini` | `npm install -g @google/gemini-cli` |
+| GitHub Copilot CLI | `copilot` | `npm install -g @github/copilot` |
+| Cursor CLI | `agent` | `curl https://cursor.com/install -fsS \| bash` |
+
+Each provider then needs to be signed in once, through its own CLI. Joe never
+asks for or stores provider credentials.
+
+`joe doctor` lists what is detected and prints the install command and official
+page for whatever is missing, with the Windows variant where it differs. The
+same list lives in the Web interface under **Options → Preferences → Manage AI
+CLIs**, where each detected CLI can also be switched off so Joe leaves it alone.
 
 Joe discovers the models and options exposed by the installed CLIs whenever
 possible. Availability, quota precision, tool access, and model controls still

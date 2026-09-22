@@ -6,6 +6,26 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Provider CLIs are now discoverable: `joe doctor` and a permanent **Manage AI
+  CLIs** panel list what is detected, print the install command and official
+  page for what is missing, and let a detected CLI be switched off.
+
+### Changed
+
+- Joe only routes to provider CLIs it can actually run. The router previously
+  received every declared provider, so a first request on a machine with one
+  CLI installed could be sent to a missing one, fail, and fall back.
+- `joe doctor` answers in English, like the rest of the public surface.
+
+### Fixed
+
+- Cursor is detected again. Its CLI is now installed as `agent`, and Joe looked
+  only for `cursor-agent`, so no current installation was ever found. Joe tries
+  both, and verifies that a binary found under the generic name really is the
+  Cursor CLI before adopting it.
+
 ## [1.1.2] — 2026-09-21
 
 ### Fixed
