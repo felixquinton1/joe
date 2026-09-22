@@ -67,6 +67,45 @@ class ProviderSpec:
     départage, elle n'exclut personne.
     """
 
+    executables: tuple[str, ...] = ()
+    """Noms cherchés sur le PATH, par ordre de préférence. Vide = `name`.
+
+    Une CLI peut être renommée sans que le fournisseur change de nom chez Joe :
+    ce nom-là est écrit dans les conversations et les réglages. Cursor l'a fait
+    — `cursor-agent` est devenu `agent` — et tout ce qui cherchait le seul
+    ancien nom a cessé de la voir.
+    """
+
+    identity_marker: str = ""
+    """Mot attendu dans `--version` d'un exécutable au nom générique.
+
+    Un alias comme `agent` n'appartient à personne : sur une machine ordinaire
+    il peut désigner tout autre chose. Sans preuve d'identité, Joe adopterait
+    ce binaire et enverrait ses runs à un inconnu. La vérification ne porte que
+    sur les noms qui ne sont pas celui du fournisseur.
+    """
+
+    install_posix: str = ""
+    """Commande d'installation documentée sur macOS et Linux."""
+
+    install_windows: str = ""
+    """Commande d'installation documentée sur Windows. Vide = celle de POSIX."""
+
+    homepage: str = ""
+    """Page officielle. C'est elle qui fait foi, pas la commande ci-dessus.
+
+    Une commande d'installation vieillit ; Joe l'affiche pour épargner une
+    recherche, jamais comme source de vérité. L'interface montre toujours les
+    deux.
+    """
+
+    sign_in: str = ""
+    """Comment s'authentifier une fois la CLI installée.
+
+    Joe ne détient aucun identifiant : une CLI installée mais non connectée
+    échoue au premier run, avec une erreur que rien ne rattache à la cause.
+    """
+
 
 PROVIDERS = (
     ProviderSpec(
@@ -79,6 +118,10 @@ PROVIDERS = (
         # borne annoncée décrivait donc une version où les runs échouaient.
         minimum_version="0.155.0",
         exposes_usage=True,
+        install_posix="npm install -g @openai/codex",
+        install_windows="npm install -g @openai/codex",
+        homepage="https://github.com/openai/codex",
+        sign_in="codex",
     ),
     ProviderSpec(
         "claude",
@@ -88,6 +131,12 @@ PROVIDERS = (
         fallbacks=("gemini", "codex", "copilot", "cursor-agent"),
         minimum_version="2.1.197",
         exposes_usage=True,
+        # L'installation par npm est dépréciée en amont : l'installeur natif
+        # n'a aucune dépendance et se met à jour seul.
+        install_posix="curl -fsSL https://claude.ai/install.sh | bash",
+        install_windows="irm https://claude.ai/install.ps1 | iex",
+        homepage="https://code.claude.com/docs",
+        sign_in="claude",
     ),
     ProviderSpec(
         "gemini",
@@ -105,6 +154,10 @@ PROVIDERS = (
         exposes_usage=True,
         # Rarement dans la paire par défaut, donc rarement juge et partie.
         arbitration_priority=1,
+        install_posix="npm install -g @google/gemini-cli",
+        install_windows="npm install -g @google/gemini-cli",
+        homepage="https://github.com/google-gemini/gemini-cli",
+        sign_in="gemini",
     ),
     ProviderSpec(
         "copilot",
@@ -112,16 +165,29 @@ PROVIDERS = (
         reviewer_peers=("codex", "claude"),
         fallbacks=("gemini", "codex", "claude"),
         minimum_version="1.0.75",
+        install_posix="npm install -g @github/copilot",
+        install_windows="npm install -g @github/copilot",
+        homepage="https://docs.github.com/en/copilot/get-started/cli-quickstart",
+        sign_in="copilot, then /login",
     ),
-    # Le nom porte le suffixe `-agent` parce qu'il sert aussi à trouver
-    # l'exécutable : `cursor` est l'éditeur, `cursor-agent` la CLI sans fenêtre.
-    # Pointer sur le premier ferait croire Cursor disponible sans qu'aucun run
-    # ne puisse aboutir. L'interface affiche le libellé, pas ce nom.
+    # Le nom porte le suffixe `-agent` parce qu'il a d'abord servi à trouver
+    # l'exécutable : `cursor` est l'éditeur, la CLI est sans fenêtre. Il reste
+    # le nom du fournisseur — il est écrit dans les conversations — mais
+    # l'exécutable, lui, s'appelle `agent` sur une installation actuelle.
+    # `cursor-agent` subsiste par compatibilité, donc on cherche les deux.
     ProviderSpec(
         "cursor-agent",
         "Cursor",
         reviewer_peers=("codex", "claude"),
         fallbacks=("claude", "codex", "gemini"),
+        # `agent` est un nom générique qu'une autre CLI peut occuper : le
+        # diagnostic vérifie l'identité du binaire trouvé sous ce nom-là.
+        executables=("cursor-agent", "agent"),
+        identity_marker="cursor",
+        install_posix="curl https://cursor.com/install -fsS | bash",
+        install_windows="irm 'https://cursor.com/install?win32=true' | iex",
+        homepage="https://cursor.com/docs/cli/installation",
+        sign_in="agent login",
     ),
 )
 
@@ -149,6 +215,23 @@ def get_provider_spec(name: str) -> ProviderSpec:
     hérite des valeurs les plus prudentes (pas de JSON, pas de watchdog).
     """
     return _BY_NAME.get(name) or ProviderSpec(name, name.capitalize())
+
+
+def provider_executables(name: str) -> tuple[str, ...]:
+    """Noms à chercher sur le PATH pour ce fournisseur, par ordre."""
+    spec = get_provider_spec(name)
+    return spec.executables or (spec.name,)
+
+
+def install_hint(name: str, *, windows: bool = False) -> dict[str, str]:
+    """Tout ce qu'il faut pour installer et connecter une CLI absente."""
+    spec = get_provider_spec(name)
+    command = spec.install_windows if windows else spec.install_posix
+    return {
+        "command": command or spec.install_posix,
+        "homepage": spec.homepage,
+        "sign_in": spec.sign_in,
+    }
 
 
 def default_fallbacks() -> dict[str, list[str]]:

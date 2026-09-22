@@ -25,7 +25,7 @@ from .prompt_language import (
     response_language,
 )
 from .provider_health import recent_failure, record_result
-from .providers import Provider, default_providers
+from .providers import Provider, active_providers
 from .router import Router
 
 _MUTABLE_STATE_PATTERN = re.compile(
@@ -111,7 +111,7 @@ class Orchestrator:
     ):
         self.project = project.resolve()
         self.memory = ProjectMemory(self.project)
-        self.providers = providers or default_providers(
+        self.providers = providers or active_providers(
             additional_roots, remote_access
         )
         self.router = router or Router()

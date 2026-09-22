@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -50,11 +49,16 @@ def joe_project() -> Path:
 
 
 def _version(provider: str) -> str | None:
-    if not shutil.which(provider):
+    # Le nom du fournisseur n'est pas toujours celui de son exécutable : le
+    # chercher directement laissait une CLI renommée sans version.
+    from .providers import resolve_executable
+
+    executable = resolve_executable(provider)
+    if not executable:
         return None
     try:
         result = subprocess.run(
-            [provider, "--version"],
+            [executable, "--version"],
             capture_output=True,
             text=True,
             timeout=8,

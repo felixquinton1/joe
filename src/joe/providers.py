@@ -18,6 +18,7 @@ from .provider_registry import (
     get_provider_names,
     get_provider_spec,
     get_provider_specs,
+    provider_executables,
 )
 from .usage import record_gemini_usage
 
@@ -100,6 +101,61 @@ def windows_aware_executable(
         if command:
             return command
     return shutil_module.which(name)
+
+
+# Une identité se prouve en lançant le binaire : on ne le refait pas à chaque
+# run. La clé est le chemin résolu, donc une réinstallation ailleurs rouvre la
+# question.
+_IDENTITY_CACHE: dict[str, bool] = {}
+
+
+def _proves_identity(path: str, marker: str) -> bool:
+    """Le binaire trouvé sous un nom générique se réclame-t-il du fournisseur ?"""
+    cached = _IDENTITY_CACHE.get(path)
+    if cached is not None:
+        return cached
+    proven = False
+    for flag in ("--version", "--help"):
+        try:
+            result = subprocess.run(
+                [path, flag],
+                capture_output=True,
+                text=True,
+                timeout=8,
+                check=False,
+                encoding="utf-8",
+                errors="replace",
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if marker in f"{result.stdout}{result.stderr}".lower():
+            proven = True
+            break
+    _IDENTITY_CACHE[path] = proven
+    return proven
+
+
+def resolve_executable(name: str, *, unconfirmed: bool = False, **kwargs) -> str | None:
+    """Premier exécutable trouvé parmi les noms que le registre déclare.
+
+    Une CLI peut être renommée en amont sans que le fournisseur change de nom
+    chez Joe : ce nom-là est écrit dans les conversations. Chercher le seul nom
+    du fournisseur revenait à la déclarer absente sur toute installation à jour.
+
+    Un nom générique n'appartient à personne, alors il doit faire ses preuves.
+    `unconfirmed=True` renvoie quand même le candidat qui a échoué, pour que le
+    diagnostic puisse le nommer au lieu de dire « absent ».
+    """
+    marker = get_provider_spec(name).identity_marker
+    doubtful = None
+    for candidate in provider_executables(name):
+        found = windows_aware_executable(candidate, **kwargs)
+        if not found:
+            continue
+        if candidate == name or not marker or _proves_identity(found, marker):
+            return found
+        doubtful = doubtful or found
+    return doubtful if unconfirmed else None
 
 
 def _access_level(execution_mode: str | None, modifying: bool) -> str:
@@ -328,7 +384,14 @@ class Provider:
         cancel_event: threading.Event | None = None,
         on_stream: StreamCallback | None = None,
     ) -> ProviderResult:
-        executable = windows_aware_executable(self.executable)
+        # `executable` reste un point d'entrée explicite — les doublures de
+        # test s'en servent, et il permet d'épingler un binaire précis. Sans
+        # override, le registre décide quels noms chercher.
+        executable = (
+            resolve_executable(self.name)
+            if self.executable == self.name
+            else windows_aware_executable(self.executable)
+        )
         if not executable:
             return ProviderResult(
                 self.name, [self.executable], "", "executable not found", 127, 0,
@@ -473,10 +536,38 @@ def default_providers(
     additional_roots: tuple[Path, ...] = (),
     remote_access: bool = False,
 ) -> dict[str, Provider]:
+    """Tous les fournisseurs déclarés, installés ou non — vue du diagnostic."""
     return {
         name: Provider(name, name, additional_roots, remote_access)
         for name in get_provider_names()
     }
+
+
+def active_providers(
+    additional_roots: tuple[Path, ...] = (),
+    remote_access: bool = False,
+) -> dict[str, Provider]:
+    """Ceux que Joe peut réellement lancer : détectés et non écartés.
+
+    Le routage recevait jusqu'ici les cinq fournisseurs quoi qu'il arrive. Sur
+    une machine où une seule CLI est installée, la première demande partait
+    donc vers une CLI absente, échouait, puis se rabattait — l'utilisateur
+    voyait une erreur pour une situation parfaitement normale.
+
+    Si rien n'est détecté, on rend la liste complète plutôt qu'une liste vide :
+    l'erreur au run reste « exécutable introuvable », qui dit la vérité, au
+    lieu d'un plantage de routage sans destinataire.
+    """
+    from .provider_choice import disabled_providers
+
+    declared = default_providers(additional_roots, remote_access)
+    refused = disabled_providers()
+    usable = {
+        name: provider
+        for name, provider in declared.items()
+        if name not in refused and resolve_executable(name)
+    }
+    return usable or declared
 
 
 def _text(value: str | bytes | None) -> str:
