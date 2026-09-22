@@ -249,9 +249,22 @@
         <small data-i18n="default_workflow_help">En automatique, Joe adapte le nombre d’agents à la demande.</small>
       </label>
       <button id="open-project-skills" class="subtle-action" type="button" data-i18n="manage_active_project_skills">Gérer les skills du projet actif</button>
+      <button id="open-providers" class="subtle-action" type="button" data-i18n="manage_providers">Gérer les CLI d’IA</button>
       <div class="dialog-actions">
         <button value="cancel" data-i18n="cancel">Annuler</button>
         <button id="save-preferences" value="default" data-i18n="save">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="providers-dialog" class="project-dialog providers-dialog">
+    <form method="dialog">
+      <span class="eyebrow" data-i18n="providers">Fournisseurs</span>
+      <h2 data-i18n="providers_title">CLI d’IA disponibles</h2>
+      <p data-i18n="providers_intro">Joe n’envoie une demande qu’aux CLI qu’il trouve sur cette machine. Installe celles que tu veux, décoche celles que Joe doit laisser tranquilles.</p>
+      <div id="providers-list" class="providers-list"><small data-i18n="diagnostic_running">Diagnostic en cours…</small></div>
+      <div class="dialog-actions">
+        <button id="refresh-providers" class="subtle-action" type="button" data-i18n="refresh">Actualiser</button>
+        <button value="default" data-i18n="close">Fermer</button>
       </div>
     </form>
   </dialog>
@@ -340,7 +353,8 @@
       <h2 data-i18n="everything_ready">Tout est prêt ?</h2>
       <p data-i18n="doctor_intro">Joe vérifie localement les fournisseurs et le stockage. Aucun prompt de test n’est envoyé.</p>
       <div class="risk-note"><strong data-i18n="before_starting">Avant de commencer</strong><p data-i18n="orchestrator_responsibility">Joe n’est pas un fournisseur d’IA : il orchestre les comptes, CLI et API que tu configures. Leur facturation et leurs quotas restent sous ta responsabilité. Un run peut continuer après la fermeture du navigateur.</p></div>
-      <div id="doctor-status" class="doctor-status"><small data-i18n="diagnostic_running">Diagnostic en cours…</small></div>
+      <div id="doctor-status" class="providers-list"><small data-i18n="diagnostic_running">Diagnostic en cours…</small></div>
+      <p class="providers-reminder"><small data-i18n="providers_reminder">Tu pourras revenir à cette liste à tout moment : Options → Préférences → Gérer les CLI d’IA.</small></p>
       <div class="dialog-actions"><button id="close-onboarding" value="default" data-i18n="start_using_joe">Commencer</button></div>
     </form>
   </dialog>

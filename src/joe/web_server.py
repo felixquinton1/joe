@@ -17,6 +17,7 @@ from .auth import LocalAuth, auth_token_path, rotate_token
 from .autonomous_builder import parse_autonomous_request
 from .conversations import FREE_PROJECT_ID
 from .doctor import doctor_report
+from .provider_choice import set_disabled
 from .files import MAX_FILE_BYTES
 from .models import Mode
 from .http_utils import RequestBodyError, read_json_body, validate_bind
@@ -165,6 +166,24 @@ class Handler(BaseHTTPRequestHandler):
 
     def _get_doctor(self) -> None:
         self._json(doctor_report(self.server.manager.project))
+
+    def _patch_providers(self) -> None:
+        """Enregistrer les fournisseurs que l'utilisateur écarte."""
+        payload = self._read_payload()
+        if payload is None:
+            return
+        disabled = payload.get("disabled")
+        declared = set(get_provider_names())
+        if (
+            not isinstance(disabled, list)
+            or not all(isinstance(name, str) for name in disabled)
+            or not set(disabled) <= declared
+        ):
+            return self._json(
+                {"error": "disabled must list known providers"},
+                HTTPStatus.BAD_REQUEST,
+            )
+        self._json({"disabled": sorted(set_disabled(disabled))})
 
     def _get_files(self) -> None:
         self._json(self.server.manager.files.list(self._param("project", "free")))

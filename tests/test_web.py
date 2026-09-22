@@ -1405,3 +1405,67 @@ def test_every_agent_answer_is_rendered_through_the_question_aware_path():
 
     assert renders, "le rendu des messages d'agent doit être visible dans les assets"
     assert all(name == "renderAnswer" for _, name in renders), renders
+
+
+def test_the_providers_panel_is_reachable_and_writes_the_choice(tmp_path, monkeypatch):
+    """Le choix des CLI doit rester accessible, pas mourir avec l'accueil.
+
+    L'écran de bienvenue se marquait vu dans le navigateur et ne revenait
+    jamais : on ne pouvait plus ni voir ce qui manquait, ni en ajouter.
+    """
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    server, thread = start_server(tmp_path)
+    try:
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port)
+
+        body = json.dumps({"disabled": ["copilot"]})
+        connection.request(
+            "PATCH",
+            "/api/providers",
+            body=body,
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read())["disabled"] == ["copilot"]
+
+        connection.request("GET", "/api/doctor")
+        response = connection.getresponse()
+        report = json.loads(response.read())
+        copilot = next(
+            item for item in report["providers"] if item["provider"] == "copilot"
+        )
+        assert copilot["enabled"] is False
+        assert copilot["install"]["command"]
+        assert copilot["label"] == "Copilot"
+
+        # Un nom inconnu n'entre pas dans le fichier relu à chaque démarrage.
+        connection.request(
+            "PATCH",
+            "/api/providers",
+            body=json.dumps({"disabled": ["chatgpt"]}),
+            headers={"Content-Type": "application/json"},
+        )
+        assert connection.getresponse().status == 400
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+def test_the_interface_offers_one_permanent_place_to_manage_cli():
+    """Le panneau et l'accueil doivent rendre la même liste.
+
+    Deux rendus séparés divergent, et c'est le permanent qui compte : on
+    installe une CLI des semaines après avoir découvert Joe.
+    """
+    assets = Path(__file__).resolve().parent.parent / "src" / "joe" / "web_assets"
+    page = (assets / "index.html").read_text(encoding="utf-8")
+    app = (assets / "app.js").read_text(encoding="utf-8")
+
+    assert 'id="providers-dialog"' in page
+    assert 'id="open-providers"' in page
+    assert 'data-i18n="manage_providers"' in page
+    # Un seul rendu, appelé par les deux écrans.
+    assert app.count("function renderProviders(") == 1
+    assert 'fetchDoctor($("providers-list")' in app
+    assert 'fetchDoctor($("doctor-status")' in app

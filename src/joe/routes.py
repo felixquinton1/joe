@@ -63,6 +63,9 @@ ROUTES: tuple[Route, ...] = (
     _route("GET", "/api/status", "_get_status", ""),
     _route("GET", "/api/capabilities", "_get_capabilities", "viewer"),
     _route("GET", "/api/doctor", "_get_doctor", "viewer"),
+    # Choisir les CLI que Joe a le droit de lancer engage la machine : c'est
+    # une décision d'administration, pas de lecture.
+    _route("PATCH", "/api/providers", "_patch_providers", "maintainer"),
     _route("GET", "/api/files", "_get_files", "viewer"),
     _route("GET", "/api/files/{item_id}/download", "_get_file_download", "viewer"),
     # Forcer l'actualisation lance un sous-processus fournisseur : l'élévation

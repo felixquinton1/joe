@@ -573,25 +573,131 @@ function formatBytes(value) {
   return `${(size / 1024).toFixed(size < 10240 ? 1 : 0)} Kio`;
 }
 
+// Une seule liste de fournisseurs, rendue à deux endroits : l'écran de
+// première ouverture et le panneau permanent des préférences. Deux rendus
+// séparés auraient divergé, et c'est le second qui compte — on installe une
+// CLI des semaines après avoir découvert Joe.
+function providerState(provider) {
+  if (!provider.enabled) return { key: "provider_turned_off", tone: "muted" };
+  if (provider.installed) return { key: "provider_detected", tone: "ok" };
+  if (provider.unconfirmed) return { key: "provider_unconfirmed", tone: "warn" };
+  return { key: "provider_absent", tone: "muted" };
+}
+
+function providerRow(provider, interactive) {
+  const row = document.createElement("div");
+  row.className = `provider-row ${providerState(provider).tone}`;
+  const head = document.createElement("div");
+  head.className = "provider-head";
+  const name = document.createElement("b");
+  name.textContent = provider.label || provider.provider;
+  const state = document.createElement("span");
+  state.textContent = [
+    t(providerState(provider).key),
+    provider.version || "",
+    provider.runtime_issue || ""
+  ].filter(Boolean).join(" · ");
+  head.append(name, state);
+  row.appendChild(head);
+  // L'interrupteur n'a de sens que sur une CLI présente : rien à écarter
+  // tant qu'elle n'est pas là.
+  if (interactive && (provider.installed || !provider.enabled)) {
+    const choice = document.createElement("label");
+    choice.className = "provider-choice";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = provider.enabled !== false;
+    box.addEventListener("change", () => setProviderEnabled(provider.provider, box.checked));
+    const text = document.createElement("span");
+    text.textContent = t("provider_use");
+    choice.append(box, text);
+    row.appendChild(choice);
+  }
+  const install = provider.install || {};
+  if (!provider.installed && (install.command || install.homepage)) {
+    const help = document.createElement("div");
+    help.className = "provider-install";
+    if (install.command) {
+      const code = document.createElement("code");
+      code.textContent = install.command;
+      help.append(code, copyButton(() => install.command));
+    }
+    if (install.sign_in) {
+      const signIn = document.createElement("small");
+      signIn.textContent = `${t("provider_sign_in")} ${install.sign_in}`;
+      help.appendChild(signIn);
+    }
+    if (install.homepage) {
+      const link = document.createElement("a");
+      link.href = install.homepage;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = t("provider_official_page");
+      help.appendChild(link);
+    }
+    row.appendChild(help);
+  }
+  return row;
+}
+
+function renderProviders(target, report, { interactive = false } = {}) {
+  const providers = report.providers || [];
+  // La liste des refus vient du serveur à chaque rendu : la reconstruire de
+  // mémoire ferait perdre un refus posé ailleurs, ou depuis un autre onglet.
+  state.disabledProviders = new Set(
+    providers.filter(provider => provider.enabled === false).map(provider => provider.provider)
+  );
+  target.replaceChildren();
+  if (report.storage && !report.storage.writable) {
+    const storage = document.createElement("div");
+    storage.className = "provider-row error";
+    storage.innerHTML = `<div class="provider-head"><b>${t("storage")}</b><span>${t("needs_fix")}</span></div>`;
+    target.appendChild(storage);
+  }
+  for (const provider of providers) {
+    target.appendChild(providerRow(provider, interactive));
+  }
+  if (!providers.some(provider => provider.installed)) {
+    const empty = document.createElement("p");
+    empty.className = "provider-empty";
+    empty.textContent = t("providers_none");
+    target.appendChild(empty);
+  }
+}
+
+async function fetchDoctor(target, options) {
+  try {
+    const response = await joeFetch("/api/doctor");
+    if (!response.ok) throw new Error("doctor unavailable");
+    renderProviders(target, await response.json(), options);
+  } catch {
+    target.innerHTML = `<p>${t("diagnostic_unavailable")}</p>`;
+  }
+}
+
+async function setProviderEnabled(provider, enabled) {
+  const current = new Set(state.disabledProviders || []);
+  if (enabled) current.delete(provider);
+  else current.add(provider);
+  state.disabledProviders = current;
+  const response = await joeFetch("/api/providers", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ disabled: [...current] })
+  });
+  if (!response.ok) window.alert(t("providers_save_failed"));
+  await fetchDoctor($("providers-list"), { interactive: true });
+}
+
+async function openProviders() {
+  $("providers-dialog").showModal();
+  await fetchDoctor($("providers-list"), { interactive: true });
+}
+
 async function loadDoctor() {
   if (window.localStorage.getItem("joe-onboarded-v1")) return;
-  const dialog = $("onboarding-dialog");
-  dialog.showModal();
-  const response = await joeFetch("/api/doctor");
-  if (!response.ok) {
-    $("doctor-status").innerHTML = `<p>${t("diagnostic_unavailable")}</p>`;
-    return;
-  }
-  const report = await response.json();
-  $("doctor-status").innerHTML = `
-    <p class="${report.storage?.writable ? "ok" : "error"}">
-      <b>${t("storage")}</b><span>${report.storage?.writable ? t("ready") : t("needs_fix")}</span>
-    </p>
-    ${(report.providers || []).map(provider => `
-      <p class="${provider.installed ? "ok" : "muted"}">
-        <b>${escapeHtml(capitalize(provider.provider))}</b>
-        <span>${provider.installed ? escapeHtml(provider.version || t("installed")) : t("not_detected")}</span>
-      </p>`).join("")}`;
+  $("onboarding-dialog").showModal();
+  await fetchDoctor($("doctor-status"), { interactive: true });
 }
 
 function setupSelectMenu(select) {
@@ -1963,6 +2069,17 @@ $("save-automation").onclick = event => automation.save(event).catch(
 $("start-autonomous-campaign").onclick = () => automation.startCampaign().catch(
   error => window.alert(error.message)
 );
+$("open-providers").onclick = () => {
+  $("preferences-dialog").close();
+  openProviders();
+};
+$("refresh-providers").onclick = event => {
+  // Le bouton vit dans un `<form method="dialog">` : sans cela il fermerait
+  // le panneau au lieu de le recharger.
+  event.preventDefault();
+  fetchDoctor($("providers-list"), { interactive: true });
+};
+
 $("open-project-skills").onclick = () => {
   const conversation = state.conversations.find(
     item => item.id === state.activeConversationId
