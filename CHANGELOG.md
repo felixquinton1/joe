@@ -6,6 +6,8 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-09-22
+
 ### Added
 
 - A per-project setting allows the MCP tools already configured in a CLI. An
