@@ -108,11 +108,12 @@ class Orchestrator:
         router: Router | None = None,
         additional_roots: tuple[Path, ...] = (),
         remote_access: bool = False,
+        mcp_tools: bool = False,
     ):
         self.project = project.resolve()
         self.memory = ProjectMemory(self.project)
         self.providers = providers or active_providers(
-            additional_roots, remote_access
+            additional_roots, remote_access, mcp_tools
         )
         self.router = router or Router()
 

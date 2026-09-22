@@ -272,9 +272,21 @@ Autrement dit : aujourd’hui, un outil MCP ne s’exécute sous Joe qu’en acc
 complet. Ce n’est pas une limite de Joe mais du mode non interactif, et elle
 vaut aussi quand on appelle la CLI soi-même de cette façon.
 
-Pour l’utiliser à un niveau plus étroit, pré-autorise le serveur dans la
-configuration de la CLI — l’autorisation se donne par serveur
-(`mcp__nom-du-serveur`), pas par motif générique.
+Pour l’utiliser à un niveau plus étroit, coche **« Autoriser les outils MCP
+déjà configurés dans les CLI »** dans les réglages du projet. Joe interroge
+alors la CLI pour connaître ses serveurs et les pré-autorise, ce qui permet de
+lire une base sans passer en accès complet.
+
+Ce réglage est désactivé par défaut, et c’est volontaire : un outil MCP agit
+hors du projet — base de données, réseau, service externe. « Je peux modifier
+ce projet » ne vaut pas « je peux agir au-dehors », donc l’élargissement reste
+une décision explicite, par projet.
+
+Deux limites à connaître. Un serveur déclaré dans le `.mcp.json` du projet
+reste « en attente d’approbation » jusqu’à ce que tu lances la CLI une fois de
+manière interactive pour l’approuver ; ceux ajoutés par `claude mcp add` sont
+déjà approuvés. Et seul Claude Code expose un inventaire interrogeable : chez
+les autres fournisseurs, le réglage reste sans effet.
 
 Les identifiants de connexion à une base restent dans la configuration du
 serveur MCP, jamais dans Joe : il ne les voit pas et ne les enregistre pas.

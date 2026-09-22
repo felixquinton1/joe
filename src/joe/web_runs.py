@@ -762,6 +762,7 @@ class RunManager:
                 workspace,
                 additional_roots=additional_roots + attachment_roots,
                 remote_access=remote_access,
+                mcp_tools=self._project_allows_mcp(run.conversation_id),
             )
             # La décision a déjà été prise avant l'autorisation : on la
             # consomme telle quelle. Elle n'est recalculée qu'après une attente
@@ -1224,6 +1225,15 @@ class RunManager:
                 project.get("ai_access"), project.get("default_execution_mode")
             ),
         )
+
+    def _project_allows_mcp(self, conversation_id: str) -> bool:
+        """Ce projet autorise-t-il les outils MCP deja configures dans la CLI ?"""
+        conversation = self.conversations.get(conversation_id) or {}
+        project = self.conversations.get_project(
+            str(conversation.get("project_id", FREE_PROJECT_ID))
+        ) or {}
+        return bool(project.get("mcp_tools", False))
+
 
     def _project_uses_worktree(self, conversation_id: str) -> bool:
         conversation = self.conversations.get(conversation_id) or {}

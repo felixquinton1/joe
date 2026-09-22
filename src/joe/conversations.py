@@ -170,6 +170,9 @@ class ConversationStore:
             "auto_commit_push": False,
             "isolated_worktrees": False,
             "quota_automation": True,
+            # Un outil MCP sort du projet par nature : rien ne l'autorise tant
+            # que ce projet ne l'a pas demandé.
+            "mcp_tools": False,
             "quota_provider": "",
             "default_execution_mode": "",
             "ai_access": DEFAULT_AI_ACCESS,
@@ -215,6 +218,8 @@ class ConversationStore:
                 project["isolated_worktrees"] = bool(changes["isolated_worktrees"])
             if "quota_automation" in changes:
                 project["quota_automation"] = bool(changes["quota_automation"])
+            if "mcp_tools" in changes:
+                project["mcp_tools"] = bool(changes["mcp_tools"])
             if "quota_provider" in changes:
                 value = str(changes["quota_provider"])
                 project["quota_provider"] = (
@@ -781,6 +786,7 @@ class ConversationStore:
                     "auto_commit_push": False,
                     "isolated_worktrees": False,
                     "quota_automation": True,
+                    "mcp_tools": False,
                     "default_execution_mode": "",
                     "collapsed": False,
                     "position": 0,
@@ -819,6 +825,7 @@ class ConversationStore:
             project.setdefault("auto_commit_push", False)
             project.setdefault("isolated_worktrees", False)
             project.setdefault("quota_automation", True)
+            project.setdefault("mcp_tools", False)
             project.setdefault("quota_provider", "")
             project.setdefault("default_execution_mode", "")
             project["ai_access"] = _ai_access(

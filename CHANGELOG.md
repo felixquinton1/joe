@@ -8,6 +8,11 @@ All notable changes to Joe are documented here. The format follows
 
 ### Added
 
+- A per-project setting allows the MCP tools already configured in a CLI. An
+  MCP tool always asks for explicit permission, even to read, and a
+  non-interactive call cannot grant it — so it was refused at every access
+  level below full. The setting is off by default: such a tool acts outside the
+  project, and widening that stays an explicit decision.
 - Provider CLIs are now discoverable: `joe doctor` and a permanent **Manage AI
   CLIs** panel list what is detected, print the install command and official
   page for what is missing, and let a detected CLI be switched off.
@@ -35,6 +40,10 @@ All notable changes to Joe are documented here. The format follows
 
 ### Fixed
 
+- A Claude run no longer risks losing its prompt. `--allowedTools` accepts
+  several values, so with no flag after it the CLI took the prompt for one more
+  tool name and the run failed on "Input must be provided". Only the flags that
+  happened to follow were hiding it.
 - An empty provider answer now says why. A command that drives an interactive
   session returns neither an answer nor an error through a non-interactive
   call, so the conversation showed an empty bubble that looked like a failure.

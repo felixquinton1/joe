@@ -647,6 +647,7 @@ window.createJoeConversations = function createJoeConversations({
     $("project-auto-delivery").checked = false;
     $("project-isolated-worktrees").checked = false;
     $("project-quota-automation").checked = true;
+    $("project-mcp-tools").checked = false;
     updateAutoDeliveryHelp();
     $("project-ai-access").value = "manual";
     refreshSelectMenu($("project-ai-access"));
@@ -677,6 +678,7 @@ window.createJoeConversations = function createJoeConversations({
     $("project-auto-delivery").checked = Boolean(project.auto_commit_push);
     $("project-isolated-worktrees").checked = Boolean(project.isolated_worktrees);
     $("project-quota-automation").checked = project.quota_automation !== false;
+    $("project-mcp-tools").checked = project.mcp_tools === true;
     updateAutoDeliveryHelp();
     $("project-ai-access").value = project.ai_access || "manual";
     refreshSelectMenu($("project-ai-access"));
@@ -979,6 +981,7 @@ window.createJoeConversations = function createJoeConversations({
           auto_commit_push: $("project-auto-delivery").checked,
           isolated_worktrees: $("project-isolated-worktrees").checked,
           quota_automation: $("project-quota-automation").checked,
+          mcp_tools: $("project-mcp-tools").checked,
           ai_access: $("project-ai-access").value,
           context: $("project-context").value
         })

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Callable
 
 from .models import Intent, ProviderResult
+from .mcp import allowed_tool_patterns
 from .provider_registry import (
     get_provider_names,
     get_provider_spec,
@@ -180,6 +181,15 @@ class Provider:
     executable: str
     additional_roots: tuple[Path, ...] = ()
     remote_access: bool = False
+    mcp_tools: bool = False
+    """Le projet autorise les outils MCP deja configures dans la CLI.
+
+    Un outil MCP demande toujours une autorisation explicite, meme pour lire, et
+    un appel non interactif n'offre aucun canal pour la donner : il est donc
+    refuse. Pre-autoriser leve le refus, mais un outil MCP sort du projet par
+    nature — cela ne se fait que sur demande du projet.
+    """
+
     watchdog_seconds: float | None = None
     """Override du délai déclaré au registre. `None` = valeur du registre."""
 
@@ -279,14 +289,21 @@ class Provider:
             "--verbose",
             "--permission-mode", permission, "--no-session-persistence",
         ]
-        if access == "write":
-            command.extend(["--allowedTools", "Bash"])
+        allowed = ["Bash"] if access == "write" else []
+        if self.mcp_tools:
+            allowed.extend(allowed_tool_patterns(self.name, self.executable))
+        if allowed:
+            command.extend(["--allowedTools", *allowed])
         command.extend(self._roots("--add-dir"))
         if effort:
             command.extend(["--effort", effort])
         if model:
             command.extend(["--model", model])
-        return [*command, prompt]
+        # `--allowedTools` accepte plusieurs valeurs : sans ce séparateur, la
+        # CLI avale le prompt comme un nom d'outil de plus et le run échoue sur
+        # « Input must be provided ». Seuls les drapeaux qui suivaient le
+        # masquaient jusqu'ici.
+        return [*command, "--", prompt]
 
     def _argv_gemini(
         self,
@@ -535,10 +552,11 @@ def _terminal_quota(provider: str | None, text: str) -> bool:
 def default_providers(
     additional_roots: tuple[Path, ...] = (),
     remote_access: bool = False,
+    mcp_tools: bool = False,
 ) -> dict[str, Provider]:
     """Tous les fournisseurs déclarés, installés ou non — vue du diagnostic."""
     return {
-        name: Provider(name, name, additional_roots, remote_access)
+        name: Provider(name, name, additional_roots, remote_access, mcp_tools)
         for name in get_provider_names()
     }
 
@@ -546,6 +564,7 @@ def default_providers(
 def active_providers(
     additional_roots: tuple[Path, ...] = (),
     remote_access: bool = False,
+    mcp_tools: bool = False,
 ) -> dict[str, Provider]:
     """Ceux que Joe peut réellement lancer : détectés et non écartés.
 
@@ -560,7 +579,7 @@ def active_providers(
     """
     from .provider_choice import disabled_providers
 
-    declared = default_providers(additional_roots, remote_access)
+    declared = default_providers(additional_roots, remote_access, mcp_tools)
     refused = disabled_providers()
     usable = {
         name: provider
