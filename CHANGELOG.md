@@ -14,6 +14,17 @@ All notable changes to Joe are documented here. The format follows
 
 ### Changed
 
+- The routing tier now decides which model runs. It was resolved by position in
+  the provider's list, so `standard` returned the middle entry — on the Claude
+  catalog, the most expensive model of the six, dearer than the one returned
+  for `strong`. Tiers are read from what providers publish about their own
+  models, with a declared catalog for what a description cannot settle, and an
+  unclassified range still routes exactly as before.
+- A review or a consensus no longer forces the flagship model and maximum
+  effort on every stage. Anything other than FAST was declared complex.
+- The markers that flag a demanding request exist in English too. They were
+  French only, so the same need was routed differently depending on the
+  language it was written in.
 - Joe only routes to provider CLIs it can actually run. The router previously
   received every declared provider, so a first request on a machine with one
   CLI installed could be sent to a missing one, fail, and fall back.

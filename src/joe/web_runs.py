@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .capabilities import select_model, select_model_tier
+from .capabilities import select_model_tier
 from .approvals import ApprovalStore
 from .automations import AutomationStore, START_MODES
 from .autonomous import AutonomousStore, TERMINAL_STATUSES, build_autonomous_skill
@@ -688,12 +688,13 @@ class RunManager:
         if classification is not None:
             effort = effort or classification.effort
             model = model or select_model_tier(route.primary, classification.model_tier)
-        elif _complex_request(request, route):
-            effort = effort or "high"
-            model = model or select_model(route.primary, complex_request=True)
-        elif route.mode is Mode.FAST:
-            effort = effort or "low"
-            model = model or select_model(route.primary, complex_request=False)
+        else:
+            # Une seule échelle, quel que soit le mode : sans elle, un run non
+            # FAST ne recevait ni modèle ni effort et partait sur le défaut du
+            # fournisseur, ou sur le modèle phare via `_complex_request`.
+            tier, default_effort = _route_tier(request, route)
+            effort = effort or default_effort
+            model = model or select_model_tier(route.primary, tier)
         if "health-check" in route.reason:
             effort = effort or "low"
             if route.primary == "gemini":
@@ -2901,28 +2902,54 @@ def build_quota_notice(
     }
 
 
+# Les mots qui signalent une demande lourde. Ils n'existaient qu'en français :
+# « implement the migration » ne déclenchait rien, « implémente la migration »
+# oui. Deux utilisateurs, le même besoin, deux routages.
+_HEAVY_MARKERS = frozenset({
+    "architecture", "analyse", "analyze", "analysis", "audit", "debug",
+    "implémente", "implémenter", "implement", "implementation",
+    "migration", "migrate", "refactor", "refactoring", "refonte",
+    "scientifique", "scientific", "expérimental", "experimental",
+    "optimise", "optimize", "optimisation", "optimization",
+    "sécurité", "security", "performance", "benchmark",
+})
+
+
+def _heavy_words(request: str) -> bool:
+    text = _routing_text(request).lower()
+    for separator in (",", ".", ";", ":", "!", "?", "(", ")", "\n"):
+        text = text.replace(separator, " ")
+    return bool(set(text.split()) & _HEAVY_MARKERS)
+
+
 def _complex_request(request: str, route: Route) -> bool:
-    markers = {
-        "architecture",
-        "analyse",
-        "audit",
-        "debug",
-        "implémente",
-        "implémenter",
-        "migration",
-        "refactor",
-        "scientifique",
-        "expérimental",
-    }
-    request = _routing_text(request)
-    words = set(request.lower().replace(",", " ").replace(".", " ").split())
     return (
         route.mode is not Mode.FAST
         or route.intent is Intent.MODIFY
-        and (len(request) >= 240 or bool(words & markers))
+        and (len(_routing_text(request)) >= 240 or _heavy_words(request))
         or route.intent is Intent.ANALYZE
-        and bool(words & markers)
+        and _heavy_words(request)
     )
+
+
+def _route_tier(request: str, route: Route) -> tuple[str, str]:
+    """Niveau de modèle et effort quand aucun classifieur n'a tranché.
+
+    Tout ce qui n'était pas FAST héritait du modèle phare et d'un effort
+    maximal : une relecture ou un consensus prenait donc le plus gros modèle
+    pour chacune de ses étapes, y compris les revues croisées. Le niveau suit
+    désormais ce que la demande exige.
+    """
+    heavy = _heavy_words(request) or len(_routing_text(request)) >= 240
+    if route.mode is Mode.CONSENSUS:
+        return "strong", "high"
+    if route.mode is Mode.REVIEW:
+        return ("strong", "high") if heavy else ("standard", "medium")
+    if route.intent is Intent.MODIFY:
+        return ("strong", "high") if heavy else ("standard", "medium")
+    if route.intent is Intent.ANALYZE and heavy:
+        return "standard", "medium"
+    return "light", "low"
 
 
 def _existing_directory(value: Any) -> Path | None:

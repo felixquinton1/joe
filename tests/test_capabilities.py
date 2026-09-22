@@ -72,7 +72,14 @@ def test_simple_selection_prefers_declared_fast_lower_cost_model(monkeypatch):
     assert select_model("codex", complex_request=False) == "terra"
     assert select_model("codex", complex_request=True) == "frontier"
     assert select_model_tier("codex", "light") == "terra"
-    assert select_model_tier("codex", "standard") == "frontier"
+    # `frontier` ne dit rien de lui-même : ni description, ni coût. Il n'est
+    # donc pas promu « standard » alors qu'un modèle classé plus léger existe.
+    # Servir le modèle de tête faute de classement est précisément ce qui
+    # envoyait le plus gros modèle sur des tâches simples.
+    assert select_model_tier("codex", "standard") == "terra"
+    # En haut de gamme au contraire, rien de classé signifie qu'on garde le
+    # modèle de tête : servir un modèle léger à une demande lourde serait pire
+    # que le défaut qu'on corrige.
     assert select_model_tier("codex", "strong") == "frontier"
 
 

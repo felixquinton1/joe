@@ -1550,3 +1550,44 @@ def test_the_panel_explains_that_a_detected_cli_still_needs_an_account():
 
     assert "provider.installed && install.sign_in" in app
     assert 'provider.auth_failed ? "provider_sign_in_failed" : "provider_sign_in_once"' in app
+
+
+def test_a_review_no_longer_forces_the_flagship_model_on_every_stage():
+    """Tout ce qui n'était pas FAST héritait du modèle phare et d'un effort max.
+
+    Une relecture ou un consensus prenait donc le plus gros modèle pour chacune
+    de ses étapes, y compris les revues croisées qui n'en ont pas besoin.
+    """
+    from joe.web_runs import _route_tier
+
+    simple_review = Route(Intent.MODIFY, Mode.REVIEW, "codex")
+    assert _route_tier("Rename this variable", simple_review) == ("standard", "medium")
+
+    heavy_review = Route(Intent.MODIFY, Mode.REVIEW, "codex")
+    assert _route_tier("Refactor the migration", heavy_review) == ("strong", "high")
+
+    # Un consensus est réservé aux décisions conséquentes : il garde le haut.
+    consensus = Route(Intent.ANALYZE, Mode.CONSENSUS, "codex")
+    assert _route_tier("Choose between these two designs", consensus) == (
+        "strong",
+        "high",
+    )
+
+    question = Route(Intent.ANSWER, Mode.FAST, "codex")
+    assert _route_tier("What does this function return?", question) == ("light", "low")
+
+
+def test_the_heavy_markers_work_in_both_languages():
+    """Ils n'existaient qu'en français.
+
+    « implement the migration » ne déclenchait rien, « implémente la migration »
+    oui : deux utilisateurs, le même besoin, deux routages.
+    """
+    from joe.web_runs import _heavy_words
+
+    for request in ("implémente la migration", "implement the migration"):
+        assert _heavy_words(request) is True
+    for request in ("audit de sécurité", "security audit"):
+        assert _heavy_words(request) is True
+    assert _heavy_words("comment ça marche ?") is False
+    assert _heavy_words("how does this work?") is False

@@ -6,6 +6,7 @@ import subprocess
 import time
 from typing import Any
 
+from .model_tiers import choose
 from .provider_registry import get_provider_specs
 
 _cache: tuple[float, dict[str, Any]] | None = None
@@ -136,7 +137,13 @@ def select_model(provider: str, *, complex_request: bool) -> str | None:
 
 
 def select_model_tier(provider: str, tier: str) -> str | None:
-    """Map an abstract routing tier to the provider's current model catalog."""
+    """Map an abstract routing tier to the provider's current model catalog.
+
+    Le niveau se résolvait par un index : « strong » prenait le premier modèle,
+    « standard » le milieu de la liste. Sur le catalogue Claude, ce milieu tombe
+    sur le modèle le plus cher des six — plus cher que celui rendu pour
+    « strong ». Le niveau demandé n'avait aucun rapport avec le modèle obtenu.
+    """
     models = list(
         (cached_provider_capabilities() or provider_capabilities())
         .get(provider, {})
@@ -144,6 +151,11 @@ def select_model_tier(provider: str, tier: str) -> str | None:
     )
     if not models:
         return None
+    declared = choose(models, tier)
+    if declared:
+        return declared
+    # Aucun modèle classé : on garde l'ancien comportement plutôt que de
+    # deviner. Une gamme entièrement nouvelle est routée comme avant.
     if tier == "light":
         return select_model(provider, complex_request=False)
     if tier in {"strong", "long-context"}:
