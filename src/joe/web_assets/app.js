@@ -103,11 +103,19 @@ function annotateNetworkControl(controlled) {
 
 function updateProviderMenu(providers) {
   const selected = $("agent").value;
-  const items = providers.map(provider => (
-    typeof provider === "string"
+  // Une CLI absente reste visible mais inchoisissable : la masquer ferait
+  // croire que Joe ne la connaît pas, et la proposer mènerait à un choix qui
+  // ne peut pas aboutir. Le panneau des CLI dit comment l'installer.
+  const items = providers.map(provider => {
+    const item = typeof provider === "string"
       ? { id: provider, label: capitalize(provider) }
-      : provider
-  ));
+      : { ...provider };
+    if (item.available === false) {
+      item.label = `${item.label} — ${t("provider_absent")}`;
+      item.disabled = item.id !== selected;
+    }
+    return item;
+  });
   setOptions(
     $("agent"),
     [{ id: "", label: t("automatic") }, ...items]
@@ -608,9 +616,12 @@ function providerRow(provider, interactive) {
     box.type = "checkbox";
     box.checked = provider.enabled !== false;
     box.addEventListener("change", () => setProviderEnabled(provider.provider, box.checked));
+    const knob = document.createElement("span");
+    knob.className = "provider-switch";
+    knob.setAttribute("aria-hidden", "true");
     const text = document.createElement("span");
     text.textContent = t("provider_use");
-    choice.append(box, text);
+    choice.append(box, knob, text);
     row.appendChild(choice);
   }
   const install = provider.install || {};
@@ -771,6 +782,7 @@ function refreshSelectMenu(select) {
     item.setAttribute("role", "option");
     item.setAttribute("aria-selected", String(option.value === select.value));
     item.textContent = option.textContent;
+    item.disabled = option.disabled;
     item.onclick = event => {
       event.preventDefault();
       event.stopPropagation();
@@ -1013,6 +1025,7 @@ function addOptions(select, items) {
     const option = document.createElement("option");
     option.value = item.id;
     option.textContent = item.label || item.id;
+    option.disabled = Boolean(item.disabled);
     select.appendChild(option);
   }
 }

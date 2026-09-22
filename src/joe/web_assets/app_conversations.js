@@ -408,7 +408,11 @@ window.createJoeConversations = function createJoeConversations({
     // principale même après un rechargement, pas seulement dans le panneau Tâches.
     attachPlanControls(conversationId, lastAssistantBubble);
     if (!conversation.messages.length) {
-      $("messages").innerHTML = `<div class="empty-state"><span class="empty-mark">J</span><h3>${tr("new_conversation")}</h3></div>`;
+      // Le même écran vide que celui du document, mot pour mot. Il en existait
+      // un second, réduit au titre, qui écrasait le premier une fraction de
+      // seconde après l'ouverture : la seule phrase qui explique quoi faire
+      // disparaissait au moment précis où elle servait.
+      $("messages").innerHTML = `<div class="empty-state"><span class="empty-mark">J</span><h3>${tr("empty_title")}</h3><p>${tr("empty_text")}</p></div>`;
     }
     const conversationViewport = document.querySelector(".conversation");
     if (requestedMessage) {

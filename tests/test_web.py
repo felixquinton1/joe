@@ -98,7 +98,13 @@ def test_web_status_and_assets(tmp_path, monkeypatch):
         )
         assert "joe/backups" in payload["conversation_backup"].replace("\\", "/")
         assert "codex" in payload["providers"]
-        assert {"id": "codex", "label": "Codex"} in payload["provider_catalog"]
+        codex = next(
+            item for item in payload["provider_catalog"] if item["id"] == "codex"
+        )
+        assert codex["label"] == "Codex"
+        # Le menu Agent lit ce catalogue : sans cette marque, il proposait un
+        # agent que le panneau des CLI déclarait absent au même moment.
+        assert "available" in codex
 
         connection.request("GET", "/app.js")
         response = connection.getresponse()
@@ -613,7 +619,10 @@ def test_web_api_uses_the_provider_registry(tmp_path, monkeypatch):
         status = json.loads(response.read())
 
         assert "fixture" in status["providers"]
-        assert {"id": "fixture", "label": "Fixture"} in status["provider_catalog"]
+        assert any(
+            item["id"] == "fixture" and item["label"] == "Fixture"
+            for item in status["provider_catalog"]
+        )
 
         connection.request(
             "POST",
@@ -1469,3 +1478,36 @@ def test_the_interface_offers_one_permanent_place_to_manage_cli():
     assert app.count("function renderProviders(") == 1
     assert 'fetchDoctor($("providers-list")' in app
     assert 'fetchDoctor($("doctor-status")' in app
+
+
+def test_the_agent_menu_never_offers_a_cli_joe_cannot_run():
+    """Le panneau disait « non détectée » pendant que le menu la proposait.
+
+    Deux affirmations contraires sur le même écran, et un choix qui ne pouvait
+    pas aboutir. Le menu lit maintenant la même détection que le panneau.
+    """
+    app = (
+        Path(__file__).resolve().parent.parent
+        / "src" / "joe" / "web_assets" / "app.js"
+    ).read_text(encoding="utf-8")
+
+    assert 'item.available === false' in app
+    assert 'item.disabled = item.id !== selected' in app
+    # Le menu déroulant maison doit honorer l'état, sinon le clic passe quand même.
+    assert "item.disabled = option.disabled;" in app
+    assert "option.disabled = Boolean(item.disabled);" in app
+
+
+def test_an_empty_conversation_keeps_explaining_what_to_do():
+    """Deux écrans vides coexistaient, et le second écrasait le premier.
+
+    La seule phrase qui explique quoi faire disparaissait une fraction de
+    seconde après l'ouverture — au moment précis où elle sert.
+    """
+    assets = Path(__file__).resolve().parent.parent / "src" / "joe" / "web_assets"
+    page = (assets / "index.html").read_text(encoding="utf-8")
+    conversations = (assets / "app_conversations.js").read_text(encoding="utf-8")
+
+    assert 'data-i18n="empty_title"' in page and 'data-i18n="empty_text"' in page
+    assert 'tr("empty_title")' in conversations
+    assert 'tr("empty_text")' in conversations

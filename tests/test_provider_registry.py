@@ -22,4 +22,8 @@ def test_registry_extension_reaches_cli_engine_and_capabilities(monkeypatch):
     assert provider_registry.get_provider_catalog()[-1] == {
         "id": "fixture",
         "label": "Fixture",
+        "available": True,
     }
+    # Sans connaître ce qui est détecté, le catalogue ne présume rien ;
+    # l'interface a besoin de la marque pour ne pas proposer l'impossible.
+    assert provider_registry.get_provider_catalog(set())[-1]["available"] is False

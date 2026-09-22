@@ -202,9 +202,22 @@ def get_provider_names() -> tuple[str, ...]:
     return tuple(provider.name for provider in PROVIDERS)
 
 
-def get_provider_catalog() -> tuple[dict[str, str], ...]:
+def get_provider_catalog(
+    available: set[str] | None = None,
+) -> tuple[dict[str, object], ...]:
+    """Le catalogue, et ce que Joe peut réellement lancer.
+
+    Sans cette marque, l'interface proposait un agent que le panneau des CLI
+    déclarait absent dans la même fenêtre : deux affirmations contraires sur le
+    même écran, et un choix qui ne pouvait pas aboutir.
+    """
     return tuple(
-        {"id": provider.name, "label": provider.label} for provider in PROVIDERS
+        {
+            "id": provider.name,
+            "label": provider.label,
+            "available": available is None or provider.name in available,
+        }
+        for provider in PROVIDERS
     )
 
 

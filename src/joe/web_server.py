@@ -18,6 +18,7 @@ from .autonomous_builder import parse_autonomous_request
 from .conversations import FREE_PROJECT_ID
 from .doctor import doctor_report
 from .provider_choice import set_disabled
+from .providers import active_providers
 from .files import MAX_FILE_BYTES
 from .models import Mode
 from .http_utils import RequestBodyError, read_json_body, validate_bind
@@ -141,7 +142,7 @@ class Handler(BaseHTTPRequestHandler):
             "version": __version__,
             "api_version": API_VERSION,
             "providers": get_provider_names(),
-            "provider_catalog": get_provider_catalog(),
+            "provider_catalog": get_provider_catalog(set(active_providers())),
             "modes": [item.value for item in Mode],
             "auth_required": self.server.auth.enabled,
             "network_control_providers": list(NETWORK_CONTROLLED_PROVIDERS),
