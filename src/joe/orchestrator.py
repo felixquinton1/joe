@@ -115,7 +115,10 @@ class Orchestrator:
         self.providers = providers or active_providers(
             additional_roots, remote_access, mcp_tools
         )
-        self.router = router or Router()
+        # Le routeur doit connaitre ce qui est lancable : sinon il nomme un
+        # fournisseur absent, et les modes a deux intervenants echouent faute
+        # de second.
+        self.router = router or Router(frozenset(self.providers))
 
     def plan(
         self,

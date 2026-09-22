@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 
 from .models import Intent, Mode, Route
-from .provider_registry import counterpart, get_provider_names
+from .provider_registry import counterpart, get_provider_names, get_provider_spec
 
 MODIFY_WORDS = {
     "ajoute", "ajouter", "change", "changer", "corrige", "corriger", "crée",
@@ -219,6 +219,52 @@ def _intent_text(text: str) -> tuple[str, bool]:
 
 
 class Router:
+    """Choisit une intention, un workflow et un fournisseur.
+
+    `available` dit ce qui est reellement lancable. Sans lui, le routeur
+    nommait un fournisseur absent — codex par defaut sur une demande de code —
+    et laissait le repli rattraper la situation. Deux consequences : l'interface
+    annoncait un agent que la machine n'a pas, et surtout les modes a deux
+    intervenants echouaient franchement, parce que la seconde etape ne trouvait
+    personne. Une machine avec une seule CLI ne pouvait donc ni relire ni
+    arbitrer.
+    """
+
+    def __init__(self, available: frozenset[str] | None = None):
+        self.available = available
+
+    def _usable(self, name: str | None) -> str | None:
+        """Le fournisseur demande, ou le premier de ses replis qui existe."""
+        if not name or self.available is None or name in self.available:
+            return name
+        for candidate in get_provider_spec(name).fallbacks:
+            if candidate in self.available:
+                return candidate
+        return name
+
+    def _fit(
+        self, intent: Intent, mode: Mode, primary: str, reviewer: str | None
+    ) -> tuple[Mode, str, str | None, str]:
+        """Ajuster la decision a ce que la machine peut reellement tenir."""
+        if self.available is None:
+            return mode, primary, reviewer, ""
+        primary = self._usable(primary) or primary
+        if reviewer and reviewer not in self.available:
+            peers = get_provider_spec(primary).reviewer_peers
+            reviewer = next(
+                (peer for peer in peers if peer in self.available and peer != primary),
+                None,
+            )
+        seconds = [name for name in self.available if name != primary]
+        if mode in (Mode.REVIEW, Mode.CONSENSUS) and not seconds:
+            # Relire ou arbitrer demande un second intervenant. Sans lui, le
+            # run echouait au lieu de repondre : mieux vaut une reponse simple
+            # annoncee comme telle.
+            return Mode.FAST, primary, None, "; un seul fournisseur disponible"
+        if reviewer is None and mode is Mode.REVIEW and seconds:
+            reviewer = seconds[0]
+        return mode, primary, reviewer, ""
+
     def route(
         self,
         request: str,
@@ -349,4 +395,5 @@ class Router:
                 else ""
             )
         )
-        return Route(intent, mode, primary, reviewer, reason)
+        mode, primary, reviewer, adjusted = self._fit(intent, mode, primary, reviewer)
+        return Route(intent, mode, primary, reviewer, reason + adjusted)
