@@ -16,6 +16,7 @@ from . import __version__
 from .models import Mode
 from .orchestrator import OrchestrationError, Orchestrator
 from .provider_registry import get_provider_names
+from .prompt_language import request_language
 from .routing import resolve_route
 from .route_classifier import classify_request
 from .capabilities import select_model_tier
@@ -188,6 +189,7 @@ def _handle(
                 else None
             ),
             effort=classification.effort if classification else None,
+            language=request_language(request),
         )
     except OrchestrationError as exc:
         print(f"joe: {exc}", file=sys.stderr)

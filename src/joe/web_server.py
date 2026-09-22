@@ -23,6 +23,7 @@ from .files import MAX_FILE_BYTES
 from .models import Mode
 from .http_utils import RequestBodyError, read_json_body, validate_bind
 from .provider_registry import get_provider_catalog, get_provider_names
+from .prompt_language import request_language
 from .providers import NETWORK_CONTROLLED_PROVIDERS
 from .routes import Route, resolve
 from .skills import (
@@ -671,6 +672,7 @@ class Handler(BaseHTTPRequestHandler):
             language = str(payload.get("language", "fr")).strip().lower()
             if language not in {"fr", "en"}:
                 raise ValueError("invalid language")
+            language = request_language(request, language)
             execution_mode = str(payload.get("execution_mode", "")).strip() or None
             attachments = payload.get("attachments") or []
             if (

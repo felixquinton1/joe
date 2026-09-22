@@ -6,6 +6,15 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-09-22
+
+### Fixed
+
+- Answers follow the language of the current request instead of inheriting the
+  interface language. Explicit requests such as “answer in French” still take
+  precedence, while short ambiguous technical prompts use the interface as a
+  fallback.
+
 ## [1.2.0] — 2026-09-22
 
 ### Added

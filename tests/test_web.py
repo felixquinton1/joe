@@ -20,8 +20,8 @@ from joe.web import (
     build_quota_notice,
 )
 from joe.http_utils import MAX_JSON_BODY_BYTES, validate_bind
-from joe.prompt_language import response_language
-from joe.web_runs import _resolve_execution_mode, _run_summary
+from joe.prompt_language import request_language, response_language
+from joe.web_runs import RunDecision, _resolve_execution_mode, _run_summary
 from joe.web_server import API_VERSION
 
 
@@ -1359,6 +1359,60 @@ def test_run_language_instruction_covers_all_workflow_stages():
     assert "plans, reviews, consensus stages" in english
     assert "Réponds à l'utilisateur en français" in french
     assert "étapes de consensus" in french
+
+
+@pytest.mark.parametrize(
+    ("prompt_text", "interface", "expected"),
+    [
+        ("Parle-moi de LimiX 2, le nouveau modèle tabulaire", "en", "fr"),
+        ("Tell me about LimiX 2, the new tabular model", "fr", "en"),
+        ("pytest -q", "en", "en"),
+        ("Réponds en anglais : parle-moi de ce modèle", "fr", "en"),
+        ("Answer in French: explain this model", "en", "fr"),
+    ],
+)
+def test_the_request_language_is_independent_from_the_interface(
+    prompt_text, interface, expected
+):
+    assert request_language(prompt_text, interface) == expected
+
+
+def test_web_sends_the_request_language_to_the_run(tmp_path, monkeypatch):
+    server, thread = start_server(tmp_path)
+    conversation = server.manager.conversations.create("main")
+    captured = {}
+    decision = RunDecision(
+        route=Route(Intent.ANSWER, Mode.FAST, "codex"),
+        execution_mode="read-only",
+    )
+    monkeypatch.setattr(server.manager, "decide", lambda *args, **kwargs: decision)
+    monkeypatch.setattr(
+        server.manager,
+        "start",
+        lambda *args, **kwargs: captured.update(kwargs)
+        or SimpleNamespace(run_id="language-test"),
+    )
+    try:
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/api/runs",
+            body=json.dumps(
+                {
+                    "request": "Parle-moi du nouveau modèle tabulaire",
+                    "conversation_id": conversation["id"],
+                    "language": "en",
+                }
+            ),
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        response.read()
+        assert response.status == 202
+        assert captured["language"] == "fr"
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
 
 
 def test_the_server_answers_on_both_loopback_families(tmp_path):

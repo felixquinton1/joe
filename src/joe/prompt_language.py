@@ -2,16 +2,59 @@
 
 Les consignes de comportement envoyées aux fournisseurs sont rédigées en
 anglais ; seules les phrases que l'utilisateur lira vraiment suivent la langue
-choisie dans Joe Web. Le mélange précédent — une organisation de réponse
-rédigée en français, un exemple de question en français, un « nous » cité dans
-un prompt anglais — pesait plus lourd que la consigne de langue : une interface
-réglée sur l'anglais recevait des réponses en français.
+de sa demande. La langue de l'interface sert uniquement de repli pour un prompt
+technique ambigu. Le mélange précédent — une organisation de réponse rédigée
+en français, un exemple de question en français, un « nous » cité dans un
+prompt anglais — pesait plus lourd que la consigne finale.
 """
 
 from __future__ import annotations
 
+import re
+
 SUPPORTED = ("fr", "en")
 DEFAULT_LANGUAGE = "fr"
+
+_FRENCH_WORDS = {
+    "avec", "ce", "cette", "comment", "dans", "de", "des", "du",
+    "est", "explique", "fais", "faire", "je", "la", "le", "les",
+    "modèle", "moi", "nouveau", "parle", "peux", "pour", "pourquoi",
+    "quelle", "quelles", "quels", "sont", "sur", "tu", "une", "vous",
+}
+_ENGLISH_WORDS = {
+    "a", "an", "and", "are", "can", "could", "explain", "for", "how",
+    "in", "is", "me", "model", "new", "of", "on", "or", "please",
+    "should", "tell", "the", "this", "to", "what", "why", "with", "you",
+}
+
+
+def request_language(request: str, fallback: str = DEFAULT_LANGUAGE) -> str:
+    """Choose the answer language without coupling it to the interface.
+
+    The UI language remains a useful fallback for short technical fragments,
+    paths, or code. A natural-language request, however, should be answered in
+    the language in which it was written. Explicit instructions win over both.
+    """
+    text = str(request or "").casefold()
+    if re.search(r"\b(?:réponds?|reponds?)\s+en\s+anglais\b", text):
+        return "en"
+    if re.search(r"\b(?:answer|respond)\s+(?:to\s+me\s+)?in\s+french\b", text):
+        return "fr"
+    if re.search(r"\b(?:réponds?|reponds?)\s+en\s+français\b", text):
+        return "fr"
+    if re.search(r"\b(?:answer|respond)\s+(?:to\s+me\s+)?in\s+english\b", text):
+        return "en"
+
+    words = re.findall(r"[a-zà-öø-ÿ]+", text)
+    french = sum(word in _FRENCH_WORDS for word in words)
+    english = sum(word in _ENGLISH_WORDS for word in words)
+    if re.search(r"[àâçéèêëîïôùûüÿœ]", text):
+        french += 2
+    if french > english:
+        return "fr"
+    if english > french:
+        return "en"
+    return normalize(fallback)
 
 
 def normalize(language: str | None) -> str:
