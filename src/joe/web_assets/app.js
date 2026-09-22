@@ -2069,6 +2069,13 @@ $("save-automation").onclick = event => automation.save(event).catch(
 $("start-autonomous-campaign").onclick = () => automation.startCampaign().catch(
   error => window.alert(error.message)
 );
+$("recheck-onboarding").onclick = event => {
+  // On installe une CLI dans un terminal, cet écran ouvert : sans ce bouton
+  // il faudrait fermer l'accueil pour constater qu'elle est arrivée.
+  event.preventDefault();
+  fetchDoctor($("doctor-status"), { interactive: true });
+};
+
 $("open-providers").onclick = () => {
   $("preferences-dialog").close();
   openProviders();
