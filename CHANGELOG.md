@@ -14,6 +14,9 @@ All notable changes to Joe are documented here. The format follows
   interface language. Explicit requests such as “answer in French” still take
   precedence, while short ambiguous technical prompts use the interface as a
   fallback.
+- The first-run AI CLI setup opens independently from conversations, tasks and
+  automation loading. Its renewed browser marker also shows it once to users
+  whose earlier local state incorrectly skipped the onboarding.
 
 ## [1.2.0] — 2026-09-22
 

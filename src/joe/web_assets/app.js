@@ -755,8 +755,10 @@ function openSettings(pane = "conversations") {
   showSettingsPane(pane);
 }
 
+const ONBOARDING_STORAGE_KEY = "joe-onboarded-v2";
+
 async function loadDoctor() {
-  if (window.localStorage.getItem("joe-onboarded-v1")) return;
+  if (window.localStorage.getItem(ONBOARDING_STORAGE_KEY)) return;
   $("onboarding-dialog").showModal();
   await fetchDoctor($("doctor-status"), { interactive: true });
 }
@@ -2103,7 +2105,7 @@ $("composer").addEventListener("drop", async event => {
 });
 $("refresh-files").onclick = () => loadFiles().catch(() => {});
 $("close-onboarding").onclick = () => {
-  window.localStorage.setItem("joe-onboarded-v1", "1");
+  window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "1");
 };
 window.addEventListener("joe:conversation-selected", () => {
   selectedFileIds.clear();
@@ -2352,10 +2354,13 @@ function reportStartupFailure(error) {
 
 window.JoeAuth.pairBrowser()
   .then(() => {
+    // L'accueil des CLI ne dépend pas du chargement des conversations,
+    // tâches ou automatisations. Une erreur dans l'un de ces panneaux ne doit
+    // jamais priver une nouvelle installation de son parcours de démarrage.
+    loadDoctor().catch(reportStartupFailure);
     Promise.all([loadStatus(), loadActiveRuns(), loadTasks(), automation.load()])
       .then(() => loadConversations())
       .then(connectActiveRuns)
-      .then(loadDoctor)
       .catch(reportStartupFailure);
 
     loadCapabilities().catch(() => {

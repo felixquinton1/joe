@@ -76,6 +76,19 @@ def test_the_page_notices_when_the_server_serves_another_history():
     assert "loadStatus()" in app.split("setInterval")[-1]
 
 
+def test_first_run_cli_onboarding_does_not_depend_on_other_panels():
+    """A broken conversation/task load must not hide first-run CLI setup."""
+    app = (
+        Path(__file__).resolve().parent.parent
+        / "src" / "joe" / "web_assets" / "app.js"
+    ).read_text(encoding="utf-8")
+
+    startup = app.split("window.JoeAuth.pairBrowser()", 1)[1]
+    assert 'const ONBOARDING_STORAGE_KEY = "joe-onboarded-v2"' in app
+    assert "loadDoctor().catch(reportStartupFailure);" in startup
+    assert ".then(loadDoctor)" not in startup
+
+
 def test_web_status_and_assets(tmp_path, monkeypatch):
     usage_calls = []
     monkeypatch.setattr(
