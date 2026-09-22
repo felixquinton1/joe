@@ -687,14 +687,21 @@ class RunManager:
         )
         if classification is not None:
             effort = effort or classification.effort
-            model = model or select_model_tier(route.primary, classification.model_tier)
+            model = model or select_model_tier(
+                route.primary,
+                _tier_under_quota_pressure(
+                    route.primary, classification.model_tier
+                ),
+            )
         else:
             # Une seule échelle, quel que soit le mode : sans elle, un run non
             # FAST ne recevait ni modèle ni effort et partait sur le défaut du
             # fournisseur, ou sur le modèle phare via `_complex_request`.
             tier, default_effort = _route_tier(request, route)
             effort = effort or default_effort
-            model = model or select_model_tier(route.primary, tier)
+            model = model or select_model_tier(
+                route.primary, _tier_under_quota_pressure(route.primary, tier)
+            )
         if "health-check" in route.reason:
             effort = effort or "low"
             if route.primary == "gemini":
@@ -3018,6 +3025,46 @@ def _complex_request(request: str, route: Route) -> bool:
         or route.intent is Intent.ANALYZE
         and _heavy_words(request)
     )
+
+
+# Sous ce reste de fenetre, on cesse de depenser le haut de gamme. Le seuil est
+# volontairement large : il vaut mieux repondre un cran plus bas que de vider la
+# reserve, puis attendre un rechargement pour la question suivante.
+QUOTA_PRESSURE_PERCENT = 20.0
+
+_TIER_LADDER = ("light", "standard", "strong")
+
+
+def _remaining_percent(provider: str) -> float | None:
+    """Le plus petit reste connu parmi les fenetres de ce fournisseur."""
+    for item in usage_status(force=False):
+        if str(item.get("provider")) != provider:
+            continue
+        valeurs = [
+            float(window["remaining_percent"])
+            for window in item.get("windows") or []
+            if isinstance(window.get("remaining_percent"), (int, float))
+        ]
+        return min(valeurs) if valeurs else None
+    return None
+
+
+def _tier_under_quota_pressure(provider: str, tier: str) -> str:
+    """Descendre d'un cran quand la reserve du fournisseur s'epuise.
+
+    L'information etait lue depuis longtemps pour choisir un fournisseur, mais
+    jamais pour choisir la taille du modele : une question triviale pouvait
+    consommer la derniere tranche d'Opus, indisponible ensuite pour ce qui en
+    avait besoin.
+
+    Un fournisseur qui ne publie aucun quota n'est pas presume tendu.
+    """
+    if tier not in _TIER_LADDER or tier == "light":
+        return tier
+    remaining = _remaining_percent(provider)
+    if remaining is None or remaining >= QUOTA_PRESSURE_PERCENT:
+        return tier
+    return _TIER_LADDER[_TIER_LADDER.index(tier) - 1]
 
 
 def _route_tier(request: str, route: Route) -> tuple[str, str]:

@@ -29,6 +29,31 @@ REPORT_RULES = (
 )
 
 
+# Ce que chaque etape merite, et non ce que la demande globale merite. Une
+# revue croisee lit une proposition et la critique : c'est plus leger que de
+# la produire. Jusqu'ici une seule etape recevait un modele — la proposition
+# du fournisseur choisi — et toutes les autres partaient sur le defaut de leur
+# CLI, que Joe ne controle pas et qui est souvent le modele phare.
+STAGE_TIERS = {
+    "proposal": "strong",
+    "cross_review": "standard",
+    "synthesis": "strong",
+    "implementation": None,   # suit le niveau de la demande
+    "review": "standard",
+    "correction": None,       # meme niveau que l'implementation
+}
+
+
+def stage_model(orchestrator, provider: str, stage: str, fallback: str | None) -> str | None:
+    """Le modele d'une etape interne, ou `fallback` si l'etape suit la demande."""
+    tier = STAGE_TIERS.get(stage)
+    if not tier:
+        return fallback
+    from .capabilities import select_model_tier
+
+    return select_model_tier(provider, tier) or fallback
+
+
 def clean_report(text: str) -> str:
     """Remove only generic internal-validation refusal sections from agent prose."""
     if not text:
@@ -174,6 +199,7 @@ def run_review_workflow(
         Intent.ANALYZE,
         results,
         exclude={primary.provider},
+        model=stage_model(orchestrator, reviewer, "review", None),
         on_event=on_event,
         cancel_event=cancel_event,
         respect_cooldown=True,
@@ -267,7 +293,12 @@ def run_consensus_workflow(
                 proposal_prompt,
                 Intent.ANALYZE,
                 {other},
-                model if selected_provider == provider else None,
+                stage_model(
+                    orchestrator,
+                    provider,
+                    "proposal",
+                    model if selected_provider == provider else None,
+                ),
                 effort if selected_provider == provider else None,
                 None,
                 cancel_event,
@@ -337,7 +368,7 @@ def run_consensus_workflow(
                 ),
                 Intent.ANALYZE,
                 {other},
-                None,
+                stage_model(orchestrator, provider, "cross_review", None),
                 None,
                 None,
                 cancel_event,
@@ -447,6 +478,7 @@ def run_consensus_workflow(
         synthesis_prompt,
         Intent.ANALYZE,
         results,
+        model=stage_model(orchestrator, arbiter, "synthesis", None),
         on_event=on_event,
         cancel_event=cancel_event,
         respect_cooldown=True,

@@ -33,6 +33,14 @@ All notable changes to Joe are documented here. The format follows
 - The user guide and the HTTP/SSE API contract are written in English, like the
   rest of the public surface. The README linked to them as "User guide" and
   "API contract" while both were still French.
+- Each workflow stage now gets the tier it deserves. A cross-review reads a
+  proposal and criticises it, which is lighter than producing one. Only one
+  stage received a model at all — the chosen provider's proposal — while every
+  other ran on its CLI's own default, which Joe does not control.
+- A shrinking provider quota steps the tier down instead of spending the last
+  slice of the top model. The remaining headroom was already read to pick a
+  provider, never to pick how large a model to ask for. A provider that
+  publishes no quota is not presumed to be tight.
 - The routing tier now decides which model runs. It was resolved by position in
   the provider's list, so `standard` returned the middle entry — on the Claude
   catalog, the most expensive model of the six, dearer than the one returned
