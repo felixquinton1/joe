@@ -751,7 +751,11 @@ class RunManager:
             workspace = run.workspace or workspace
             conversation = self.conversations.get(run.conversation_id) or {}
             project_id = str(conversation.get("project_id", FREE_PROJECT_ID))
-            attachments = self.files.resolve(run.attachments, project_id)
+            attachments = _without_live_duplicates(
+                self.files.resolve(run.attachments, project_id),
+                run.request,
+                workspace,
+            )
             attachment_roots = tuple(
                 sorted(
                     {Path(item["path"]).parent for item in attachments},
@@ -2941,6 +2945,32 @@ def _heavy_words(request: str) -> bool:
 # Rien n'est bloqué en amont : une commande personnalisée fonctionne, elle,
 # parfaitement, et refuser `/review` ou `/init` au prétexte du nom aurait cassé
 # ce qui marche. On explique donc ce qu'on a observé, pas ce qu'on avait prédit.
+def _without_live_duplicates(
+    attachments: list[dict[str, Any]],
+    request: str,
+    workspace: Path,
+) -> list[dict[str, Any]]:
+    """Retirer les pièces jointes dont la CLI lira elle-même l'original.
+
+    Écrire `@fichier` joint la copie que Joe détient dans sa bibliothèque, et la
+    CLI développe de son côté le chemin qu'elle reconnaît : le même fichier
+    partait deux fois. Pire que du contexte gaspillé — la copie de Joe est un
+    instantané de son import, donc le modèle recevait deux versions de « ce
+    fichier » sans pouvoir dire laquelle est à jour.
+
+    L'original vivant l'emporte. Une pièce jointe choisie au menu ne porte
+    aucune mention dans le texte : elle est conservée, même homonyme.
+    """
+    kept = []
+    for item in attachments:
+        name = str(item.get("name", ""))
+        mentioned = bool(name) and f"@{name}" in request
+        if mentioned and (workspace / name).is_file():
+            continue
+        kept.append(item)
+    return kept
+
+
 def _leading_slash_command(request: str) -> str:
     stripped = request.strip()
     if not stripped.startswith("/"):

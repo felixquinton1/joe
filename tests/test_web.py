@@ -1668,3 +1668,28 @@ def test_a_custom_command_is_never_refused_on_the_strength_of_its_name():
     note = _empty_answer_note("/review", "en")
     assert "produced no output" in note
     assert "does work" in note
+
+
+def test_a_mentioned_project_file_is_not_sent_twice(tmp_path):
+    """`@fichier` partait deux fois : la copie de Joe et l'original.
+
+    Pire que du contexte gaspille : la copie est un instantane de son import,
+    donc le modele recevait deux versions de « ce fichier » sans pouvoir dire
+    laquelle est a jour.
+    """
+    from joe.web_runs import _without_live_duplicates
+
+    (tmp_path / "README.md").write_text("vivant", encoding="utf-8")
+    piece = {"name": "README.md", "path": str(tmp_path / "copie.md")}
+
+    # Mentionne et present dans le projet : la CLI lira l'original.
+    assert _without_live_duplicates([piece], "resume @README.md", tmp_path) == []
+
+    # Mentionne mais absent du projet : la copie de Joe est la seule source.
+    ailleurs = {"name": "rapport.pdf", "path": str(tmp_path / "x.pdf")}
+    assert _without_live_duplicates([ailleurs], "lis @rapport.pdf", tmp_path) == [
+        ailleurs
+    ]
+
+    # Choisi au menu, sans mention : conserve meme homonyme.
+    assert _without_live_duplicates([piece], "resume le projet", tmp_path) == [piece]
