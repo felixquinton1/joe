@@ -100,3 +100,22 @@ def test_no_message_label_is_written_in_the_code():
             if re.search(r"addMessage\(\s*[\"'`]", line):
                 offenders.append(f"{path.name}:{number}")
     assert not offenders, "étiquettes écrites en dur : " + ", ".join(offenders)
+
+
+def test_no_visible_label_is_written_in_french_in_the_code():
+    """« Autre identifiant… » s'affichait en anglais aussi.
+
+    Une chaîne passée en `label:` arrive telle quelle dans un menu : elle doit
+    venir du dictionnaire, comme le reste.
+    """
+    accented = re.compile(r"""label:\s*["'`][^"'`]*[éèêàùôûçœÉÈÀ]""")
+    offenders = []
+    for path in sorted(ASSETS.glob("*.js")):
+        if path.name == "i18n.js":
+            continue
+        for number, line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            if accented.search(line):
+                offenders.append(f"{path.name}:{number}")
+    assert not offenders, "libellés écrits en dur : " + ", ".join(offenders)

@@ -989,7 +989,9 @@ function updateCapabilityMenus() {
   }
   $("model").disabled = false;
   addOptions($("model"), capability.models || []);
-  addOptions($("model"), [{ id: "__custom__", label: "Autre identifiant…" }]);
+  // Échappatoire : la CLI accepte parfois un modèle que Joe ne liste pas
+  // encore. Le libellé était écrit en dur, donc en français même en anglais.
+  addOptions($("model"), [{ id: "__custom__", label: t("model_by_id") }]);
   if (previous && [...$("model").options].some(option => option.value === previous)) {
     $("model").value = previous;
   }
