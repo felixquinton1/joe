@@ -6,6 +6,15 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A machine with a single provider CLI works. The router picked a provider from
+  the request alone — codex for anything code-shaped — whether or not it was
+  installed, so the interface announced an agent the machine did not have. The
+  fallback hid that for one-step runs, but REVIEW and CONSENSUS failed outright
+  on "All providers failed", because their second stage found nobody. Those
+  modes now degrade to a single-agent answer, and say so.
+
 ## [1.2.1] — 2026-09-22
 
 ### Fixed
