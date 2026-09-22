@@ -91,6 +91,21 @@ class ProviderSpec:
     install_windows: str = ""
     """Commande d'installation documentée sur Windows. Vide = celle de POSIX."""
 
+    deprecated_since: str = ""
+    """Date a laquelle la CLI a cesse de servir le grand public, si elle l'a fait.
+
+    Ce n'est pas une suppression : Gemini CLI continue de repondre aux licences
+    entreprise. Joe garde donc le fournisseur, cesse seulement de le preferer,
+    et le dit — sinon un utilisateur grand public voit des echecs sans cause
+    apparente.
+    """
+
+    successor: str = ""
+    """Nom de la CLI qui la remplace."""
+
+    successor_url: str = ""
+    """Ou se la procurer."""
+
     requires_node: str = ""
     """Version majeure de Node exigee par la commande d'installation npm.
 
@@ -122,7 +137,7 @@ PROVIDERS = (
         "Codex",
         streams_json=True,
         reviewer_peers=("claude", "cursor-agent"),
-        fallbacks=("gemini", "claude", "copilot", "cursor-agent"),
+        fallbacks=("claude", "copilot", "cursor-agent", "gemini"),
         # 0.147.0 rejetait `--search`, que Joe passe en accès distant : la
         # borne annoncée décrivait donc une version où les runs échouaient.
         minimum_version="0.155.0",
@@ -138,7 +153,7 @@ PROVIDERS = (
         "Claude",
         streams_json=True,
         reviewer_peers=("codex", "cursor-agent"),
-        fallbacks=("gemini", "codex", "copilot", "cursor-agent"),
+        fallbacks=("codex", "copilot", "cursor-agent", "gemini"),
         minimum_version="2.1.197",
         exposes_usage=True,
         # L'installation par npm est dépréciée en amont : l'installeur natif
@@ -162,8 +177,13 @@ PROVIDERS = (
         fallbacks=("codex", "claude", "copilot"),
         minimum_version="0.52.0",
         exposes_usage=True,
-        # Rarement dans la paire par défaut, donc rarement juge et partie.
-        arbitration_priority=1,
+        # Etait l'arbitre prefere, parce que rarement juge et partie. Depuis le
+        # 18 juin 2026 la CLI ne sert plus les comptes grand public : en faire
+        # l'arbitre par defaut revenait a choisir celui qui echouera.
+        arbitration_priority=5,
+        deprecated_since="2026-06-18",
+        successor="Antigravity CLI",
+        successor_url="https://antigravity.google",
         install_posix="npm install -g @google/gemini-cli",
         requires_node="20",
         install_windows="npm install -g @google/gemini-cli",
@@ -174,7 +194,7 @@ PROVIDERS = (
         "copilot",
         "Copilot",
         reviewer_peers=("codex", "claude"),
-        fallbacks=("gemini", "codex", "claude"),
+        fallbacks=("codex", "claude", "gemini"),
         minimum_version="1.0.75",
         install_posix="npm install -g @github/copilot",
         requires_node="22",

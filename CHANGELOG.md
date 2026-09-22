@@ -6,7 +6,20 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Gemini is no longer a default. Its CLI stopped serving consumer accounts on
+  18 June 2026, superseded by Antigravity CLI, yet it was the first fallback of
+  three providers and the preferred consensus arbiter — defaults that named the
+  provider most likely to fail. An enterprise licence still works, so Gemini
+  stays available, last in line, and both the panel and `joe doctor` say what
+  happened.
+
 ### Fixed
+
+- The Agent menu follows a language change. Its "Automatic" entry is built in
+  JavaScript and carries no translation marker, so the document-wide
+  translation never reached it and nothing rebuilt that menu.
 
 - A machine with a single provider CLI works. The router picked a provider from
   the request alone — codex for anything code-shaped — whether or not it was

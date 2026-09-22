@@ -43,6 +43,11 @@ function applyLanguage(value) {
     $("conversation-title").textContent = t("accomplish");
   }
   updateCapabilityMenus();
+  // L'option « Automatique » du menu Agent est construite en JavaScript : elle
+  // ne porte pas de balise `data-i18n`, donc la traduction du document ne
+  // l'atteint pas. Elle restait dans la langue precedente pendant que tout le
+  // reste changeait. On rebatit le menu avant de repeindre.
+  updateProviderMenu(state.providerCatalog || []);
   for (const select of document.querySelectorAll("select")) {
     refreshSelectMenu(select);
   }
@@ -640,6 +645,28 @@ function providerRow(provider, interactive) {
     text.textContent = t("provider_use");
     choice.append(box, knob, text);
     row.appendChild(choice);
+  }
+  // Une CLI depreciee reste detectee et se laisse choisir : sans cette
+  // mention, l'utilisateur voit des echecs sans cause apparente.
+  const retired = provider.deprecated || {};
+  if (retired.since) {
+    const note = document.createElement("div");
+    note.className = "provider-retired";
+    const text = document.createElement("small");
+    text.textContent = t("provider_retired", {
+      date: retired.since,
+      successor: retired.successor || ""
+    });
+    note.appendChild(text);
+    if (retired.successor_url) {
+      const link = document.createElement("a");
+      link.href = retired.successor_url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = retired.successor || retired.successor_url;
+      note.appendChild(link);
+    }
+    row.appendChild(note);
   }
   const install = provider.install || {};
   // Personne n'installe cinq CLI : sans savoir a quoi chacune sert, choisir

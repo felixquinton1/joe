@@ -1800,3 +1800,32 @@ def test_a_missing_cli_is_guided_step_by_step():
         assert f't("{key}")' in app, key
     # Le role de chaque fournisseur aide a choisir laquelle installer.
     assert "provider_purpose_" in app
+
+
+def test_the_agent_menu_follows_a_language_change():
+    """« Automatique » restait dans la langue precedente.
+
+    Cette option est construite en JavaScript : elle ne porte pas de balise
+    `data-i18n`, donc la traduction du document ne l'atteignait pas, et rien ne
+    reconstruisait ce menu au changement de langue.
+    """
+    app = (
+        Path(__file__).resolve().parent.parent
+        / "src" / "joe" / "web_assets" / "app.js"
+    ).read_text(encoding="utf-8")
+
+    corps = app.split("function applyLanguage(")[1].split("\n}")[0]
+    assert "updateProviderMenu(" in corps
+    # Et la reconstruction doit preceder le repeinturage des menus dessines.
+    assert corps.index("updateProviderMenu(") < corps.index("refreshSelectMenu(select)")
+
+
+def test_a_retired_cli_says_so_where_it_is_chosen():
+    """Gemini reste installee et detectee mais ne sert plus le grand public."""
+    app = (
+        Path(__file__).resolve().parent.parent
+        / "src" / "joe" / "web_assets" / "app.js"
+    ).read_text(encoding="utf-8")
+
+    assert "provider.deprecated" in app
+    assert 't("provider_retired"' in app

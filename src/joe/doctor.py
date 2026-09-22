@@ -116,6 +116,14 @@ def doctor_report(
             # ne rattache a sa cause. Joe ne peut pas le savoir sans la lancer,
             # mais il retient un refus d'authentification deja rencontre.
             "auth_failed": (recent_failure(name) or ("", 0))[0] == "authentication",
+            # Une CLI depreciee reste installee et detectee : sans cette
+            # mention, un utilisateur grand public voit des echecs sans cause
+            # apparente, alors qu'une licence entreprise, elle, fonctionne.
+            "deprecated": {
+                "since": get_provider_spec(name).deprecated_since,
+                "successor": get_provider_spec(name).successor,
+                "successor_url": get_provider_spec(name).successor_url,
+            },
             "install": {
                 **install_hint(name, windows=windows),
                 # Le prerequis ne concerne que ce qui reste a installer :
@@ -177,6 +185,9 @@ def format_doctor(report: dict[str, Any]) -> str:
         if item.get("runtime_issue"):
             state = f"incomplete · {item['runtime_issue']}"
         version = f" · {item['version']}" if item.get("version") else ""
+        retired = item.get("deprecated") or {}
+        if retired.get("since"):
+            state += f" · retired for consumer accounts on {retired['since']}"
         disabled = "" if item.get("enabled", True) else " · turned off in Joe"
         line = f"- {label}: {state}{version}{disabled}"
         live = item.get("live")
@@ -209,6 +220,19 @@ def format_doctor(report: dict[str, Any]) -> str:
             "Joe only routes to the CLIs it can actually run. Install one and "
             "it becomes available on the next request — nothing to configure."
         )
+    for item in report["providers"]:
+        retired = item.get("deprecated") or {}
+        if not retired.get("since"):
+            continue
+        lines.append("")
+        label = item.get("label") or item["provider"]
+        lines.append(
+            f"{label} stopped serving consumer accounts on {retired['since']}. "
+            "An enterprise licence still works; otherwise use "
+            f"{retired.get('successor') or 'its successor'}."
+        )
+        if retired.get("successor_url"):
+            lines.append(f"    {retired['successor_url']}")
     if not any("live" in item for item in report["providers"]):
         lines.append("")
         lines.append("Run `joe doctor --live` to send one short real request to each.")

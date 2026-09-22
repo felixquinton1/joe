@@ -249,13 +249,18 @@ class Router:
         if self.available is None:
             return mode, primary, reviewer, ""
         primary = self._usable(primary) or primary
-        if reviewer and reviewer not in self.available:
-            peers = get_provider_spec(primary).reviewer_peers
-            reviewer = next(
-                (peer for peer in peers if peer in self.available and peer != primary),
-                None,
-            )
-        seconds = [name for name in self.available if name != primary]
+        # `sorted` plutot que l'ordre d'un ensemble : deux machines identiques
+        # doivent router pareil.
+        seconds = [name for name in sorted(self.available) if name != primary]
+        # Remplacer le primaire peut l'amener sur le fournisseur qui relisait :
+        # un relecteur qui est aussi l'auteur ne relit rien.
+        if reviewer == primary or (reviewer and reviewer not in self.available):
+            peers = [
+                peer
+                for peer in get_provider_spec(primary).reviewer_peers
+                if peer in self.available and peer != primary
+            ]
+            reviewer = peers[0] if peers else (seconds[0] if seconds else None)
         if mode in (Mode.REVIEW, Mode.CONSENSUS) and not seconds:
             # Relire ou arbitrer demande un second intervenant. Sans lui, le
             # run echouait au lieu de repondre : mieux vaut une reponse simple

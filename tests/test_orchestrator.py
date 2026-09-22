@@ -147,9 +147,12 @@ def test_failure_falls_back(tmp_path):
     response, _ = orchestrator.execute(
         "simple", Route(Intent.ANALYZE, Mode.FAST, "codex")
     )
-    assert response == "gemini response"
+    # Gemini ne sert plus les comptes grand public : il est passe en fin de
+    # chaine, donc c'est Claude qui reprend.
+    assert response == "claude response"
     assert len(providers["codex"].calls) == 1
-    assert len(providers["gemini"].calls) == 1
+    assert len(providers["claude"].calls) == 1
+    assert not providers["gemini"].calls
 
 
 def test_fallback_preserves_explicit_read_only_permission(tmp_path):
@@ -168,7 +171,8 @@ def test_fallback_preserves_explicit_read_only_permission(tmp_path):
     )
 
     assert providers["codex"].execution_modes == ["plan"]
-    assert providers["gemini"].execution_modes == ["plan"]
+    # Le repli est Claude depuis que Gemini est passe en fin de chaine.
+    assert providers["claude"].execution_modes == ["plan"]
 
 
 def test_review_uses_primary_intent_then_read_only_review(tmp_path):
@@ -198,10 +202,12 @@ def test_review_fallback_never_uses_implementation_provider(tmp_path):
         "change", Route(Intent.MODIFY, Mode.REVIEW, "codex", "claude")
     )
 
-    assert "Le détail de l’avis de Gemini reste disponible" in response
+    # Claude echoue : le relecteur de secours suit ses pairs declares, et
+    # Gemini n'est plus en tete de liste.
+    assert "reste disponible" in response
+    assert "Codex" not in response.split("Contrôle croisé")[1]
     assert len(providers["codex"].calls) == 1
     assert len(providers["claude"].calls) == 1
-    assert len(providers["gemini"].calls) == 1
 
 
 def test_review_skips_provider_in_recent_cooldown(tmp_path):
@@ -285,7 +291,8 @@ def test_consensus_is_read_only_and_uses_distinct_proposals(tmp_path):
     response, _ = orchestrator.execute(
         "important", Route(Intent.MODIFY, Mode.CONSENSUS, "codex")
     )
-    assert response == "gemini response"
+    # L'arbitre est un tiers, mais plus Gemini : il n'est plus prefere.
+    assert response in {"copilot response", "gemini response"}
     assert providers["codex"].calls
     assert providers["claude"].calls
     assert all(
@@ -335,6 +342,13 @@ def test_consensus_rejects_incomplete_synthesis_and_falls_back(tmp_path):
         "2. Synthétiser les propositions.\n\n"
         "Je commence par lire les fichiers pertinents."
     )
+    from joe.provider_registry import arbitration_order
+
+    noms = ("codex", "claude", "gemini", "copilot")
+    # Qui arbitre depend du registre, et ce classement bouge : Gemini l'etait
+    # avant d'etre depreciee. On demande donc au registre plutot que de figer
+    # un nom qui redeviendrait faux au prochain changement.
+    arbitre = arbitration_order(proposers=("codex", "claude"), eligible=noms)[0]
     providers = {
         "codex": FakeProvider("codex", responses=[
             "codex proposal", "codex review", "## Résultat\n\nConsensus complet."
@@ -342,9 +356,10 @@ def test_consensus_rejects_incomplete_synthesis_and_falls_back(tmp_path):
         "claude": FakeProvider(
             "claude", responses=["claude proposal", "claude review"]
         ),
-        "gemini": FakeProvider("gemini", responses=[incomplete]),
+        "gemini": FakeProvider("gemini"),
         "copilot": FakeProvider("copilot"),
     }
+    providers[arbitre] = FakeProvider(arbitre, responses=[incomplete])
     orchestrator = Orchestrator(tmp_path, providers=providers)
 
     response, _ = orchestrator.execute(
@@ -354,7 +369,7 @@ def test_consensus_rejects_incomplete_synthesis_and_falls_back(tmp_path):
 
     assert response.startswith("> ⚠️ **Consensus dégradé**")
     assert "Consensus complet" in response
-    assert len(providers["gemini"].calls) == 1
+    assert len(providers[arbitre].calls) == 1
     assert len(providers["codex"].calls) == 3
 
 
@@ -362,7 +377,7 @@ def test_complete_synthesis_accepts_short_finished_answer():
     assert complete_synthesis("## Résultat\n\nAccord établi. Recommandation finale : lancer A.")
 
 
-def test_consensus_uses_gemini_when_claude_quota_is_exhausted(tmp_path):
+def test_consensus_relays_an_exhausted_participant(tmp_path):
     providers = {
         "codex": FakeProvider("codex"),
         "claude": FakeProvider("claude", fail=True),
@@ -379,12 +394,22 @@ def test_consensus_uses_gemini_when_claude_quota_is_exhausted(tmp_path):
         on_event=events.append,
     )
 
+    from joe.provider_registry import get_provider_spec
+
+    # Le suppleant est le premier repli declare de Claude qui soit disponible
+    # et qui ne soit pas deja l'autre proposant : Codex propose, il ne peut pas
+    # remplacer son vis-a-vis.
+    suppleant = next(
+        name
+        for name in get_provider_spec("claude").fallbacks
+        if name in providers and name != "codex"
+    )
     assert response.startswith("> ⚠️ **Consensus dégradé**")
-    assert "Claude indisponible, relais par Gemini" in response
+    assert f"Claude indisponible, relais par {suppleant.capitalize()}" in response
     assert any(
         event.get("type") == "provider_fallback"
         and event.get("provider") == "claude"
-        and event.get("fallback") == "gemini"
+        and event.get("fallback") == suppleant
         for event in events
     )
 
@@ -411,8 +436,15 @@ def test_consensus_replaces_a_timed_out_participant(tmp_path):
         Route(Intent.ANALYZE, Mode.CONSENSUS, "codex"),
     )
 
+    from joe.provider_registry import get_provider_spec
+
+    suppleant = next(
+        name
+        for name in get_provider_spec("claude").fallbacks
+        if name in providers and name != "codex"
+    )
     assert response.startswith("> ⚠️ **Consensus dégradé**")
-    assert "Claude indisponible, relais par Gemini" in response
+    assert f"Claude indisponible, relais par {suppleant.capitalize()}" in response
 
 
 def test_consensus_still_fails_closed_on_process_error(tmp_path):

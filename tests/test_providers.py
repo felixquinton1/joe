@@ -643,8 +643,11 @@ def test_the_arbiter_prefers_a_third_party_but_never_blocks_the_consensus():
 
     proposers = ("codex", "claude")
 
-    # Un tiers passe devant les deux proposants.
-    assert arbitration_order(proposers)[0] == "gemini"
+    # Un tiers passe devant les deux proposants — mais plus Gemini, qui ne
+    # sert plus les comptes grand public depuis le 18 juin 2026 : en faire
+    # l'arbitre par defaut revenait a designer celui qui echouera.
+    assert arbitration_order(proposers)[0] not in proposers
+    assert arbitration_order(proposers)[0] != "gemini"
     assert arbitration_order(proposers, ("codex", "claude", "cursor-agent"))[0] == (
         "cursor-agent"
     )

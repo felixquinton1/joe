@@ -124,3 +124,25 @@ def test_a_generic_name_must_prove_it_is_the_right_cli(monkeypatch):
     assert resolve_executable("cursor-agent") is None
     # Le diagnostic doit pouvoir le nommer plutôt que de dire « absent ».
     assert resolve_executable("cursor-agent", unconfirmed=True) == "/venv/bin/agent"
+
+
+def test_a_retired_cli_is_no_longer_preferred():
+    """Gemini a cesse de servir les comptes grand public le 18 juin 2026.
+
+    Elle etait pourtant le premier repli de trois fournisseurs et l'arbitre
+    prefere du consensus : ces defauts designaient celui qui echouerait. Une
+    licence entreprise fonctionne toujours, donc on la garde, en dernier.
+    """
+    from joe.provider_registry import arbitration_order, get_provider_spec
+
+    gemini = get_provider_spec("gemini")
+    assert gemini.deprecated_since == "2026-06-18"
+    assert gemini.successor == "Antigravity CLI"
+    assert gemini.successor_url.startswith("https://")
+
+    for nom in ("codex", "claude", "copilot"):
+        chaine = get_provider_spec(nom).fallbacks
+        assert "gemini" in chaine, nom
+        assert chaine[-1] == "gemini", nom
+
+    assert arbitration_order(proposers=("codex", "claude"))[0] != "gemini"
