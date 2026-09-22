@@ -131,10 +131,11 @@ through. `@file` references work, and so do your own commands under
 an empty answer.
 
 MCP servers need no setup in Joe: it passes no MCP options, so each CLI loads
-its own configuration and MCP tool calls appear in the activity panel. Access
-level decides whether a tool can run — a tool that asks for approval cannot get
-it in a non-interactive call, so pre-authorise it in the CLI's own
-configuration or grant full access. See the
+its own configuration and MCP tool calls appear in the activity panel. One
+caveat, measured rather than assumed: an MCP tool always asks for explicit
+permission, and a non-interactive call has no way to grant it. Today an MCP
+tool therefore runs only under full project access, unless you pre-authorise
+its server in the CLI's own configuration. See the
 [user guide](docs/user-guide.md) for the detail.
 
 Joe discovers the models and options exposed by the installed CLIs whenever

@@ -257,15 +257,24 @@ dans `.mcp.json` ou dans ses réglages, ou pour Codex dans `~/.codex/config.toml
 est donc disponible pendant un run. Les appels d’outils MCP apparaissent dans le
 panneau d’activité, au même titre que les commandes shell.
 
-C’est le niveau d’accès qui décide si l’outil peut réellement s’exécuter, et il
-faut le savoir avant de compter sur une base de données externe :
+Reste la permission, et c’est là qu’il faut être précis avant de compter sur une
+base externe. Un outil MCP demande **toujours** une autorisation explicite, même
+pour lire. Un appel non interactif n’offre aucun canal pour la donner : la
+demande est donc refusée. Mesuré sur les trois niveaux :
 
-- **Lecture seule** : un outil MCP qui ne fait que lire fonctionne.
-- **Écriture projet** : un outil qui demande une approbation ne l’obtiendra
-  pas. Un appel non interactif n’offre aucun canal de réponse, donc la demande
-  est refusée sans que rien ne l’explique. Pré-autorise l’outil dans la
-  configuration de la CLI si tu veux l’utiliser à ce niveau.
-- **Accès complet** : tout est pré-autorisé, y compris les outils MCP.
+| Niveau d’accès du projet | Outil MCP |
+| --- | --- |
+| Lecture seule | refusé — « requested permissions […] but you haven’t granted it » |
+| Écriture projet | refusé, pour la même raison |
+| **Accès complet** | **fonctionne** |
+
+Autrement dit : aujourd’hui, un outil MCP ne s’exécute sous Joe qu’en accès
+complet. Ce n’est pas une limite de Joe mais du mode non interactif, et elle
+vaut aussi quand on appelle la CLI soi-même de cette façon.
+
+Pour l’utiliser à un niveau plus étroit, pré-autorise le serveur dans la
+configuration de la CLI — l’autorisation se donne par serveur
+(`mcp__nom-du-serveur`), pas par motif générique.
 
 Les identifiants de connexion à une base restent dans la configuration du
 serveur MCP, jamais dans Joe : il ne les voit pas et ne les enregistre pas.
