@@ -6,7 +6,7 @@ import subprocess
 import time
 from typing import Any
 
-from .model_tiers import choose
+from .model_tiers import choose, is_metered
 from .provider_registry import get_provider_specs
 
 _cache: tuple[float, dict[str, Any]] | None = None
@@ -107,10 +107,23 @@ def provider_defaults(
     return selected_model, selected_effort
 
 
+def _auto_selectable(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Ce dans quoi un choix automatique a le droit de puiser.
+
+    Un modèle facturé au jeton reste dans le catalogue — on peut le choisir à
+    la main — mais aucune bascule automatique ne doit engager une dépense hors
+    abonnement. Si tout est au jeton, on rend la liste complète plutôt que rien.
+    """
+    free = [model for model in models if not is_metered(model)]
+    return free or models
+
+
 def select_model(provider: str, *, complex_request: bool) -> str | None:
     """Choose from published capabilities without assuming model names."""
     capabilities = cached_provider_capabilities() or provider_capabilities()
-    models = list(capabilities.get(provider, {}).get("models", []))
+    models = _auto_selectable(
+        list(capabilities.get(provider, {}).get("models", []))
+    )
     if not models:
         return None
     if complex_request:
@@ -144,10 +157,12 @@ def select_model_tier(provider: str, tier: str) -> str | None:
     sur le modèle le plus cher des six — plus cher que celui rendu pour
     « strong ». Le niveau demandé n'avait aucun rapport avec le modèle obtenu.
     """
-    models = list(
-        (cached_provider_capabilities() or provider_capabilities())
-        .get(provider, {})
-        .get("models", [])
+    models = _auto_selectable(
+        list(
+            (cached_provider_capabilities() or provider_capabilities())
+            .get(provider, {})
+            .get("models", [])
+        )
     )
     if not models:
         return None

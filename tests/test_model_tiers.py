@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from joe.model_tiers import choose, model_tier
+from joe.model_tiers import choose, is_metered, model_tier
 
 
 CLAUDE = [
@@ -92,8 +92,30 @@ def test_a_heavy_request_never_falls_back_to_a_light_model():
 def test_the_declared_catalog_settles_what_a_description_cannot():
     """Fable se décrit comme le plus capable, et coûte le plus cher.
 
-    Laissé au seul texte, il disputerait la tête à Opus. La déclaration en
-    fait un dernier recours, jamais un défaut.
+    Laissé au seul texte, il disputerait la tête à Opus.
     """
     assert model_tier(CLAUDE[3]) == "strong"
     assert choose(CLAUDE, "strong") == "claude-opus-5"
+
+
+def test_a_metered_model_is_never_chosen_automatically():
+    """Facturé au jeton, hors abonnement.
+
+    Engager une dépense doit venir d'une décision, pas du mode retenu pour une
+    demande. Le modèle reste proposé au choix manuel.
+    """
+    assert is_metered(CLAUDE[3]) is True
+    assert all(not is_metered(model) for model in CODEX)
+
+    chosen = {choose(CLAUDE, tier) for tier in ("light", "standard", "strong")}
+    assert "claude-fable-5-1" not in chosen
+    # Même en haut de gamme et seul de son niveau, il n'est pas retenu.
+    assert choose([CLAUDE[3]], "strong") is None
+
+
+def test_everything_metered_still_answers_rather_than_refusing():
+    """Une gamme entièrement au jeton ne doit pas priver Joe de modèle."""
+    from joe.capabilities import _auto_selectable
+
+    metered = [{"id": "paid-1", "metered": True}, {"id": "paid-2", "metered": True}]
+    assert len(_auto_selectable(metered)) == 2

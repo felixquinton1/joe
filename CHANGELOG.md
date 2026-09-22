@@ -20,6 +20,9 @@ All notable changes to Joe are documented here. The format follows
   for `strong`. Tiers are read from what providers publish about their own
   models, with a declared catalog for what a description cannot settle, and an
   unclassified range still routes exactly as before.
+- A model billed per token stays out of automatic routing, whatever its tier.
+  Spending outside the subscription should follow a decision, not the workflow
+  picked for a request. It remains selectable by hand.
 - A review or a consensus no longer forces the flagship model and maximum
   effort on every stage. Anything other than FAST was declared complex.
 - The markers that flag a demanding request exist in English too. They were

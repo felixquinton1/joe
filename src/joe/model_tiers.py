@@ -15,6 +15,10 @@ Un modèle inconnu ne reçoit aucun niveau : l'appelant retombe alors sur son
 comportement d'origine. Une nouvelle sortie chez un fournisseur ne casse donc
 rien, elle est simplement routée comme avant jusqu'à ce que sa description soit
 reconnue ou son entrée ajoutée.
+
+Un modèle facturé au jeton reste hors du routage automatique, quel que soit son
+niveau : engager une dépense hors abonnement est une décision de l'utilisateur,
+pas une conséquence du choix d'un mode.
 """
 
 from __future__ import annotations
@@ -64,9 +68,9 @@ DECLARED: dict[str, dict[str, Any]] = {
     "claude-sonnet-5": {"tier": "light", "preference": 1},
     "claude-haiku-4-5": {"tier": "light", "preference": 2},
     "claude-opus-5": {"tier": "strong", "preference": 1},
-    # Décrit par le catalogue comme le plus capable et le plus cher : c'est un
-    # choix de dernier recours, jamais un défaut.
-    "claude-fable-5-1": {"tier": "strong", "preference": 2},
+    # Facturé au jeton, hors abonnement : le routage ne doit jamais l'engager
+    # sans qu'on l'ait demandé. Il reste sélectionnable à la main.
+    "claude-fable-5-1": {"tier": "strong", "metered": True},
     "claude-opus-4-8": {"tier": "legacy"},
     "claude-sonnet-4-6": {"tier": "legacy"},
 }
@@ -90,6 +94,16 @@ def model_tier(model: dict[str, Any]) -> str:
     if isinstance(cost, (int, float)):
         return "light" if cost <= 2 else "standard" if cost == 3 else "strong"
     return ""
+
+
+def is_metered(model: dict[str, Any]) -> bool:
+    """Facturé à l'usage plutôt que couvert par l'abonnement.
+
+    Un tel modèle n'entre jamais dans un choix automatique : la dépense doit
+    venir d'une décision, pas du mode retenu pour une demande.
+    """
+    declared = DECLARED.get(str(model.get("id", "")), {})
+    return bool(declared.get("metered") or model.get("metered"))
 
 
 def _preference(model: dict[str, Any]) -> tuple[int, int, str]:
@@ -117,7 +131,9 @@ def choose(models: list[dict[str, Any]], tier: str) -> str | None:
         (model, model_tier(model)) for model in models
     ]
     usable = [
-        (model, kind) for model, kind in classified if kind in ranked
+        (model, kind)
+        for model, kind in classified
+        if kind in ranked and not is_metered(model)
     ]
     if not usable:
         return None
