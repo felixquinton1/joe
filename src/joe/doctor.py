@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
 from .maintenance import provider_audit
 from .models import Intent
 from .provider_registry import get_provider_spec
+from .provider_choice import disabled_providers
+from .provider_registry import install_hint
 from .providers import (
     Provider,
     default_providers,
     provider_runtime_issue,
-    windows_aware_executable,
+    resolve_executable,
 )
 from .usage import usage_status
 
@@ -35,18 +38,30 @@ def doctor_report(
         item["provider"]: item.get("current_version")
         for item in provider_audit()
     }
+    refused = disabled_providers()
+    windows = os.name == "nt"
     for name, provider in provider_map.items():
-        executable = windows_aware_executable(provider.executable)
+        executable = resolve_executable(name)
+        # Un binaire trouvé sous un nom générique mais qui n'a pas prouvé son
+        # identité : le nommer vaut mieux que de le taire, car l'utilisateur
+        # est le seul à pouvoir trancher.
+        doubtful = (
+            None if executable else resolve_executable(name, unconfirmed=True)
+        )
         runtime_issue = (
             provider_runtime_issue(name, executable) if executable else None
         )
         item: dict[str, Any] = {
             "provider": name,
+            "label": get_provider_spec(name).label,
             "installed": bool(executable) and not runtime_issue,
-            "executable": executable,
+            "enabled": name not in refused,
+            "executable": executable or doubtful,
+            "unconfirmed": doubtful,
             "version": versions.get(name),
             "usage": usage.get(name),
             "runtime_issue": runtime_issue,
+            "install": install_hint(name, windows=windows),
         }
         if live and executable and not runtime_issue:
             result = provider.run(
@@ -66,34 +81,67 @@ def doctor_report(
 
 
 def format_doctor(report: dict[str, Any]) -> str:
+    """Le diagnostic est la première commande d'un nouvel arrivant.
+
+    Elle est citée dans le README juste après l'installation, et elle répondait
+    en français à qui lisait une documentation anglaise. Elle doit aussi dire
+    quoi faire : constater qu'une CLI manque sans indiquer comment l'obtenir
+    laisse exactement le problème qu'on venait résoudre.
+    """
     storage = report["storage"]
     lines = [
         f"Joe doctor — {report['project']}",
         (
-            "Stockage : OK"
+            "Storage: OK"
             if storage["writable"]
-            else f"Stockage : ERREUR · {storage['message']}"
+            else f"Storage: ERROR · {storage['message']}"
         ),
+        "",
     ]
+    missing = []
     for item in report["providers"]:
-        state = "installé" if item["installed"] else "absent"
+        label = item.get("label") or item["provider"]
+        if item["installed"]:
+            state = "installed"
+        elif item.get("unconfirmed"):
+            state = f"unconfirmed · found {item['unconfirmed']}"
+        else:
+            state = "not found"
+            missing.append(item)
         if item.get("runtime_issue"):
-            state = f"incomplet · {item['runtime_issue']}"
+            state = f"incomplete · {item['runtime_issue']}"
         version = f" · {item['version']}" if item.get("version") else ""
-        # Le libellé du registre, pas le nom technique : capitaliser donnait
-        # « Cursor-agent » là où le produit s'appelle Cursor.
-        label = get_provider_spec(item["provider"]).label
-        line = f"- {label} : {state}{version}"
+        disabled = "" if item.get("enabled", True) else " · turned off in Joe"
+        line = f"- {label}: {state}{version}{disabled}"
         live = item.get("live")
         if live:
             line += (
-                f" · live OK ({live['duration_seconds']} s)"
+                f" · live OK ({live['duration_seconds']}s)"
                 if live["ok"]
-                else f" · live échec ({live['error'] or 'réponse vide'})"
+                else f" · live failed ({live['error'] or 'empty answer'})"
             )
         lines.append(line)
+    for item in missing:
+        install = item.get("install") or {}
+        if not install.get("command") and not install.get("homepage"):
+            continue
+        lines.append("")
+        lines.append(f"Install {item.get('label') or item['provider']}:")
+        if install.get("command"):
+            lines.append(f"    {install['command']}")
+        if install.get("sign_in"):
+            lines.append(f"    then sign in with: {install['sign_in']}")
+        if install.get("homepage"):
+            lines.append(f"    {install['homepage']}")
+    if missing:
+        lines.append("")
+        lines.append(
+            "Joe only routes to the CLIs it can actually run. Install one and "
+            "it becomes available on the next request — nothing to configure."
+        )
     if not any("live" in item for item in report["providers"]):
-        lines.append("Utilise `joe doctor --live` pour tester les CLI réellement.")
+        lines.append("")
+        lines.append("Run `joe doctor --live` to send one short real request to each.")
     return "\n".join(lines)
 
 
