@@ -990,6 +990,13 @@ h1 { max-width: 680px; font: 500 clamp(25px, 2.5vw, 36px)/1.15 Georgia, serif; }
 .provider-signin code { display: block; overflow-x: auto; padding: 5px 7px; border-radius: 6px; background: #efece2; color: var(--ink); font-size: 9px; white-space: pre; }
 .provider-signin.failed small { color: var(--danger); }
 .provider-signin.failed code { background: #f7e9e6; }
+.provider-purpose { color: var(--muted); font-size: 8.5px; line-height: 1.5; }
+.provider-steps { display: grid; gap: 7px; margin: 0; padding-left: 15px; color: var(--muted); font-size: 8.5px; line-height: 1.55; }
+.provider-steps li { padding-left: 2px; }
+.provider-steps code { display: block; overflow-x: auto; margin-top: 4px; padding: 6px 7px; border-radius: 6px; background: var(--ink); color: #f5f4ef; font-size: 9px; white-space: pre; }
+.provider-step-blocked { color: var(--danger); }
+.provider-step-blocked small { display: block; margin-top: 2px; color: var(--danger); }
+.provider-step-blocked a { display: inline-block; margin-top: 3px; }
 .provider-install { display: grid; gap: 5px; padding-top: 6px; border-top: 1px solid var(--line); }
 .provider-install code { display: block; overflow-x: auto; padding: 6px 7px; border-radius: 6px; background: var(--ink); color: #f5f4ef; font-size: 9px; white-space: pre; }
 .provider-install small { color: var(--muted); font-size: 8.5px; }

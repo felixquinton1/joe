@@ -642,6 +642,15 @@ function providerRow(provider, interactive) {
     row.appendChild(choice);
   }
   const install = provider.install || {};
+  // Personne n'installe cinq CLI : sans savoir a quoi chacune sert, choisir
+  // revient a deviner. Le texte reprend la doctrine de routage de Joe.
+  const purpose = t(`provider_purpose_${provider.provider.replace(/-/g, "_")}`);
+  if (!provider.installed && purpose) {
+    const role = document.createElement("small");
+    role.className = "provider-purpose";
+    role.textContent = purpose;
+    row.appendChild(role);
+  }
   // Trouver le binaire ne dit rien du compte. Joe ne peut pas le savoir sans
   // lancer la CLI, alors il le dit : une CLI détectée reste inutilisable tant
   // qu'on ne s'y est pas connecté, et l'erreur au premier run n'explique rien.
@@ -660,16 +669,44 @@ function providerRow(provider, interactive) {
   if (!provider.installed && (install.command || install.homepage)) {
     const help = document.createElement("div");
     help.className = "provider-install";
+    // Trois lignes libres laissaient deviner l'ordre des gestes. Une liste
+    // numerotee dit ou commencer et ou s'arreter.
+    const steps = document.createElement("ol");
+    steps.className = "provider-steps";
+    if (install.node_warning) {
+      const missing = document.createElement("li");
+      missing.className = "provider-step-blocked";
+      const warn = document.createElement("small");
+      warn.textContent = install.node_warning;
+      missing.append(document.createTextNode(t("provider_prerequisite")), warn);
+      const nodeLink = document.createElement("a");
+      nodeLink.href = "https://nodejs.org/en/download";
+      nodeLink.target = "_blank";
+      nodeLink.rel = "noopener noreferrer";
+      nodeLink.textContent = t("provider_install_node");
+      missing.appendChild(nodeLink);
+      steps.appendChild(missing);
+    }
     if (install.command) {
+      const step = document.createElement("li");
+      step.appendChild(document.createTextNode(t("provider_step_install")));
       const code = document.createElement("code");
       code.textContent = install.command;
-      help.append(code, copyButton(() => install.command));
+      step.append(code, copyButton(() => install.command));
+      steps.appendChild(step);
     }
     if (install.sign_in) {
-      const signIn = document.createElement("small");
-      signIn.textContent = `${t("provider_sign_in")} ${install.sign_in}`;
-      help.appendChild(signIn);
+      const step = document.createElement("li");
+      step.appendChild(document.createTextNode(t("provider_step_sign_in")));
+      const code = document.createElement("code");
+      code.textContent = install.sign_in;
+      step.append(code, copyButton(() => install.sign_in));
+      steps.appendChild(step);
     }
+    const last = document.createElement("li");
+    last.textContent = t("provider_step_recheck");
+    steps.appendChild(last);
+    help.appendChild(steps);
     if (install.homepage) {
       const link = document.createElement("a");
       link.href = install.homepage;
@@ -759,8 +796,24 @@ const ONBOARDING_STORAGE_KEY = "joe-onboarded-v2";
 
 async function loadDoctor() {
   if (window.localStorage.getItem(ONBOARDING_STORAGE_KEY)) return;
-  $("onboarding-dialog").showModal();
-  await fetchDoctor($("doctor-status"), { interactive: true });
+  const dialog = $("onboarding-dialog");
+  const start = $("close-onboarding");
+  // Fermer avant la fin du diagnostic fait manquer la seule page qui dise
+  // quelles CLI manquent et comment les installer — et elle ne revient pas
+  // d'elle-même. Le bouton reste donc inerte tant que Joe n'a pas répondu,
+  // touche Échap comprise.
+  const holdEscape = event => event.preventDefault();
+  start.disabled = true;
+  start.textContent = t("diagnostic_pending");
+  dialog.addEventListener("cancel", holdEscape);
+  dialog.showModal();
+  try {
+    await fetchDoctor($("doctor-status"), { interactive: true });
+  } finally {
+    dialog.removeEventListener("cancel", holdEscape);
+    start.disabled = false;
+    start.textContent = t("start_using_joe");
+  }
 }
 
 function setupSelectMenu(select) {

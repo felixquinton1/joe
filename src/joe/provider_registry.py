@@ -91,6 +91,15 @@ class ProviderSpec:
     install_windows: str = ""
     """Commande d'installation documentée sur Windows. Vide = celle de POSIX."""
 
+    requires_node: str = ""
+    """Version majeure de Node exigee par la commande d'installation npm.
+
+    L'exigence porte sur l'installation, pas sur l'execution : Codex tourne ici
+    sous Node 20 alors que son `npm install -g` en demande 22. C'est donc un
+    avertissement attache a la commande, la ou il sert — sinon `npm` echoue sur
+    un message qui ne nomme jamais la cause.
+    """
+
     homepage: str = ""
     """Page officielle. C'est elle qui fait foi, pas la commande ci-dessus.
 
@@ -119,6 +128,7 @@ PROVIDERS = (
         minimum_version="0.155.0",
         exposes_usage=True,
         install_posix="npm install -g @openai/codex",
+        requires_node="22",
         install_windows="npm install -g @openai/codex",
         homepage="https://github.com/openai/codex",
         sign_in="codex",
@@ -155,6 +165,7 @@ PROVIDERS = (
         # Rarement dans la paire par défaut, donc rarement juge et partie.
         arbitration_priority=1,
         install_posix="npm install -g @google/gemini-cli",
+        requires_node="20",
         install_windows="npm install -g @google/gemini-cli",
         homepage="https://github.com/google-gemini/gemini-cli",
         sign_in="gemini",
@@ -166,6 +177,7 @@ PROVIDERS = (
         fallbacks=("gemini", "codex", "claude"),
         minimum_version="1.0.75",
         install_posix="npm install -g @github/copilot",
+        requires_node="22",
         install_windows="npm install -g @github/copilot",
         homepage="https://docs.github.com/en/copilot/get-started/cli-quickstart",
         sign_in="copilot, then /login",
@@ -244,6 +256,7 @@ def install_hint(name: str, *, windows: bool = False) -> dict[str, str]:
         "command": command or spec.install_posix,
         "homepage": spec.homepage,
         "sign_in": spec.sign_in,
+        "requires_node": spec.requires_node,
     }
 
 

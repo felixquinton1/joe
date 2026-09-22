@@ -167,3 +167,49 @@ def test_a_refused_sign_in_is_reported_where_the_choice_is_made(tmp_path, monkey
 
     assert states["claude"] is True
     assert states["codex"] is False
+
+
+def test_an_npm_install_warns_when_node_is_too_old(tmp_path, monkeypatch):
+    """`npm` echoue sur un message qui ne nomme jamais la cause.
+
+    L'utilisateur colle la commande, lit une erreur obscure, et rien ne lui dit
+    que son Node est trop ancien.
+    """
+    from joe.doctor import _node_warning, format_doctor
+
+    vieux = {"present": True, "version": "20.19.5", "major": 20}
+    assert _node_warning("22", vieux) == "Node 20.19.5 present, requires 22+"
+    assert _node_warning("20", vieux) == ""
+    # Sans exigence declaree, aucun avertissement.
+    assert _node_warning("", vieux) == ""
+    assert _node_warning("22", {"present": False}) == "node absent, requires Node 22+"
+
+    monkeypatch.setattr("joe.doctor.usage_status", lambda force=False: [])
+    monkeypatch.setattr("joe.doctor.provider_audit", lambda: [])
+    monkeypatch.setattr("joe.doctor.resolve_executable", lambda name, **kwargs: None)
+    monkeypatch.setattr("joe.doctor.node_runtime", lambda: vieux)
+
+    texte = format_doctor(doctor_report(tmp_path))
+    assert "requires 22+" in texte
+    # Claude s'installe par un script, sans Node : rien ne doit l'encombrer.
+    claude = texte.split("Install Claude:")[1].split("Install ")[0]
+    assert "requires" not in claude
+
+
+def test_an_installed_cli_is_never_nagged_about_node(tmp_path, monkeypatch):
+    """Codex tourne ici sous Node 20 alors que son paquet en demande 22.
+
+    L'exigence porte sur l'installation, pas sur l'execution.
+    """
+    monkeypatch.setattr("joe.doctor.usage_status", lambda force=False: [])
+    monkeypatch.setattr("joe.doctor.provider_audit", lambda: [])
+    monkeypatch.setattr(
+        "joe.doctor.resolve_executable", lambda name, **kwargs: f"/usr/bin/{name}"
+    )
+    monkeypatch.setattr(
+        "joe.doctor.node_runtime",
+        lambda: {"present": True, "version": "20.19.5", "major": 20},
+    )
+
+    report = doctor_report(tmp_path)
+    assert all(item["install"]["node_warning"] == "" for item in report["providers"])

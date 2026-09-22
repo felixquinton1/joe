@@ -27,6 +27,12 @@ All notable changes to Joe are documented here. The format follows
   non-interactive call cannot grant it — so it was refused at every access
   level below full. The setting is off by default: such a tool acts outside the
   project, and widening that stays an explicit decision.
+- The welcome screen cannot be dismissed before its diagnostic finishes,
+  Escape included. It is the only page that says which CLIs are missing and how
+  to install them, and it does not come back on its own.
+- A missing CLI is guided step by step: what it is best at, the prerequisite
+  when the install command needs a newer Node than the machine has, the command
+  to run, the one to sign in with, and what to do next.
 - Provider CLIs are now discoverable: `joe doctor` and a permanent **Manage AI
   CLIs** panel list what is detected, print the install command and official
   page for what is missing, and let a detected CLI be switched off.

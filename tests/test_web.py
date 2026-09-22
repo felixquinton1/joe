@@ -1760,3 +1760,43 @@ def test_a_mentioned_project_file_is_not_sent_twice(tmp_path):
 
     # Choisi au menu, sans mention : conserve meme homonyme.
     assert _without_live_duplicates([piece], "resume le projet", tmp_path) == [piece]
+
+
+def test_the_welcome_screen_cannot_be_dismissed_before_the_diagnostic_ends():
+    """C'est la seule page qui dise quelles CLI manquent et comment les poser.
+
+    Elle ne revient pas d'elle-meme : la fermer trop tot fait manquer
+    l'information au moment precis ou elle sert.
+    """
+    app = (
+        Path(__file__).resolve().parent.parent
+        / "src" / "joe" / "web_assets" / "app.js"
+    ).read_text(encoding="utf-8")
+
+    body = app.split("async function loadDoctor()")[1].split("\n}")[0]
+    assert "start.disabled = true" in body
+    # La touche Echap ferme un `<dialog>` par defaut : il faut la retenir aussi.
+    assert 'dialog.addEventListener("cancel", holdEscape)' in body
+    # Et tout doit etre rendu meme si le diagnostic echoue.
+    assert "finally" in body
+    assert body.index("finally") < body.index("start.disabled = false")
+    assert 'dialog.removeEventListener("cancel", holdEscape)' in body
+
+
+def test_a_missing_cli_is_guided_step_by_step():
+    """Trois lignes libres laissaient deviner l'ordre des gestes."""
+    app = (
+        Path(__file__).resolve().parent.parent
+        / "src" / "joe" / "web_assets" / "app.js"
+    ).read_text(encoding="utf-8")
+
+    assert 'steps.className = "provider-steps"' in app
+    for key in (
+        "provider_step_install",
+        "provider_step_sign_in",
+        "provider_step_recheck",
+        "provider_prerequisite",
+    ):
+        assert f't("{key}")' in app, key
+    # Le role de chaque fournisseur aide a choisir laquelle installer.
+    assert "provider_purpose_" in app

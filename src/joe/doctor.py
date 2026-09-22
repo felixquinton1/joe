@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +19,51 @@ from .providers import (
     resolve_executable,
 )
 from .usage import usage_status
+
+
+def node_runtime() -> dict[str, Any]:
+    """Version de Node presente, pour juger une commande `npm install -g`.
+
+    Sans cela, `npm` echoue sur un message qui ne nomme jamais la cause : un
+    nouvel arrivant colle la commande, voit une erreur obscure, et rien ne lui
+    dit que son Node est trop ancien. L'exigence porte sur l'installation et non
+    sur l'execution — Codex tourne sous Node 20 alors que son paquet en demande
+    22.
+    """
+    executable = resolve_executable("node") or shutil.which("node")
+    if not executable:
+        return {"present": False, "version": None, "major": None}
+    try:
+        completed = subprocess.run(
+            [executable, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=8,
+            check=False,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return {"present": True, "version": None, "major": None}
+    version = (completed.stdout or "").strip().lstrip("v")
+    head = version.split(".")[0]
+    return {
+        "present": True,
+        "version": version or None,
+        "major": int(head) if head.isdigit() else None,
+    }
+
+
+def _node_warning(required: str, node: dict[str, Any]) -> str:
+    """Ce qui manque pour que la commande d'installation aboutisse."""
+    if not required:
+        return ""
+    if not node.get("present"):
+        return f"node absent, requires Node {required}+"
+    major = node.get("major")
+    if major is not None and major < int(required):
+        return f"Node {node.get('version')} present, requires {required}+"
+    return ""
 
 
 def doctor_report(
@@ -41,6 +88,8 @@ def doctor_report(
     }
     refused = disabled_providers()
     windows = os.name == "nt"
+    node = node_runtime()
+    report["node"] = node
     for name, provider in provider_map.items():
         executable = resolve_executable(name)
         # Un binaire trouvé sous un nom générique mais qui n'a pas prouvé son
@@ -67,7 +116,18 @@ def doctor_report(
             # ne rattache a sa cause. Joe ne peut pas le savoir sans la lancer,
             # mais il retient un refus d'authentification deja rencontre.
             "auth_failed": (recent_failure(name) or ("", 0))[0] == "authentication",
-            "install": install_hint(name, windows=windows),
+            "install": {
+                **install_hint(name, windows=windows),
+                # Le prerequis ne concerne que ce qui reste a installer :
+                # Codex tourne ici sous Node 20 alors que son paquet en
+                # demande 22, donc l'annoncer pour une CLI presente serait
+                # un faux probleme.
+                "node_warning": (
+                    ""
+                    if executable
+                    else _node_warning(get_provider_spec(name).requires_node, node)
+                ),
+            },
         }
         if live and executable and not runtime_issue:
             result = provider.run(
@@ -135,6 +195,10 @@ def format_doctor(report: dict[str, Any]) -> str:
         lines.append(f"Install {item.get('label') or item['provider']}:")
         if install.get("command"):
             lines.append(f"    {install['command']}")
+        # Sans ce rappel, `npm` echoue sur un message qui ne nomme jamais la
+        # cause : l'utilisateur colle la commande et lit une erreur obscure.
+        if install.get("node_warning"):
+            lines.append(f"    ⚠ {install['node_warning']}")
         if install.get("sign_in"):
             lines.append(f"    then sign in with: {install['sign_in']}")
         if install.get("homepage"):
