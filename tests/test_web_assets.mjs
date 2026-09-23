@@ -29,6 +29,16 @@ test("uses automatic AI access for new and legacy project dialogs", () => {
   assert.doesNotMatch(source, /project\.ai_access \|\| "manual"/);
 });
 
+test("terminal run events settle every active agent card", () => {
+  const source = readFileSync(
+    new URL("../src/joe/web_assets/app.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(source, /function settleRunningAgents\(statusKey\)/);
+  assert.match(source, /event\.type === "cancelled"[\s\S]*?settleRunningAgents\("interrupted"\)/);
+  assert.match(source, /event\.type === "error"[\s\S]*?settleRunningAgents\("failed"\)/);
+});
+
 test("pairs from the fragment and removes it from browser history", async () => {
   const calls = [];
   const history = {

@@ -394,8 +394,6 @@ class Orchestrator:
             usage = parse_provider_usage(name, result.stdout, selected_model)
             if usage and on_event:
                 on_event({"type": "usage", **usage})
-            if result.error_kind == "cancelled":
-                raise OrchestrationError("Exécution interrompue")
             if on_event:
                 on_event(
                     {
@@ -405,6 +403,11 @@ class Orchestrator:
                         "error": result.error_kind,
                     }
                 )
+            # Une annulation est une fin de tentative comme les autres. Lever
+            # avant `provider_end` laissait la carte de l'agent en « Running »
+            # alors que son processus avait bien été arrêté.
+            if result.error_kind == "cancelled":
+                raise OrchestrationError("Exécution interrompue")
             if result.ok and result.stdout.strip():
                 return result
             if (

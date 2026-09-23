@@ -1559,6 +1559,18 @@ function patchRunningStages(activeRun, provider, patch) {
   }
 }
 
+function settleRunningAgents(statusKey) {
+  // L'événement terminal du run reste l'autorité finale. Il ferme aussi une
+  // carte dont `provider_end` aurait été perdu pendant une déconnexion.
+  for (const agent of state.agents.values()) {
+    if (!agent.card.classList.contains("active")) continue;
+    agent.card.classList.remove("active");
+    agent.heartbeat.textContent = "";
+    agent.heartbeat.classList.add("hidden");
+    agent.status.textContent = t(statusKey);
+  }
+}
+
 function handleEvent(conversationId, event, finalBubble) {
   const activeRun = state.runs.get(conversationId);
   if (event.type === "route" && activeRun) {
@@ -1742,6 +1754,7 @@ function handleEvent(conversationId, event, finalBubble) {
   } else if (event.type === "git_report") {
     renderGitReport(event, event.run_id);
   } else if (event.type === "complete") {
+    settleRunningAgents("done");
     setSummaryPending(finalBubble, false);
     finishWorkflowProgress(activeRun?.runId, activeRun?.mode);
     renderAnswer(finalBubble, event.response);
@@ -1752,6 +1765,7 @@ function handleEvent(conversationId, event, finalBubble) {
       .catch(() => {});
     launchNextQueued(conversationId);
   } else if (event.type === "error") {
+    settleRunningAgents("failed");
     setSummaryPending(finalBubble, false);
     failRunningWorkflow();
     finalBubble.textContent = `Erreur : ${event.message}`;
@@ -1759,6 +1773,7 @@ function handleEvent(conversationId, event, finalBubble) {
     loadTasks().catch(() => {});
     loadConversations(false).then(() => selectConversation(conversationId));
   } else if (event.type === "cancelled") {
+    settleRunningAgents("interrupted");
     setSummaryPending(finalBubble, false);
     failRunningWorkflow();
     const prompt = state.runs.get(conversationId)?.request || "";

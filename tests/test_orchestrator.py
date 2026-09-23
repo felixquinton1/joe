@@ -55,6 +55,44 @@ def test_fast_uses_one_call(tmp_path):
     assert log.exists()
 
 
+def test_cancelled_provider_emits_terminal_event_before_run_stops(tmp_path):
+    class CancelledProvider(FakeProvider):
+        def run(self, *args, **kwargs):
+            return ProviderResult(
+                self.name,
+                [self.name],
+                "",
+                "cancelled",
+                130,
+                0.01,
+                error_kind="cancelled",
+            )
+
+    events = []
+    orchestrator = Orchestrator(
+        tmp_path,
+        providers={"codex": CancelledProvider("codex")},
+    )
+
+    try:
+        orchestrator.execute(
+            "stop",
+            Route(Intent.ANALYZE, Mode.FAST, "codex"),
+            on_event=events.append,
+        )
+    except OrchestrationError as error:
+        assert "interrompue" in str(error)
+    else:
+        raise AssertionError("A cancelled provider must stop orchestration")
+
+    assert events[-1] == {
+        "type": "provider_end",
+        "provider": "codex",
+        "ok": False,
+        "error": "cancelled",
+    }
+
+
 def test_mutable_state_request_requires_current_workspace_inspection(tmp_path):
     providers = {"claude": FakeProvider("claude")}
     orchestrator = Orchestrator(tmp_path, providers=providers)
