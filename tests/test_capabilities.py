@@ -9,9 +9,12 @@ from joe.capabilities import (
 
 def test_capabilities_have_safe_defaults_and_provider_specific_controls():
     capabilities = provider_capabilities(refresh=True)
-    assert set(capabilities) == {
-        "codex", "claude", "gemini", "copilot", "cursor-agent"
-    }
+    # La liste suit le registre : un fournisseur ajouté là-bas doit apparaître
+    # ici sans qu'on le recopie, sinon les deux divergent en silence.
+    from joe.provider_registry import get_provider_names
+
+    assert set(capabilities) == set(get_provider_names())
+    assert "antigravity" in capabilities
     assert any(
         mode["id"] == "read-only"
         for mode in capabilities["codex"]["execution_modes"]

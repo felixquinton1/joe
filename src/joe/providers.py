@@ -359,6 +359,46 @@ class Provider:
             args.append("--allow-tool=shell")
         return [*args, "--prompt", prompt]
 
+    def _argv_antigravity(
+        self,
+        access: str,
+        prompt: str,
+        cwd: Path,
+        model: str | None,
+        effort: str | None,
+    ) -> list[str]:
+        """Piloter `agy` en un seul tour non interactif.
+
+        La CLI n'expose aucun drapeau d'autorisation fine : seulement un mode
+        d'execution et un « tout approuver ». Les ecritures dans l'espace de
+        travail sont deja auto-approuvees, mais une commande shell reste
+        refusee en mode non interactif — la CLI le signale alors dans
+        `denied_actions` plutot que d'echouer.
+
+        Joe ne franchit donc pas ce palier a sa place : accorder « tout
+        approuver » pour pouvoir lancer des tests reviendrait a autoriser aussi
+        ce qui sort du projet, alors que l'utilisateur n'a consenti qu'a
+        modifier celui-ci.
+        """
+        command = [self.executable, "--output-format", "stream-json"]
+        if access == "project-full":
+            command.append("--dangerously-skip-permissions")
+        elif access == "restricted":
+            command.extend(["--sandbox", "--mode", "plan"])
+        else:
+            command.extend(
+                ["--mode", "accept-edits" if access == "write" else "plan"]
+            )
+        command.extend(self._roots("--add-dir"))
+        if model:
+            command.extend(["--model", model])
+        if effort:
+            command.extend(["--effort", effort])
+        # `--print` accepte une valeur facultative : laisse seul, il avale
+        # l'argument suivant comme prompt. La CLI le dit elle-meme quand cela
+        # arrive. On attache donc le prompt au drapeau.
+        return [*command, f"--print={prompt}"]
+
     def _argv_cursor(
         self,
         access: str,
@@ -533,6 +573,7 @@ _ARGV_BUILDERS = {
     "claude": Provider._argv_claude,
     "gemini": Provider._argv_gemini,
     "copilot": Provider._argv_copilot,
+    "antigravity": Provider._argv_antigravity,
     "cursor-agent": Provider._argv_cursor,
 }
 if set(_ARGV_BUILDERS) != set(get_provider_names()):
@@ -846,6 +887,66 @@ def _activity_claude(event: dict) -> dict[str, str] | None:
     return None
 
 
+def _activity_antigravity(event: dict) -> dict[str, str] | None:
+    """Lire le flux `stream-json` d'`agy`.
+
+    L'enveloppe porte la cle `event`, pas `type`, et chaque etape d'outil
+    arrive deux fois — ACTIVE puis DONE. On n'annonce que la premiere, sinon
+    chaque outil apparaitrait en double dans le panneau d'activite.
+    """
+    if event.get("event") == "init":
+        model = _event_model(event.get("init") or {})
+        if model:
+            return {"kind": "model", "label": model, "detail": ""}
+        return None
+    step = event.get("step_update") or {}
+    if step.get("step_type") != "tool" or step.get("state") != "ACTIVE":
+        return None
+    name = str(step.get("tool_name") or "Outil")
+    parameters = (step.get("tool_info") or {}).get("parameters")
+    return {
+        "kind": (
+            "command_execution"
+            if name == "run_command"
+            else "mcp_tool_call"
+            if name.startswith("mcp")
+            else "tool"
+        ),
+        "label": name,
+        "detail": _tool_detail(parameters),
+    }
+
+
+def _final_antigravity(event: dict, text_parts: list[str]) -> str:
+    """La reponse finale, ou l'explication de son absence.
+
+    Une permission qu'un appel non interactif ne peut pas demander est
+    « refusee en douceur » : la CLI sort en succes avec une reponse vide et
+    liste ce qu'elle n'a pas eu le droit de faire. Rendre ce vide tel quel
+    donnerait une bulle muette ; on nomme donc l'autorisation manquante.
+    """
+    if event.get("event") != "result":
+        return ""
+    result = event.get("result") or {}
+    response = str(result.get("response") or "").strip()
+    if response:
+        return response
+    refuses = [
+        str(item.get("display_name") or item.get("action"))
+        for item in result.get("denied_actions") or []
+        if isinstance(item, dict)
+    ]
+    if refuses:
+        return (
+            "Aucune réponse : l'agent a demandé une autorisation que Joe ne "
+            "peut pas accorder dans un appel non interactif — "
+            + ", ".join(refuses)
+            + ". Autorise-la dans les réglages d'Antigravity, ou relance en "
+            "accès complet."
+        )
+    return ""
+
+
 def _activity_gemini(event: dict) -> dict[str, str] | None:
     event_type = event.get("type")
     if event_type in {"tool_use", "tool_call"}:
@@ -972,11 +1073,13 @@ _ACTIVITY_PARSERS = {
     "codex": _activity_codex,
     "claude": _activity_claude,
     "gemini": _activity_gemini,
+    "antigravity": _activity_antigravity,
 }
 _FINAL_EXTRACTORS = {
     "codex": _final_codex,
     "claude": _final_claude,
     "gemini": _final_gemini,
+    "antigravity": _final_antigravity,
 }
 _FINAL_SEPARATORS = {"gemini": ""}
 

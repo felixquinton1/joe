@@ -6,6 +6,17 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Antigravity CLI joins the supported providers, as `agy`. It replaces Gemini
+  CLI, retired for consumer accounts in June 2026. Its four access levels map
+  to real CLI modes — `--mode plan`, `--mode accept-edits`,
+  `--dangerously-skip-permissions`, `--sandbox` — and its activity stream is
+  parsed from a real capture, so tool calls appear in the panel like any other
+  provider's. When a permission cannot be granted in a non-interactive call,
+  the CLI soft-denies and returns an empty answer; Joe names the missing
+  permission instead of showing a blank bubble.
+
 ### Changed
 
 - Gemini is no longer a default. Its CLI stopped serving consumer accounts on

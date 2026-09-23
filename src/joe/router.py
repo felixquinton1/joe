@@ -240,7 +240,11 @@ class Router:
         for candidate in get_provider_spec(name).fallbacks:
             if candidate in self.available:
                 return candidate
-        return name
+        # Aucun repli declare n'est la. Plutot que de nommer un absent — ce qui
+        # fait echouer le run sans rien expliquer — on prend ce qui existe.
+        # C'est le cas d'une machine equipee d'un seul fournisseur qui ne
+        # figure dans la chaine de personne.
+        return next(iter(sorted(self.available)), name)
 
     def _fit(
         self, intent: Intent, mode: Mode, primary: str, reviewer: str | None

@@ -137,7 +137,7 @@ PROVIDERS = (
         "Codex",
         streams_json=True,
         reviewer_peers=("claude", "cursor-agent"),
-        fallbacks=("claude", "copilot", "cursor-agent", "gemini"),
+        fallbacks=("claude", "copilot", "cursor-agent", "antigravity", "gemini"),
         # 0.147.0 rejetait `--search`, que Joe passe en accès distant : la
         # borne annoncée décrivait donc une version où les runs échouaient.
         minimum_version="0.155.0",
@@ -153,7 +153,7 @@ PROVIDERS = (
         "Claude",
         streams_json=True,
         reviewer_peers=("codex", "cursor-agent"),
-        fallbacks=("codex", "copilot", "cursor-agent", "gemini"),
+        fallbacks=("codex", "copilot", "cursor-agent", "antigravity", "gemini"),
         minimum_version="2.1.197",
         exposes_usage=True,
         # L'installation par npm est dépréciée en amont : l'installeur natif
@@ -194,13 +194,29 @@ PROVIDERS = (
         "copilot",
         "Copilot",
         reviewer_peers=("codex", "claude"),
-        fallbacks=("codex", "claude", "gemini"),
+        fallbacks=("codex", "claude", "antigravity", "gemini"),
         minimum_version="1.0.75",
         install_posix="npm install -g @github/copilot",
         requires_node="22",
         install_windows="npm install -g @github/copilot",
         homepage="https://docs.github.com/en/copilot/get-started/cli-quickstart",
         sign_in="copilot, then /login",
+    ),
+    # Successeur de Gemini CLI, depreciee pour le grand public le 18 juin 2026.
+    # Le nom du fournisseur est parlant, celui du binaire ne l'est pas : `agy`.
+    ProviderSpec(
+        "antigravity",
+        "Antigravity",
+        streams_json=True,
+        executables=("agy",),
+        reviewer_peers=("codex", "claude"),
+        fallbacks=("claude", "codex", "copilot"),
+        install_posix="curl -fsSL https://antigravity.google/cli/install.sh | bash",
+        install_windows="irm https://antigravity.google/cli/install.ps1 | iex",
+        homepage="https://antigravity.google/docs/cli/install/",
+        # Aucune commande de connexion : la CLI ouvre un navigateur, ou affiche
+        # une URL et attend un code quand elle detecte SSH.
+        sign_in="agy",
     ),
     # Le nom porte le suffixe `-agent` parce qu'il a d'abord servi à trouver
     # l'exécutable : `cursor` est l'éditeur, la CLI est sans fenêtre. Il reste
@@ -211,7 +227,7 @@ PROVIDERS = (
         "cursor-agent",
         "Cursor",
         reviewer_peers=("codex", "claude"),
-        fallbacks=("claude", "codex", "gemini"),
+        fallbacks=("claude", "codex", "antigravity", "gemini"),
         # `agent` est un nom générique qu'une autre CLI peut occuper : le
         # diagnostic vérifie l'identité du binaire trouvé sous ce nom-là.
         executables=("cursor-agent", "agent"),
@@ -273,7 +289,7 @@ def install_hint(name: str, *, windows: bool = False) -> dict[str, str]:
     spec = get_provider_spec(name)
     command = spec.install_windows if windows else spec.install_posix
     return {
-        "command": command or spec.install_posix,
+        "command": command,
         "homepage": spec.homepage,
         "sign_in": spec.sign_in,
         "requires_node": spec.requires_node,

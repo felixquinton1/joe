@@ -7,6 +7,7 @@ import time
 from typing import Any
 
 from .model_tiers import choose, is_metered
+from .providers import resolve_executable
 from .provider_registry import get_provider_specs
 
 _cache: tuple[float, dict[str, Any]] | None = None
@@ -57,6 +58,7 @@ def provider_capabilities(refresh: bool = False) -> dict[str, Any]:
                 _mode("modify", "Modifications autorisées"),
             ],
         },
+        "antigravity": _antigravity,
         "cursor-agent": _cursor,
     }
     result = {}
@@ -246,6 +248,49 @@ def _cursor_models(output: str) -> list[dict[str, Any]]:
             continue
         models.append({"id": candidate, "label": candidate, "cost_tier": 1})
     return models
+
+
+def _antigravity() -> dict[str, Any]:
+    """`agy models` imprime « slug<TAB>libelle », une ligne par modele.
+
+    Aucune description ni cout publie : le niveau se deduit du libelle, que
+    `model_tiers` sait lire. Un modele non reconnu laisse Joe router comme
+    avant plutot que de deviner.
+    """
+    executable = resolve_executable("antigravity")
+    models = []
+    if executable:
+        try:
+            completed = subprocess.run(
+                [executable, "models"],
+                text=True,
+                capture_output=True,
+                timeout=20,
+                check=False,
+                encoding="utf-8",
+                errors="replace",
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            completed = None
+        for line in (completed.stdout if completed else "").splitlines():
+            slug, separator, label = line.partition("\t")
+            slug = slug.strip()
+            if not separator or not slug or " " in slug:
+                continue
+            models.append({"id": slug, "label": label.strip() or slug})
+    return {
+        "available": bool(executable),
+        "models": models,
+        # L'effort est aussi encode dans le slug ; le drapeau reste accepte.
+        "efforts": ["low", "medium", "high"],
+        "execution_modes": [
+            _mode("auto", "Automatique"),
+            _mode("plan", "Plan — lecture seule"),
+            _mode("acceptEdits", "Modifications autorisées"),
+            _mode("danger-full-access", "Accès complet — toutes permissions"),
+            _mode("dontAsk", "Bac à sable"),
+        ],
+    }
 
 
 def _cursor() -> dict[str, Any]:
