@@ -6,6 +6,8 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.3.1] — 2026-09-23
+
 ### Changed
 
 - REVIEW mode is a second pass over the code, not a second opinion about a
@@ -30,8 +32,6 @@ All notable changes to Joe are documented here. The format follows
   examination instead of trusting the examiner's verdict marker. The provider
   that materially produced the final state is also recorded as the final
   provider for conversation continuity and subsequent routing.
-
-## [1.3.1] — 2026-09-23
 
 ### Added
 
