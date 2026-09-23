@@ -12,7 +12,7 @@ Windows.
 
 La distribution publique ne doit pas donner implicitement toutes les capacités
 de l’instance privée. L’interface reste légère, rapide, compréhensible sans
-manuel long et cohérente avec les conventions sobres de Codex, Claude et Gemini.
+manuel long et cohérente avec les conventions sobres de Codex, Claude et Antigravity.
 
 Restent fixes :
 

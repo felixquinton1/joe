@@ -6,6 +6,18 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Gemini CLI is no longer an active Joe provider. Antigravity now owns the
+  long-context and research role in routing, consensus fallback, diagnostics,
+  quotas, and the Web interface. Historical Gemini usage files remain untouched
+  so existing local records are not destroyed.
+
+### Fixed
+
+- Cancelling a run now closes every active provider attempt and settles any
+  agent card whose terminal provider event was lost during a disconnect.
+
 ## [1.3.5] — 2026-09-23
 
 ### Changed

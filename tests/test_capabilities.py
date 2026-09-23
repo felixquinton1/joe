@@ -20,7 +20,8 @@ def test_capabilities_have_safe_defaults_and_provider_specific_controls():
         for mode in capabilities["codex"]["execution_modes"]
     )
     assert "xhigh" in capabilities["claude"]["efforts"]
-    assert capabilities["gemini"]["models"][0]["id"] == "auto"
+    assert "gemini" not in capabilities
+    assert capabilities["antigravity"]["models"]
 
 
 def test_codex_catalog_efforts_follow_selected_model_when_available():

@@ -571,7 +571,6 @@ def classify_error(
 _ARGV_BUILDERS = {
     "codex": Provider._argv_codex,
     "claude": Provider._argv_claude,
-    "gemini": Provider._argv_gemini,
     "copilot": Provider._argv_copilot,
     "antigravity": Provider._argv_antigravity,
     "cursor-agent": Provider._argv_cursor,
@@ -1072,16 +1071,14 @@ def _redact_values(text: str, values: tuple[str, ...]) -> str:
 _ACTIVITY_PARSERS = {
     "codex": _activity_codex,
     "claude": _activity_claude,
-    "gemini": _activity_gemini,
     "antigravity": _activity_antigravity,
 }
 _FINAL_EXTRACTORS = {
     "codex": _final_codex,
     "claude": _final_claude,
-    "gemini": _final_gemini,
     "antigravity": _final_antigravity,
 }
-_FINAL_SEPARATORS = {"gemini": ""}
+_FINAL_SEPARATORS = {}
 
 _STREAMING = {
     spec.name for spec in get_provider_specs() if spec.streams_json

@@ -143,7 +143,7 @@
         <label><span data-i18n="shared_project_context">Contexte transmis à toutes ses conversations</span><textarea id="project-context" rows="8" placeholder="Objectif, conventions, décisions stables… (ex. accès SSH d’un cluster de calcul)" data-i18n-placeholder="project_context_placeholder"></textarea></label>
       </fieldset>
       <section class="skill-manager" aria-label="Skills">
-        <div class="skill-manager-head"><span data-i18n="project_skills">Skills du projet</span><small data-i18n="skills_providers_help">Utilisés par Claude, Codex, Gemini et Copilot</small></div>
+        <div class="skill-manager-head"><span data-i18n="project_skills">Skills du projet</span><small data-i18n="skills_providers_help">Utilisés par toutes les CLI activées</small></div>
         <div id="project-skills" class="skill-list"><small data-i18n="save_project_for_skills">Enregistre le projet pour ajouter un skill.</small></div>
         <div class="skill-global">
           <div class="skill-manager-head"><span data-i18n="shared_skills">Skills communs</span><small data-i18n="shared_skills_help">Appliqués à tous les projets</small></div>
@@ -290,7 +290,7 @@
         <div class="automation-section-head"><h3 data-i18n="plan_configuration">Configuration du plan</h3><p data-i18n="plan_configuration_help">Chaque étape démarre après validation de la précédente.</p></div>
         <fieldset class="dialog-section automation-policy">
           <legend data-i18n="quota_strategy">Stratégie de quotas</legend>
-          <label><span data-i18n="reserved_ai">IA réservée</span><select id="automation-provider"><option value="" data-i18n="automatic_balancing">Équilibrage automatique</option><option value="claude">Claude</option><option value="codex">Codex</option><option value="gemini">Gemini</option><option value="copilot">Copilot</option></select></label>
+          <label><span data-i18n="reserved_ai">IA réservée</span><select id="automation-provider"><option value="" data-i18n="automatic_balancing">Équilibrage automatique</option><option value="claude">Claude</option><option value="codex">Codex</option><option value="antigravity">Antigravity</option><option value="copilot">Copilot</option><option value="cursor-agent">Cursor</option></select></label>
           <small data-i18n="quota_help">Joe peut attendre la prochaine fenêtre de quota. Une relecture ou un consensus peut appeler une autre IA.</small>
         </fieldset>
         <label><span data-i18n="title">Titre</span><input id="automation-title" maxlength="80" placeholder="Ex. Campagne de tests nocturne"></label>

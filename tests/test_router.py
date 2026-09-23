@@ -22,22 +22,16 @@ def test_architecture_choice_uses_consensus():
 
 
 def test_large_context_routes_to_the_cli_still_in_service():
-    """La règle vise une capacité — tenir un grand contexte — pas une CLI.
-
-    Écrite en dur sur `gemini`, elle continuait de désigner une CLI qui ne sert
-    plus les comptes grand public. Quand son successeur est installé, c'est lui
-    qui doit répondre.
-    """
+    """Antigravity owns the long-context role when it is available."""
     demande = "Explore tout ce gros dépôt et résume les conventions"
-    installe = frozenset({"codex", "claude", "gemini", "antigravity"})
+    installe = frozenset({"codex", "claude", "antigravity"})
 
     route = Router(installe).route(demande)
     assert route.primary == "antigravity"
     assert route.mode is Mode.FAST
 
-    # Le successeur absent, la CLI dépréciée reste le meilleur choix : elle
-    # répond encore aux licences entreprise.
-    assert Router(installe - {"antigravity"}).route(demande).primary == "gemini"
+    fallback = Router(installe - {"antigravity"}).route(demande).primary
+    assert fallback in {"codex", "claude"}
 
 
 def test_other_opinion_switches_provider_with_memory():
@@ -48,9 +42,9 @@ def test_other_opinion_switches_provider_with_memory():
 
 def test_force_options_win():
     route = Router().route(
-        "fix bug", forced_agent="gemini", forced_mode=Mode.REVIEW
+        "fix bug", forced_agent="antigravity", forced_mode=Mode.REVIEW
     )
-    assert route.primary == "gemini"
+    assert route.primary == "antigravity"
     assert route.mode is Mode.REVIEW
     assert route.reviewer == "codex"
 
@@ -138,10 +132,10 @@ def test_long_capability_question_stays_fast_and_read_only():
 
 
 def test_explicit_provider_name_routes_directly_to_that_provider():
-    route = Router().route("Fais-moi un petit test de Gemini")
+    route = Router().route("Fais-moi un petit test d'Antigravity")
 
     assert route.mode is Mode.FAST
-    assert route.primary == "gemini"
+    assert route.primary == "antigravity"
     assert "explicit-provider" in route.reason
     assert "health-check" in route.reason
 
@@ -340,22 +334,19 @@ def test_words_containing_a_probe_phrase_do_not_trigger_the_probe():
 
 def test_short_availability_probes_still_reach_the_provider():
     for request in (
-        "Fais-moi un petit test de Gemini",
+        "Fais-moi un petit test d'Antigravity",
         "claude tu fonctionnes ?",
         "codex est disponible ?",
     ):
         assert "health-check" in Router().route(request).reason
 
 
-def test_an_explicit_choice_of_a_deprecated_cli_is_honoured():
-    """Substituer le successeur a une regle est une chose, a une demande une autre.
+def test_retired_gemini_name_cannot_reactivate_the_provider():
+    installed = frozenset({"codex", "antigravity"})
 
-    Une licence entreprise fait encore repondre Gemini CLI : la nommer doit la
-    lancer, sinon Joe decide a la place de celui qui a paye.
-    """
-    installe = frozenset({"codex", "gemini", "antigravity"})
-
-    assert Router(installe).route("Fais-moi un petit test de Gemini").primary == "gemini"
-    assert Router(installe).route(
-        "fix bug", forced_agent="gemini"
-    ).primary == "gemini"
+    assert Router(installed).route("Fais-moi un petit test de Gemini").primary != (
+        "gemini"
+    )
+    assert Router(installed).route("fix bug", forced_agent="gemini").primary in (
+        installed
+    )

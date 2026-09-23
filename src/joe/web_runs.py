@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .capabilities import select_model_tier
-from .provider_registry import get_provider_names, get_provider_spec
+from .provider_registry import get_provider_names
 from .approvals import ApprovalStore
 from .automations import AutomationStore, START_MODES
 from .autonomous import AutonomousStore, TERMINAL_STATUSES, build_autonomous_skill
@@ -722,8 +722,6 @@ class RunManager:
             )
         if "health-check" in route.reason:
             effort = effort or "low"
-            if route.primary == "gemini":
-                model = model or "gemini-3-flash-preview"
         return RunDecision(
             route=route,
             quota_admission=resolved.quota_admission,
@@ -2543,8 +2541,8 @@ class RunManager:
                 Intent.ANSWER,
                 60,
                 # Resumer est une tache legere, et le modele doit appartenir
-                # au fournisseur reellement retenu : un identifiant Gemini fige
-                # ne veut rien dire ailleurs.
+                # au fournisseur reellement retenu : un identifiant figé pour
+                # une autre CLI ne veut rien dire ici.
                 model=str(config.get("model", ""))
                 or select_model_tier(provider, "light"),
                 execution_mode="plan",
@@ -3129,30 +3127,17 @@ def _existing_directory(value: Any) -> Path | None:
 def _compaction_provider(configured: str, installed: Any) -> str:
     """Qui resumera la conversation, ou "" si personne ne le peut.
 
-    Le defaut livre nommait Gemini CLI, retiree des comptes grand public depuis
-    le 18 juin 2026. La compaction visait donc une CLI qui echoue — ou absente,
-    un `KeyError` — a chaque declenchement, dans un thread de fond, au milieu
-    d'un run sans rapport.
-
-    L'ordre est : ce qui est configure s'il est installe, sinon le successeur
-    declare de ce fournisseur, sinon n'importe quel fournisseur en service.
-    Une CLI depreciee n'est retenue que faute de mieux : elle repond encore aux
-    licences entreprise, ce qui vaut mieux que ne pas compacter du tout.
+    `gemini` peut encore subsister dans une ancienne configuration locale. Il
+    est migré vers Antigravity sans réintroduire Gemini dans le registre actif.
+    Sinon, le fournisseur configuré est respecté quand il est installé, puis
+    Joe prend le premier fournisseur actif disponible.
     """
+    if configured == "gemini":
+        configured = "antigravity"
     if configured and configured in installed:
         return configured
-    if configured:
-        try:
-            successeur = get_provider_spec(configured).successor_provider
-        except (KeyError, ValueError):
-            successeur = ""
-        if successeur and successeur in installed:
-            return successeur
     noms = [name for name in get_provider_names() if name in installed]
-    en_service = [
-        name for name in noms if not get_provider_spec(name).deprecated_since
-    ]
-    return (en_service or noms or [""])[0]
+    return (noms or [""])[0]
 
 
 def _installed_compaction_providers(providers: dict[str, Any]) -> dict[str, Any]:

@@ -446,6 +446,26 @@ def test_old_history_is_migrated_with_a_pre_migration_snapshot(tmp_path):
     assert json.loads(snapshots[0].read_text(encoding="utf-8"))["version"] == 2
 
 
+def test_gemini_preferences_are_cleared_during_schema_migration(tmp_path):
+    root = tmp_path / ".agentflow"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    store = ConversationStore(root, runs)
+    conversation = store.create()
+    payload = json.loads(store.path.read_text(encoding="utf-8"))
+    payload["version"] = CURRENT_SCHEMA_VERSION - 1
+    payload["preferences"]["agent"] = "gemini"
+    payload["conversations"][0]["settings"]["agent"] = "gemini"
+    payload["projects"][0]["quota_provider"] = "gemini"
+    store.path.write_text(json.dumps(payload), encoding="utf-8")
+
+    migrated = ConversationStore(root, runs)
+
+    assert migrated.preferences()["agent"] == ""
+    assert migrated.get(conversation["id"])["settings"]["agent"] == ""
+    assert migrated.list_projects()[0]["quota_provider"] == ""
+
+
 def test_newer_history_schema_is_never_overwritten(tmp_path):
     root = tmp_path / ".agentflow"
     runs = root / "runs"

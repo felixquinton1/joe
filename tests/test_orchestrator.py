@@ -281,24 +281,24 @@ def test_review_skips_provider_in_recent_cooldown(tmp_path):
     clear_cooldowns()
     record_result(
         ProviderResult(
-            "gemini", ["gemini"], "", "quota", 1, 0.01,
+            "antigravity", ["agy"], "", "quota", 1, 0.01,
             error_kind="quota",
         )
     )
     providers = {
         name: FakeProvider(name)
-        for name in ("codex", "claude", "gemini", "copilot")
+        for name in ("codex", "claude", "antigravity", "copilot")
     }
     orchestrator = Orchestrator(tmp_path, providers=providers)
 
     response, _ = orchestrator.execute(
-        "change", Route(Intent.MODIFY, Mode.REVIEW, "codex", "gemini")
+        "change", Route(Intent.MODIFY, Mode.REVIEW, "codex", "antigravity")
     )
 
-    # Gemini est en cooldown : c'est Claude qui a examine, et le pied de
+    # Antigravity est en cooldown : c'est Claude qui a examine, et le pied de
     # page le nomme.
     assert "Claude a examiné le travail" in response
-    assert providers["gemini"].calls == []
+    assert providers["antigravity"].calls == []
     assert len(providers["claude"].calls) == 1
     clear_cooldowns()
 

@@ -113,10 +113,10 @@ def test_reserved_provider_waits_for_its_own_reset():
     assert notice["reserved_provider"] == "claude"
 
 
-def test_consensus_replaces_low_claude_with_gemini():
+def test_consensus_replaces_low_claude_with_antigravity():
     route = Route(Intent.ANALYZE, Mode.CONSENSUS, "codex")
-    gemini = {
-        "provider": "gemini",
+    antigravity = {
+        "provider": "antigravity",
         "available": True,
         "windows": [],
     }
@@ -126,18 +126,18 @@ def test_consensus_replaces_low_claude_with_gemini():
         [
             status("codex", 70, 200_000),
             status("claude", 10, 200_000),
-            gemini,
+            antigravity,
         ],
         now=10_000,
     )
 
     assert admitted.mode is Mode.CONSENSUS
     assert admitted.primary == "codex"
-    assert admitted.reviewer == "gemini"
-    assert "claude->gemini" in notice["message"]
+    assert admitted.reviewer == "antigravity"
+    assert "claude->antigravity" in notice["message"]
 
 
-def test_consensus_keeps_healthy_claude_ahead_of_unknown_gemini():
+def test_consensus_keeps_healthy_claude_ahead_of_unknown_antigravity():
     route = Route(Intent.ANALYZE, Mode.CONSENSUS, "codex")
 
     admitted, notice = admit_route(
@@ -146,7 +146,7 @@ def test_consensus_keeps_healthy_claude_ahead_of_unknown_gemini():
             status("codex", 91, 200_000),
             status("claude", 69, 200_000),
             {
-                "provider": "gemini",
+                "provider": "antigravity",
                 "available": True,
                 "windows": [],
             },
@@ -174,7 +174,7 @@ def test_consensus_keeps_claude_when_its_measure_is_pending_refresh():
                 "message": "Quota expiré · actualisation en attente",
             },
             {
-                "provider": "gemini",
+                "provider": "antigravity",
                 "available": True,
                 "windows": [],
             },
@@ -201,7 +201,7 @@ def test_consensus_replaces_claude_during_a_real_provider_cooldown():
                 "message": "Pause temporaire après quota",
             },
             {
-                "provider": "gemini",
+                "provider": "antigravity",
                 "available": True,
                 "windows": [],
             },
@@ -209,14 +209,14 @@ def test_consensus_replaces_claude_during_a_real_provider_cooldown():
         now=10_000,
     )
 
-    assert admitted.reviewer == "gemini"
-    assert "claude->gemini" in notice["message"]
+    assert admitted.reviewer == "antigravity"
+    assert "claude->antigravity" in notice["message"]
 
 
 def test_consensus_becomes_fast_when_only_one_provider_has_capacity():
     route = Route(Intent.ANALYZE, Mode.CONSENSUS, "codex")
-    unavailable_gemini = {
-        "provider": "gemini",
+    unavailable_antigravity = {
+        "provider": "antigravity",
         "available": False,
         "windows": [],
         "message": "quota épuisé",
@@ -227,7 +227,7 @@ def test_consensus_becomes_fast_when_only_one_provider_has_capacity():
         [
             status("codex", 4, 200_000),
             status("claude", 4, 200_000),
-            unavailable_gemini,
+            unavailable_antigravity,
         ],
         now=10_000,
     )
@@ -244,7 +244,7 @@ def test_next_quota_reset_ignores_healthy_and_expired_windows():
         [
             status("codex", 2, 12_000),
             status("claude", 80, 11_000),
-            status("gemini", 1, 9_000),
+            status("antigravity", 1, 9_000),
         ],
         threshold=8,
         now=10_000,
@@ -260,7 +260,7 @@ def test_consensus_uses_one_affordable_provider_when_two_are_too_costly():
             status("codex", 10, 200_000),
             status("claude", 4, 200_000),
             {
-                "provider": "gemini",
+                "provider": "antigravity",
                 "available": False,
                 "availability_state": "temporarily_unavailable",
                 "windows": [],

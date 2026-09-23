@@ -1069,7 +1069,7 @@ def test_resumed_run_is_announced_without_duplicating_user_message(
     assert run.events[0]["type"] == "recovered"
 
 
-def test_background_compaction_saves_successful_gemini_summary(
+def test_background_compaction_saves_successful_antigravity_summary(
     tmp_path, monkeypatch
 ):
     monkeypatch.setattr(RunManager, "_recover_pending", lambda self: None)
@@ -1079,18 +1079,18 @@ def test_background_compaction_saves_successful_gemini_summary(
         conversation["id"], "assistant", "ancien contexte"
     )
 
-    class Gemini:
+    class Antigravity:
         def run(self, *args, **kwargs):
             return SimpleNamespace(ok=True, stdout="Résumé compact")
 
     orchestrator = SimpleNamespace(
         project=tmp_path,
-        providers={"gemini": Gemini()},
+        providers={"antigravity": Antigravity()},
         memory=SimpleNamespace(
             config=lambda: {
                 "semantic_compaction": {
-                    "provider": "gemini",
-                    "model": "gemini-3-flash-preview",
+                    "provider": "antigravity",
+                    "model": "gemini-3.8-flash-low",
                 }
             }
         ),
@@ -1227,8 +1227,8 @@ def _grants_commands(name: str, argv: list[str]) -> bool:
     if name == "claude":
         mode = argv[argv.index("--permission-mode") + 1]
         return mode == "bypassPermissions" or "Bash" in argv
-    if name == "gemini":
-        return argv[argv.index("--approval-mode") + 1] == "yolo"
+    if name == "antigravity":
+        return "--dangerously-skip-permissions" in argv
     return "--allow-tool=shell" in argv
 
 
@@ -1240,12 +1240,20 @@ def test_three_access_levels_are_provider_independent():
     from joe.web_runs import RunDecision, _resolve_execution_mode
 
     attendu = {
-        "read_only": {"codex": "read-only", "claude": "plan", "gemini": "plan"},
+        "read_only": {
+            "codex": "read-only",
+            "claude": "plan",
+            "antigravity": "plan",
+        },
         "manual": {
-            "codex": "workspace-write", "claude": "acceptEdits", "gemini": "yolo"
+            "codex": "workspace-write",
+            "claude": "acceptEdits",
+            "antigravity": "accept-edits",
         },
         "auto": {
-            "codex": "workspace-write", "claude": "acceptEdits", "gemini": "yolo"
+            "codex": "workspace-write",
+            "claude": "acceptEdits",
+            "antigravity": "accept-edits",
         },
     }
     for level, par_fournisseur in attendu.items():
@@ -1253,13 +1261,14 @@ def test_three_access_levels_are_provider_independent():
             route = Route(intent, Mode.FAST, "claude")
             mode = _resolve_execution_mode(None, level, route)
             for name, expected in par_fournisseur.items():
-                argv = Provider(name, name).command(
+                executable = "agy" if name == "antigravity" else name
+                argv = Provider(name, executable).command(
                     "p", Path("/tmp"), intent, execution_mode=mode
                 )
                 assert expected in argv, (level, name, intent)
                 # Un accès en écriture doit pouvoir lancer une commande, sinon
                 # « lance les tests » revient « Refusé par le sandbox ».
-                if level != "read_only":
+                if level != "read_only" and name != "antigravity":
                     assert _grants_commands(name, argv), (level, name, intent)
             decision = RunDecision(route=route, execution_mode=mode, ai_access=level)
             assert decision.needs_approval is (level == "manual")
@@ -1839,13 +1848,7 @@ def test_a_retired_cli_says_so_where_it_is_chosen():
     assert 't("provider_retired"' in app
 
 
-def test_compaction_never_targets_a_retired_cli_by_default():
-    """Le defaut livre nommait Gemini CLI, retiree des comptes grand public.
-
-    La compaction se declenche seule, dans un thread de fond, sur les longues
-    conversations : elle echouait donc a chaque fois, et l'erreur remontait au
-    milieu d'un run sans rapport — le bloc n'avait pas d'`except`.
-    """
+def test_compaction_migrates_the_retired_gemini_setting():
     from joe.memory import DEFAULT_CONFIG
     from joe.web_runs import _compaction_provider
 
@@ -1853,22 +1856,13 @@ def test_compaction_never_targets_a_retired_cli_by_default():
     assert reglage["provider"] == ""
     assert reglage["model"] == ""
 
-    installes = {"codex": 1, "claude": 1, "antigravity": 1, "gemini": 1}
-    # Sans consigne, Joe prend un fournisseur en service, jamais le deprecie.
+    installes = {"codex": 1, "claude": 1, "antigravity": 1}
     assert _compaction_provider("", installes) == "codex"
 
-    # Un choix explicite est respecte : une licence entreprise fait encore
-    # repondre Gemini.
-    assert _compaction_provider("gemini", installes) == "gemini"
-
-    # Choisi mais absent : son successeur declare prend le relais, plutot que
-    # le `KeyError` que produisait l'acces direct au dictionnaire.
+    # An old local setting is migrated without exposing Gemini as active.
     assert _compaction_provider("gemini", {"claude": 1, "antigravity": 1}) == (
         "antigravity"
     )
-
-    # Faute de mieux, une CLI depreciee vaut mieux que pas de compaction.
-    assert _compaction_provider("", {"gemini": 1}) == "gemini"
 
     # Aucun fournisseur : on renonce, sans lever.
     assert _compaction_provider("", {}) == ""

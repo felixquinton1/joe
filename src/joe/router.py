@@ -233,24 +233,6 @@ class Router:
     def __init__(self, available: frozenset[str] | None = None):
         self.available = available
 
-    def _in_service(self, name: str) -> str:
-        """Le successeur d'un fournisseur deprecie, quand il est installe.
-
-        Une regle nomme un fournisseur pour ce qu'il sait faire — ici tenir un
-        grand contexte — pas pour sa version. Ecrite en dur, elle continuait de
-        designer une CLI qui ne sert plus les comptes grand public, et le repli
-        d'indisponibilite l'emmenait ailleurs que chez son remplacant.
-
-        Un choix explicite de l'utilisateur n'est jamais reecrit : demander
-        Gemini doit donner Gemini, tant que la CLI repond.
-        """
-        successor = get_provider_spec(name).successor_provider
-        if not successor:
-            return name
-        if self.available is None or successor in self.available:
-            return successor
-        return name
-
     def _usable(self, name: str | None) -> str | None:
         """Le fournisseur demande, ou le premier de ses replis qui existe."""
         if not name or self.available is None or name in self.available:
@@ -397,7 +379,7 @@ class Router:
         elif follow_up_review:
             primary = counterpart(previous_provider or "")
         elif any(phrase in lower for phrase in LARGE_CONTEXT_WORDS):
-            primary = self._in_service("gemini")
+            primary = "antigravity"
         elif words & DOC_WORDS or words & ARCHITECTURE_WORDS:
             primary = "claude"
         else:

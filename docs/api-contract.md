@@ -83,7 +83,7 @@ not part of the first, read-only VS Code client.
   "version": "0.x.y",
   "api_version": "1.2",
   "project": "/path/to/project",
-  "providers": ["codex", "claude", "gemini", "copilot"],
+  "providers": ["codex", "claude", "antigravity", "copilot", "cursor-agent"],
   "provider_catalog": [{"id": "codex", "label": "Codex"}],
   "modes": ["fast", "review", "consensus"],
   "network_control_providers": ["codex"]

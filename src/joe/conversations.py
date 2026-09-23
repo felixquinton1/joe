@@ -75,7 +75,7 @@ IMPORTED_HISTORY_TITLE = "Imported history"
 UNTITLED_CONVERSATION_TITLES = frozenset(
     {DEFAULT_CONVERSATION_TITLE, "Nouvelle conversation"}
 )
-CURRENT_SCHEMA_VERSION = 11
+CURRENT_SCHEMA_VERSION = 12
 
 
 class ConversationStore:
@@ -817,6 +817,9 @@ class ConversationStore:
         )
         for conversation in payload.setdefault("conversations", []):
             conversation.setdefault("project_id", DEFAULT_PROJECT_ID)
+            settings = conversation.setdefault("settings", dict(DEFAULT_SETTINGS))
+            if settings.get("agent", "") not in _VALID_AGENTS:
+                settings["agent"] = ""
             conversation.setdefault(
                 "last_call_at",
                 conversation.get("updated_at", conversation.get("created_at", 0)),
@@ -836,6 +839,8 @@ class ConversationStore:
             project.setdefault("quota_automation", True)
             project.setdefault("mcp_tools", False)
             project.setdefault("quota_provider", "")
+            if project["quota_provider"] not in _VALID_AGENTS:
+                project["quota_provider"] = ""
             project.setdefault("default_execution_mode", "")
             project["ai_access"] = _ai_access(
                 project.get("ai_access"), project.get("default_execution_mode")

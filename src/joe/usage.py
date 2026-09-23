@@ -52,10 +52,24 @@ def usage_status(force: bool = False) -> list[dict[str, Any]]:
     with _lock:
         if not force and _cache and time.monotonic() - _cache[0] < _CACHE_SECONDS:
             return _cache[1]
+    antigravity_installed = bool(shutil.which("agy"))
     fresh = [
         _codex_status(),
         _refresh_claude_status() if force else _claude_status(),
-        _gemini_status(),
+        {
+            "provider": "antigravity",
+            "available": antigravity_installed,
+            "availability_state": (
+                "quota_unknown" if antigravity_installed else "unavailable"
+            ),
+            "plan": None,
+            "windows": [],
+            "message": (
+                "Quota non exposé par Antigravity CLI"
+                if antigravity_installed
+                else "Antigravity CLI non installée"
+            ),
+        },
         _unavailable(
             "copilot",
             "Disponible uniquement dans la session interactive Copilot",
@@ -268,7 +282,6 @@ def admit_route(
         key=lambda provider: (
             provider == route.primary,
             capacity[provider][1] if capacity[provider][1] is not None else -1,
-            provider != "gemini",
         ),
         reverse=True,
     )
@@ -476,6 +489,7 @@ def _provider_capacity(
         known_exhaustion = state in {
             "quota_exhausted",
             "temporarily_unavailable",
+            "unavailable",
         } or any(
             marker in detail.lower()
             for marker in (

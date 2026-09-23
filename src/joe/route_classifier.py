@@ -191,7 +191,9 @@ def _select_classifier(
     capabilities = cached_provider_capabilities()
     now = time.monotonic()
     candidates = []
-    for order, name in enumerate(("codex", "claude", "gemini", "copilot")):
+    for order, name in enumerate(
+        ("codex", "claude", "antigravity", "copilot", "cursor-agent")
+    ):
         provider = providers.get(name)
         if provider is None or recent_failure(name):
             continue
@@ -238,7 +240,7 @@ Allowed values:
 - action: none | create_skill
 - complexity: trivial | simple | moderate | complex | critical
 - workflow: fast | review | consensus
-- provider: codex | claude | gemini | copilot
+- provider: codex | claude | antigravity | copilot | cursor-agent
 - model_tier: light | standard | strong | long-context
 - effort: low | medium | high
 - skill_scope: project | global
@@ -247,7 +249,8 @@ Rules:
 - consensus only for critical, genuinely consequential decisions.
 - review for substantial implementation; fast for questions and small changes.
 - prefer codex for code/debug/science, claude for architecture/review/docs,
-  gemini for long context/research, copilot only for tiny isolated work.
+  antigravity for long context/research, copilot only for tiny isolated work,
+  and cursor-agent as a coding fallback.
 - create_skill only when the user explicitly asks to create a reusable skill.
 - confidence is a number from 0 to 1.
 - for create_skill, extract skill_name and skill_instructions. Leave them empty

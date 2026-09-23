@@ -1,8 +1,8 @@
 # Joe user guide
 
-Joe connects a local interface to the Codex, Claude Code, Gemini, Copilot and
-Cursor CLIs already installed and authenticated on the machine. It never asks
-for or stores their passwords.
+Joe connects a local interface to the Codex, Claude Code, Antigravity, Copilot
+and Cursor CLIs already installed and authenticated on the machine. It never
+asks for or stores their passwords.
 
 The Cursor CLI installs under the name `agent`, with no window: the `cursor`
 command launches the editor and is not suitable. Joe also accepts the older
@@ -12,9 +12,9 @@ still detected when the run starts, and the request falls back to another
 provider.
 
 The model selector is populated only for CLIs that publish their catalogue:
-Codex exposes one, and Claude's is maintained inside Joe. Gemini and Copilot
-offer no list and therefore only propose `auto`, which lets the CLI choose; the
-model you want can be imposed in the project settings.
+Codex exposes one, while the Claude and Antigravity catalogues are maintained
+inside Joe. Copilot offers no list and therefore proposes `auto`, which lets
+the CLI choose; an exact model can still be imposed in the project settings.
 
 ## Installation
 
@@ -105,9 +105,9 @@ reading projects is allowed, but project mutations and active quota refreshes
 answer `403` with an explicit message.
 
 The "Web access" setting, per project or per conversation, constrains only the
-providers that expose a network switch — today Codex alone. The Claude, Gemini
-and Copilot CLIs offer no equivalent option: unticking it does not remove their
-network access. The interface states this real scope under the checkbox, from
+providers that expose a network switch — today Codex alone. The Claude,
+Antigravity and Copilot CLIs offer no equivalent option: unticking it does not
+remove their network access. The interface states this real scope under the checkbox, from
 the `network_control_providers` field of `GET /api/status`.
 
 To pair a browser again after clearing cookies:
@@ -312,7 +312,7 @@ by the Joe server.
 When a project or a conversation requests `danger-full-access`, Joe suspends
 the launch and shows an "Allow once" confirmation. Without it, no run is
 created and no message is added to the history. Once confirmed, Codex, Claude
-or Gemini receives its real full mode for that run only. This run-level
+or Antigravity receives its real full mode for that run only. This run-level
 confirmation works in Joe Web and VS Code; the per-command prompts specific to
 each CLI remain future work.
 
@@ -361,7 +361,7 @@ waits for a known quota reset instead of giving up.
 
 The **Reserved AI** section is a project setting. In automatic mode, Joe
 balances providers according to the task and the known headroom. If Claude,
-Codex, Gemini or Copilot is reserved, Joe makes it the primary agent for the
+Codex, Antigravity or Copilot is reserved, Joe makes it the primary agent for the
 project's new automatic requests and waits for its next known window when that
 headroom is insufficient. The REVIEW and CONSENSUS workflows may still call
 another agent for the review. An agent chosen explicitly in a conversation

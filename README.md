@@ -116,17 +116,14 @@ next request with nothing to configure.
 | Claude Code | `claude` | `curl -fsSL https://claude.ai/install.sh \| bash` |
 | Antigravity CLI | `agy` | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` |
 | GitHub Copilot CLI | `copilot` | `npm install -g @github/copilot` |
-| Gemini CLI *(retired)* | `gemini` | `npm install -g @google/gemini-cli` |
 | Cursor CLI | `agent` | `curl https://cursor.com/install -fsS \| bash` |
 
 Each provider then needs to be signed in once, through its own CLI. Joe never
 asks for or stores provider credentials.
 
-Gemini CLI stopped serving consumer accounts on 18 June 2026 and was replaced
-by Antigravity CLI. An enterprise licence still works, so Joe keeps it — last
-in every fallback chain, never a default. Antigravity installs as a single Go
-binary, needs neither Node nor sudo, and signs in over SSH by printing a URL
-and waiting for the code the browser hands back.
+Antigravity installs as a single Go binary, needs neither Node nor sudo, and
+signs in over SSH by printing a URL and waiting for the code the browser hands
+back.
 
 `joe doctor` lists what is detected and prints the install command and official
 page for whatever is missing, with the Windows variant where it differs. The

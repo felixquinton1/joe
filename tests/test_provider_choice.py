@@ -58,11 +58,11 @@ def test_a_refused_provider_leaves_the_routing(monkeypatch, isolated_preferences
 
 
 def test_a_refusal_survives_a_restart(isolated_preferences):
-    provider_choice.set_disabled(["gemini", "copilot"])
+    provider_choice.set_disabled(["antigravity", "copilot"])
 
     assert isolated_preferences.is_file()
-    assert provider_choice.disabled_providers() == {"gemini", "copilot"}
-    assert not provider_choice.is_enabled("gemini")
+    assert provider_choice.disabled_providers() == {"antigravity", "copilot"}
+    assert not provider_choice.is_enabled("antigravity")
 
 
 def test_an_unknown_name_is_never_written(isolated_preferences):
@@ -126,23 +126,14 @@ def test_a_generic_name_must_prove_it_is_the_right_cli(monkeypatch):
     assert resolve_executable("cursor-agent", unconfirmed=True) == "/venv/bin/agent"
 
 
-def test_a_retired_cli_is_no_longer_preferred():
-    """Gemini a cesse de servir les comptes grand public le 18 juin 2026.
+def test_retired_gemini_cli_is_absent_from_the_active_registry():
+    from joe.provider_registry import (
+        arbitration_order,
+        get_provider_names,
+        get_provider_spec,
+    )
 
-    Elle etait pourtant le premier repli de trois fournisseurs et l'arbitre
-    prefere du consensus : ces defauts designaient celui qui echouerait. Une
-    licence entreprise fonctionne toujours, donc on la garde, en dernier.
-    """
-    from joe.provider_registry import arbitration_order, get_provider_spec
-
-    gemini = get_provider_spec("gemini")
-    assert gemini.deprecated_since == "2026-06-18"
-    assert gemini.successor == "Antigravity CLI"
-    assert gemini.successor_url.startswith("https://")
-
-    for nom in ("codex", "claude", "copilot"):
-        chaine = get_provider_spec(nom).fallbacks
-        assert "gemini" in chaine, nom
-        assert chaine[-1] == "gemini", nom
-
-    assert arbitration_order(proposers=("codex", "claude"))[0] != "gemini"
+    assert "gemini" not in get_provider_names()
+    for name in get_provider_names():
+        assert "gemini" not in get_provider_spec(name).fallbacks
+    assert "gemini" not in arbitration_order(proposers=("codex", "claude"))

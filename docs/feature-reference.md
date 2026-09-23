@@ -37,9 +37,7 @@ Joe detects and drives the following local CLIs:
 - Claude Code;
 - Antigravity CLI;
 - GitHub Copilot CLI;
-- Cursor CLI (`agent`, with `cursor-agent` retained for compatibility);
-- Gemini CLI for enterprise installations that still support it. Consumer
-  Gemini CLI accounts are considered retired and are not selected by default.
+- Cursor CLI (`agent`, with `cursor-agent` retained for compatibility).
 
 Only installed and enabled providers are eligible. A provider can be disabled
 from **Options → Preferences → AI CLIs** without uninstalling it.

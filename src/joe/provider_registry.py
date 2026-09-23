@@ -1,10 +1,8 @@
 """Declarative description of every provider Joe can drive.
 
 Chaque comportement propre à un fournisseur était auparavant re-testé par nom
-dans `providers.py` et réécrit littéralement dans cinq autres modules. Le signe
-le plus net : `watchdog_seconds` existait comme donnée, mais son activation
-restait un `if provider == "gemini"`. Ici, un comportement se déclare une fois
-et se lit partout.
+dans `providers.py` et réécrit littéralement dans cinq autres modules. Ici, un
+comportement se déclare une fois et se lit partout.
 
 Ajouter un fournisseur = une entrée dans `PROVIDERS` et une fonction d'argv
 dans `providers.py`. L'absence de l'une ou de l'autre échoue à l'import, pas au
@@ -24,7 +22,7 @@ class ProviderSpec:
     streams_json: bool = False
     """La CLI émet des événements JSON sur stdout plutôt que du texte brut.
 
-    Remplace les listes blanches `{"codex", "claude", "gemini"}` recopiées dans
+    Remplace les listes blanches de fournisseurs recopiées dans
     `_activity`, `_collect_streams` et `_final_output` : un fournisseur absent
     de ces listes renvoyait silencieusement du stdout brut au lieu d'événements
     analysés.
@@ -43,8 +41,7 @@ class ProviderSpec:
     """Fournisseurs pouvant relire ce fournisseur, par ordre de préférence.
 
     La règle « choisis le complémentaire » était écrite cinq fois dans cinq
-    modules, ce qui empêchait structurellement Gemini et Copilot d'être
-    relecteurs.
+    modules, ce qui empêchait plusieurs fournisseurs d'être relecteurs.
     """
 
     fallbacks: tuple[str, ...] = ()
@@ -54,7 +51,11 @@ class ProviderSpec:
     """Version minimale connue pour fonctionner."""
 
     exposes_usage: bool = False
-    """La CLI expose une mesure de quota exploitable."""
+    """Le fournisseur participe au routage de capacité.
+
+    Une CLI peut seulement signaler que son quota est inconnu : un pourcentage
+    précis n'est pas requis pour apparaître dans le panneau et les décisions.
+    """
 
     arbitration_priority: int = 3
     """Préférence pour arbitrer un consensus. Plus bas = préféré.
@@ -94,10 +95,8 @@ class ProviderSpec:
     deprecated_since: str = ""
     """Date a laquelle la CLI a cesse de servir le grand public, si elle l'a fait.
 
-    Ce n'est pas une suppression : Gemini CLI continue de repondre aux licences
-    entreprise. Joe garde donc le fournisseur, cesse seulement de le preferer,
-    et le dit — sinon un utilisateur grand public voit des echecs sans cause
-    apparente.
+    Un fournisseur retiré du registre n'est plus exposé du tout ; ce champ sert
+    seulement à annoncer une transition temporaire quand elle est nécessaire.
     """
 
     successor: str = ""
@@ -145,7 +144,7 @@ PROVIDERS = (
         "Codex",
         streams_json=True,
         reviewer_peers=("claude", "cursor-agent"),
-        fallbacks=("claude", "copilot", "cursor-agent", "antigravity", "gemini"),
+        fallbacks=("claude", "copilot", "cursor-agent", "antigravity"),
         # 0.147.0 rejetait `--search`, que Joe passe en accès distant : la
         # borne annoncée décrivait donc une version où les runs échouaient.
         minimum_version="0.155.0",
@@ -161,7 +160,7 @@ PROVIDERS = (
         "Claude",
         streams_json=True,
         reviewer_peers=("codex", "cursor-agent"),
-        fallbacks=("codex", "copilot", "cursor-agent", "antigravity", "gemini"),
+        fallbacks=("codex", "copilot", "cursor-agent", "antigravity"),
         minimum_version="2.1.197",
         exposes_usage=True,
         # L'installation par npm est dépréciée en amont : l'installeur natif
@@ -172,38 +171,10 @@ PROVIDERS = (
         sign_in="claude",
     ),
     ProviderSpec(
-        "gemini",
-        "Gemini",
-        streams_json=True,
-        watchdog_seconds=90,
-        terminal_quota_markers=(
-            "resource_exhausted",
-            "exceeded your current quota",
-            "status 429",
-        ),
-        reviewer_peers=("codex", "claude"),
-        fallbacks=("codex", "claude", "copilot"),
-        minimum_version="0.52.0",
-        exposes_usage=True,
-        # Etait l'arbitre prefere, parce que rarement juge et partie. Depuis le
-        # 18 juin 2026 la CLI ne sert plus les comptes grand public : en faire
-        # l'arbitre par defaut revenait a choisir celui qui echouera.
-        arbitration_priority=5,
-        deprecated_since="2026-06-18",
-        successor="Antigravity CLI",
-        successor_provider="antigravity",
-        successor_url="https://antigravity.google",
-        install_posix="npm install -g @google/gemini-cli",
-        requires_node="20",
-        install_windows="npm install -g @google/gemini-cli",
-        homepage="https://github.com/google-gemini/gemini-cli",
-        sign_in="gemini",
-    ),
-    ProviderSpec(
         "copilot",
         "Copilot",
         reviewer_peers=("codex", "claude"),
-        fallbacks=("codex", "claude", "antigravity", "gemini"),
+        fallbacks=("codex", "claude", "antigravity"),
         minimum_version="1.0.75",
         install_posix="npm install -g @github/copilot",
         requires_node="22",
@@ -211,7 +182,6 @@ PROVIDERS = (
         homepage="https://docs.github.com/en/copilot/get-started/cli-quickstart",
         sign_in="copilot, then /login",
     ),
-    # Successeur de Gemini CLI, depreciee pour le grand public le 18 juin 2026.
     # Le nom du fournisseur est parlant, celui du binaire ne l'est pas : `agy`.
     ProviderSpec(
         "antigravity",
@@ -220,6 +190,9 @@ PROVIDERS = (
         executables=("agy",),
         reviewer_peers=("codex", "claude"),
         fallbacks=("claude", "codex", "copilot"),
+        # La CLI ne publie pas de pourcentage, mais elle participe au routage
+        # de capacité avec un état explicite « quota non exposé ».
+        exposes_usage=True,
         install_posix="curl -fsSL https://antigravity.google/cli/install.sh | bash",
         install_windows="irm https://antigravity.google/cli/install.ps1 | iex",
         homepage="https://antigravity.google/docs/cli/install/",
@@ -236,7 +209,7 @@ PROVIDERS = (
         "cursor-agent",
         "Cursor",
         reviewer_peers=("codex", "claude"),
-        fallbacks=("claude", "codex", "antigravity", "gemini"),
+        fallbacks=("claude", "codex", "antigravity"),
         # `agent` est un nom générique qu'une autre CLI peut occuper : le
         # diagnostic vérifie l'identité du binaire trouvé sous ce nom-là.
         executables=("cursor-agent", "agent"),

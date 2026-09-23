@@ -204,7 +204,9 @@ def test_commands_match_inspected_noninteractive_interfaces():
     assert "p" not in codex
     assert "--print" in Provider("claude", "claude").command("p", cwd, Intent.ANALYZE)
     assert "stream-json" in Provider("claude", "claude").command("p", cwd, Intent.ANALYZE)
-    assert "--prompt" in Provider("gemini", "gemini").command("p", cwd, Intent.ANALYZE)
+    assert "--print=p" in Provider("antigravity", "agy").command(
+        "p", cwd, Intent.ANALYZE
+    )
     assert "--prompt" in Provider("copilot", "copilot").command("p", cwd, Intent.ANALYZE)
 
 
@@ -231,8 +233,15 @@ def test_codex_prompt_uses_stdin_without_platform_command_line_limits(tmp_path):
 
 def test_model_is_forwarded_to_each_cli():
     cwd = Path("/tmp/project")
-    for name in ("codex", "claude", "gemini", "copilot"):
-        command = Provider(name, name).command("p", cwd, Intent.ANALYZE, "chosen")
+    for name, executable in (
+        ("codex", "codex"),
+        ("claude", "claude"),
+        ("antigravity", "agy"),
+        ("copilot", "copilot"),
+    ):
+        command = Provider(name, executable).command(
+            "p", cwd, Intent.ANALYZE, "chosen"
+        )
         assert "--model" in command
         assert "chosen" in command
 
@@ -260,7 +269,7 @@ def test_provider_specific_read_only_modes_translate_across_providers():
     claude = Provider("claude", "claude").command(
         "p", cwd, Intent.MODIFY, execution_mode="read-only"
     )
-    gemini = Provider("gemini", "gemini").command(
+    antigravity = Provider("antigravity", "agy").command(
         "p", cwd, Intent.MODIFY, execution_mode="plan"
     )
     copilot = Provider("copilot", "copilot").command(
@@ -269,7 +278,7 @@ def test_provider_specific_read_only_modes_translate_across_providers():
 
     assert codex[codex.index("--sandbox") + 1] == "read-only"
     assert claude[claude.index("--permission-mode") + 1] == "plan"
-    assert gemini[gemini.index("--approval-mode") + 1] == "plan"
+    assert antigravity[antigravity.index("--mode") + 1] == "plan"
     assert "--plan" in copilot
     assert not any(argument.startswith("--allow-tool") for argument in copilot)
 
@@ -293,7 +302,7 @@ def test_generic_write_modes_are_translated_for_non_codex_clis():
     claude = Provider("claude", "claude").command(
         "p", cwd, Intent.ANALYZE, execution_mode="danger-full-access"
     )
-    gemini = Provider("gemini", "gemini").command(
+    antigravity = Provider("antigravity", "agy").command(
         "p", cwd, Intent.ANALYZE, execution_mode="workspace-write"
     )
     copilot = Provider("copilot", "copilot").command(
@@ -302,25 +311,23 @@ def test_generic_write_modes_are_translated_for_non_codex_clis():
 
     assert claude[claude.index("--permission-mode") + 1] == "bypassPermissions"
     assert "--allow-dangerously-skip-permissions" not in claude
-    assert gemini[gemini.index("--approval-mode") + 1] == "yolo"
+    assert antigravity[antigravity.index("--mode") + 1] == "accept-edits"
     assert "--allow-tool=write" in copilot
     assert "--allow-tool=shell" in copilot
 
 
-def test_write_access_can_actually_run_commands_on_every_cli():
+def test_write_access_uses_each_cli_safe_noninteractive_mode():
     """Écrire sans pouvoir lancer les tests écrits n'est pas un accès en écriture.
 
-    `acceptEdits` (Claude) et `auto_edit` (Gemini) n'auto-approuvent que
-    l'édition de fichiers : pytest et npm y sont refusés, et le mode `--print`
-    n'offre aucun canal d'approbation en cours de run. Le symptôme observé
-    était « Refusé par le sandbox » sur un projet pourtant réglé en accès
-    automatique.
+    Claude and Copilot can run validation commands in workspace-write mode.
+    Antigravity deliberately keeps its documented accept-edits boundary and
+    requires project-full before it auto-approves shell commands.
     """
     cwd = Path("/tmp/project")
     claude = Provider("claude", "claude").command(
         "p", cwd, Intent.MODIFY, execution_mode="workspace-write"
     )
-    gemini = Provider("gemini", "gemini").command(
+    antigravity = Provider("antigravity", "agy").command(
         "p", cwd, Intent.MODIFY, execution_mode="workspace-write"
     )
     copilot = Provider("copilot", "copilot").command(
@@ -328,7 +335,8 @@ def test_write_access_can_actually_run_commands_on_every_cli():
     )
 
     assert claude[claude.index("--allowedTools") + 1] == "Bash"
-    assert gemini[gemini.index("--approval-mode") + 1] == "yolo"
+    assert antigravity[antigravity.index("--mode") + 1] == "accept-edits"
+    assert "--dangerously-skip-permissions" not in antigravity
     assert "--allow-tool=shell" in copilot
 
 
@@ -337,13 +345,13 @@ def test_read_only_access_never_grants_commands():
     claude = Provider("claude", "claude").command(
         "p", cwd, Intent.MODIFY, execution_mode="read-only"
     )
-    gemini = Provider("gemini", "gemini").command(
+    antigravity = Provider("antigravity", "agy").command(
         "p", cwd, Intent.MODIFY, execution_mode="read-only"
     )
 
     assert "--allowedTools" not in claude
     assert claude[claude.index("--permission-mode") + 1] == "plan"
-    assert gemini[gemini.index("--approval-mode") + 1] == "plan"
+    assert antigravity[antigravity.index("--mode") + 1] == "plan"
 
 
 def test_full_access_remains_scoped_to_declared_project_roots():
@@ -355,7 +363,7 @@ def test_full_access_remains_scoped_to_declared_project_roots():
     claude = Provider("claude", "claude", extra).command(
         "p", cwd, Intent.MODIFY, execution_mode="danger-full-access"
     )
-    gemini = Provider("gemini", "gemini", extra).command(
+    antigravity = Provider("antigravity", "agy", extra).command(
         "p", cwd, Intent.MODIFY, execution_mode="danger-full-access"
     )
     copilot = Provider("copilot", "copilot", extra).command(
@@ -365,13 +373,13 @@ def test_full_access_remains_scoped_to_declared_project_roots():
     assert codex[codex.index("--sandbox") + 1] == "workspace-write"
     assert claude[claude.index("--permission-mode") + 1] == "bypassPermissions"
     assert "--allow-dangerously-skip-permissions" not in claude
-    assert gemini[gemini.index("--approval-mode") + 1] == "yolo"
+    assert "--dangerously-skip-permissions" in antigravity
     assert "--allow-tool=write" in copilot
     assert "--allow-tool=shell" in copilot
     for command, flag in (
         (codex, "--add-dir"),
         (claude, "--add-dir"),
-        (gemini, "--include-directories"),
+        (antigravity, "--add-dir"),
         (copilot, "--add-dir"),
     ):
         assert command[command.index(flag) + 1] == str(extra[0])
@@ -387,10 +395,13 @@ def test_additional_project_roots_are_forwarded_to_each_cli():
     assert codex[codex.index("--add-dir") + 1] == str(extra[0])
     for name, flag in (
         ("claude", "--add-dir"),
-        ("gemini", "--include-directories"),
+        ("antigravity", "--add-dir"),
         ("copilot", "--add-dir"),
     ):
-        command = Provider(name, name, extra).command("p", cwd, Intent.ANALYZE)
+        executable = "agy" if name == "antigravity" else name
+        command = Provider(name, executable, extra).command(
+            "p", cwd, Intent.ANALYZE
+        )
         assert command[command.index(flag) + 1] == str(extra[0])
 
 
@@ -420,17 +431,17 @@ def test_error_classification():
     assert classify_error("Please login", 1) == "authentication"
     assert classify_error("", 2) == "process"
     assert classify_error(
-        "You exceeded your current quota", 0, "gemini"
+        "You exceeded your current quota", 1, "antigravity"
     ) == "quota"
     assert classify_error(
         "L’authentification est valide et le quota est disponible",
         0,
         "codex",
     ) is None
-    # Les marqueurs de quota terminal viennent du registre, plus d'un test
-    # sur le nom du fournisseur.
-    assert _terminal_quota(
-        "gemini", "429 RESOURCE_EXHAUSTED: exceeded your current quota"
+    # Antigravity does not currently expose a terminal quota marker on an
+    # otherwise successful process.
+    assert not _terminal_quota(
+        "antigravity", "429 RESOURCE_EXHAUSTED: exceeded your current quota"
     )
     assert not _terminal_quota(
         "codex", "429 RESOURCE_EXHAUSTED: exceeded your current quota"
@@ -510,12 +521,6 @@ def test_claude_system_event_exposes_precise_model_without_ready_line():
     assert _activity("claude", "stdout", '{"type":"system","subtype":"init"}') is None
 
 
-def test_gemini_init_event_exposes_precise_model():
-    activity = _activity("gemini", "stdout", '{"type":"init","model":"gemini-3-pro"}')
-    assert activity == {"kind": "model", "label": "gemini-3-pro", "detail": ""}
-    assert _activity("gemini", "stdout", '{"type":"init"}') is None
-
-
 def test_final_output_keeps_only_the_structured_result():
     result = (
         '{"type":"result","result":"Ce que je vais faire :\\nAnalyser.\\n\\n'
@@ -524,15 +529,6 @@ def test_final_output_keeps_only_the_structured_result():
 
     assert _final_output("claude", result) == (
         "## Résultat\n\nLes tests passent."
-    )
-
-
-def test_gemini_stream_fragments_are_reassembled_without_broken_words():
-    first = '{"type":"message","role":"assistant","content":"Voici la syn"}'
-    second = '{"type":"message","role":"assistant","content":"thèse.\\n\\n## Résultat"}'
-
-    assert _final_output("gemini", f"{first}\n{second}\n") == (
-        "Voici la synthèse.\n\n## Résultat"
     )
 
 
@@ -545,11 +541,14 @@ def test_network_control_declaration_matches_commands():
     from joe.providers import NETWORK_CONTROLLED_PROVIDERS
 
     effective = []
-    for name in ("codex", "claude", "gemini", "copilot"):
-        blocked = Provider(name, name).command(
+    from joe.provider_registry import get_provider_names, provider_executables
+
+    for name in get_provider_names():
+        executable = provider_executables(name)[0]
+        blocked = Provider(name, executable).command(
             "p", Path("/tmp"), Intent.MODIFY, execution_mode="workspace-write"
         )
-        allowed = Provider(name, name, remote_access=True).command(
+        allowed = Provider(name, executable, remote_access=True).command(
             "p", Path("/tmp"), Intent.MODIFY, execution_mode="workspace-write"
         )
         if blocked != allowed:
@@ -643,9 +642,7 @@ def test_the_arbiter_prefers_a_third_party_but_never_blocks_the_consensus():
 
     proposers = ("codex", "claude")
 
-    # Un tiers passe devant les deux proposants — mais plus Gemini, qui ne
-    # sert plus les comptes grand public depuis le 18 juin 2026 : en faire
-    # l'arbitre par defaut revenait a designer celui qui echouera.
+    # Un tiers passe devant les deux proposants.
     assert arbitration_order(proposers)[0] not in proposers
     assert arbitration_order(proposers)[0] != "gemini"
     assert arbitration_order(proposers, ("codex", "claude", "cursor-agent"))[0] == (
@@ -666,9 +663,7 @@ def test_the_watchdog_is_armed_by_the_declared_delay_alone():
     """Plus aucun test sur le nom du fournisseur n'arme le chien de garde."""
     from joe.provider_registry import get_provider_spec
 
-    assert get_provider_spec("gemini").watchdog_seconds
     assert get_provider_spec("codex").watchdog_seconds is None
-    assert Provider("gemini", "gemini").watchdog_delay == 90
     assert Provider("codex", "codex").watchdog_delay is None
     # Un override d'instance reste prioritaire.
     assert Provider("codex", "codex", watchdog_seconds=5).watchdog_delay == 5
@@ -689,9 +684,7 @@ def test_the_reviewer_counterpart_comes_from_the_registry():
 
     assert counterpart("codex") == "claude"
     assert counterpart("claude") == "codex"
-    # Gemini et Copilot ont désormais un complémentaire déclaré, au lieu
-    # d'être exclus par une expression codée en dur.
-    assert counterpart("gemini") == "codex"
+    assert counterpart("antigravity") == "codex"
     assert counterpart("copilot") == "codex"
     assert counterpart("codex", eligible=("codex",)) is None
 

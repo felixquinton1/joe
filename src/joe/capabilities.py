@@ -34,20 +34,6 @@ def provider_capabilities(refresh: bool = False) -> dict[str, Any]:
                 _mode("dontAsk", "Refuser les permissions non accordées"),
             ],
         },
-        "gemini": {
-            "available": bool(shutil.which("gemini")),
-            "models": _models("auto"),
-            "efforts": [],
-            "execution_modes": [
-                _mode("auto", "Automatique"),
-                _mode("plan", "Plan — lecture seule"),
-                _mode("auto_edit", "Modifications autorisées"),
-                _mode(
-                    "danger-full-access",
-                    "Accès complet — confirmation avant chaque run",
-                ),
-            ],
-        },
         "copilot": {
             "available": bool(shutil.which("copilot")),
             "models": _models("auto"),
