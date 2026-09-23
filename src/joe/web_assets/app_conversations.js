@@ -649,7 +649,7 @@ window.createJoeConversations = function createJoeConversations({
     $("project-quota-automation").checked = true;
     $("project-mcp-tools").checked = false;
     updateAutoDeliveryHelp();
-    $("project-ai-access").value = "manual";
+    $("project-ai-access").value = "auto";
     refreshSelectMenu($("project-ai-access"));
     $("project-context").value = "";
     $("skill-name").value = "";
@@ -680,7 +680,7 @@ window.createJoeConversations = function createJoeConversations({
     $("project-quota-automation").checked = project.quota_automation !== false;
     $("project-mcp-tools").checked = project.mcp_tools === true;
     updateAutoDeliveryHelp();
-    $("project-ai-access").value = project.ai_access || "manual";
+    $("project-ai-access").value = project.ai_access || "auto";
     refreshSelectMenu($("project-ai-access"));
     $("project-context").value = project.context || "";
     $("skill-name").value = "";

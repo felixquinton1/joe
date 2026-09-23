@@ -19,6 +19,16 @@ require("../src/joe/web_assets/markdown.js");
 const { window } = globalThis;
 const katex = require("../src/joe/web_assets/katex.min.js");
 
+test("uses automatic AI access for new and legacy project dialogs", () => {
+  const source = readFileSync(
+    new URL("../src/joe/web_assets/app_conversations.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(source, /\$\("project-ai-access"\)\.value = "auto";/);
+  assert.match(source, /project\.ai_access \|\| "auto"/);
+  assert.doesNotMatch(source, /project\.ai_access \|\| "manual"/);
+});
+
 test("pairs from the fragment and removes it from browser history", async () => {
   const calls = [];
   const history = {

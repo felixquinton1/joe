@@ -1265,6 +1265,14 @@ def test_three_access_levels_are_provider_independent():
             assert decision.needs_approval is (level == "manual")
 
 
+def test_run_decision_defaults_to_unattended_project_access():
+    route = Route(Intent.MODIFY, Mode.FAST, "claude")
+    decision = RunDecision(route=route, execution_mode="workspace-write")
+
+    assert decision.ai_access == "auto"
+    assert decision.needs_approval is False
+
+
 def test_a_local_action_never_asks_for_approval():
     from joe.web_runs import RunDecision
 

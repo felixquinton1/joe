@@ -85,7 +85,7 @@ class RunDecision:
     wait_for_provider: bool = False
     local_action: str = ""
     local_payload: dict[str, Any] = field(default_factory=dict)
-    ai_access: str = "manual"
+    ai_access: str = "auto"
     plan_stage: str = ""
     """"propose" = ce run rédige un plan et n'exécute rien."""
 

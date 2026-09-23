@@ -6,6 +6,8 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.3.3] — 2026-09-23
+
 ### Security
 
 - Full access no longer rides on the confirmation setting. A project set to
@@ -24,6 +26,8 @@ All notable changes to Joe are documented here. The format follows
   nobody at the screen. The scope is unchanged: `manual` and `auto` both grant
   writing **inside the project** and nothing beyond — only the confirmation
   disappears. `read_only` remains available per project.
+- The run-decision and Web project-dialog fallbacks now use the same `auto`
+  default as project storage, including projects created or edited in the UI.
 
 ## [1.3.2] — 2026-09-23
 
