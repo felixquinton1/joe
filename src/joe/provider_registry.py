@@ -101,7 +101,15 @@ class ProviderSpec:
     """
 
     successor: str = ""
-    """Nom de la CLI qui la remplace."""
+    """Nom de la CLI qui la remplace, tel qu'on l'affiche."""
+
+    successor_provider: str = ""
+    """Identifiant du fournisseur qui la remplace, quand Joe le pilote aussi.
+
+    `successor` s'adresse a un lecteur, celui-ci au routeur : une regle qui
+    nomme un fournisseur pour ce qu'il sait faire doit atterrir sur la CLI qui
+    le sert encore, pas sur celle qui portait ce role avant.
+    """
 
     successor_url: str = ""
     """Ou se la procurer."""
@@ -183,6 +191,7 @@ PROVIDERS = (
         arbitration_priority=5,
         deprecated_since="2026-06-18",
         successor="Antigravity CLI",
+        successor_provider="antigravity",
         successor_url="https://antigravity.google",
         install_posix="npm install -g @google/gemini-cli",
         requires_node="20",

@@ -21,10 +21,23 @@ def test_architecture_choice_uses_consensus():
     assert route.primary == "claude"
 
 
-def test_large_context_routes_to_gemini():
-    route = Router().route("Explore tout ce gros dépôt et résume les conventions")
-    assert route.primary == "gemini"
+def test_large_context_routes_to_the_cli_still_in_service():
+    """La règle vise une capacité — tenir un grand contexte — pas une CLI.
+
+    Écrite en dur sur `gemini`, elle continuait de désigner une CLI qui ne sert
+    plus les comptes grand public. Quand son successeur est installé, c'est lui
+    qui doit répondre.
+    """
+    demande = "Explore tout ce gros dépôt et résume les conventions"
+    installe = frozenset({"codex", "claude", "gemini", "antigravity"})
+
+    route = Router(installe).route(demande)
+    assert route.primary == "antigravity"
     assert route.mode is Mode.FAST
+
+    # Le successeur absent, la CLI dépréciée reste le meilleur choix : elle
+    # répond encore aux licences entreprise.
+    assert Router(installe - {"antigravity"}).route(demande).primary == "gemini"
 
 
 def test_other_opinion_switches_provider_with_memory():
@@ -332,3 +345,17 @@ def test_short_availability_probes_still_reach_the_provider():
         "codex est disponible ?",
     ):
         assert "health-check" in Router().route(request).reason
+
+
+def test_an_explicit_choice_of_a_deprecated_cli_is_honoured():
+    """Substituer le successeur a une regle est une chose, a une demande une autre.
+
+    Une licence entreprise fait encore repondre Gemini CLI : la nommer doit la
+    lancer, sinon Joe decide a la place de celui qui a paye.
+    """
+    installe = frozenset({"codex", "gemini", "antigravity"})
+
+    assert Router(installe).route("Fais-moi un petit test de Gemini").primary == "gemini"
+    assert Router(installe).route(
+        "fix bug", forced_agent="gemini"
+    ).primary == "gemini"
