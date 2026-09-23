@@ -6,6 +6,20 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Automatic compaction no longer targets a retired CLI. It runs on long
+  conversations, in a background thread, and defaulted to Gemini CLI — retired
+  for consumer accounts in June 2026 — so it failed every time; with Gemini
+  uninstalled it raised a `KeyError` instead. The block had no `except`, only a
+  `finally`, so the failure surfaced raw in the middle of an unrelated run and
+  looked like that run's problem. Joe now resolves a provider among those
+  actually installed: an explicit choice first, its declared successor if that
+  choice is gone, a provider still in service otherwise, and a retired CLI only
+  for want of anything better. With no provider at all it gives up without
+  raising. The summarising model follows the provider chosen instead of a
+  frozen Gemini identifier.
+
 ## [1.3.4] — 2026-09-23
 
 ### Fixed

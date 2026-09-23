@@ -27,8 +27,12 @@ DEFAULT_CONFIG = {
         "enabled": True,
         "threshold_chars": 30000,
         "keep_recent_messages": 8,
-        "provider": "gemini",
-        "model": "gemini-3-flash-preview",
+        # Vide : le fournisseur est choisi parmi ceux reellement installes.
+        # Nommer Gemini ici visait une CLI retiree des comptes grand public, et
+        # la compaction echouait donc a chaque fois. Renseigner ces deux champs
+        # impose un choix ; les laisser vides laisse Joe prendre ce qui repond.
+        "provider": "",
+        "model": "",
     },
     "shared_skill_paths": [],
     "fallbacks": default_fallbacks(),

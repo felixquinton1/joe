@@ -1837,3 +1837,38 @@ def test_a_retired_cli_says_so_where_it_is_chosen():
 
     assert "provider.deprecated" in app
     assert 't("provider_retired"' in app
+
+
+def test_compaction_never_targets_a_retired_cli_by_default():
+    """Le defaut livre nommait Gemini CLI, retiree des comptes grand public.
+
+    La compaction se declenche seule, dans un thread de fond, sur les longues
+    conversations : elle echouait donc a chaque fois, et l'erreur remontait au
+    milieu d'un run sans rapport — le bloc n'avait pas d'`except`.
+    """
+    from joe.memory import DEFAULT_CONFIG
+    from joe.web_runs import _compaction_provider
+
+    reglage = DEFAULT_CONFIG["semantic_compaction"]
+    assert reglage["provider"] == ""
+    assert reglage["model"] == ""
+
+    installes = {"codex": 1, "claude": 1, "antigravity": 1, "gemini": 1}
+    # Sans consigne, Joe prend un fournisseur en service, jamais le deprecie.
+    assert _compaction_provider("", installes) == "codex"
+
+    # Un choix explicite est respecte : une licence entreprise fait encore
+    # repondre Gemini.
+    assert _compaction_provider("gemini", installes) == "gemini"
+
+    # Choisi mais absent : son successeur declare prend le relais, plutot que
+    # le `KeyError` que produisait l'acces direct au dictionnaire.
+    assert _compaction_provider("gemini", {"claude": 1, "antigravity": 1}) == (
+        "antigravity"
+    )
+
+    # Faute de mieux, une CLI depreciee vaut mieux que pas de compaction.
+    assert _compaction_provider("", {"gemini": 1}) == "gemini"
+
+    # Aucun fournisseur : on renonce, sans lever.
+    assert _compaction_provider("", {}) == ""

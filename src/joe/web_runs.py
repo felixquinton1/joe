@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .capabilities import select_model_tier
+from .provider_registry import get_provider_names, get_provider_spec
 from .approvals import ApprovalStore
 from .automations import AutomationStore, START_MODES
 from .autonomous import AutonomousStore, TERMINAL_STATUSES, build_autonomous_skill
@@ -2516,7 +2517,11 @@ class RunManager:
     ) -> None:
         try:
             config = orchestrator.memory.config().get("semantic_compaction", {})
-            provider = str(config.get("provider", "gemini"))
+            provider = _compaction_provider(
+                str(config.get("provider", "")), orchestrator.providers
+            )
+            if not provider:
+                return
             prompt = (
                 "Compact this conversation for handoff between coding agents. "
                 "Preserve user goals, verified facts, decisions, rejected options, "
@@ -2530,7 +2535,11 @@ class RunManager:
                 orchestrator.project,
                 Intent.ANSWER,
                 60,
-                model=str(config.get("model", "gemini-3-flash-preview")),
+                # Resumer est une tache legere, et le modele doit appartenir
+                # au fournisseur reellement retenu : un identifiant Gemini fige
+                # ne veut rien dire ailleurs.
+                model=str(config.get("model", ""))
+                or select_model_tier(provider, "light"),
                 execution_mode="plan",
             )
             if result.ok and result.stdout.strip():
@@ -2539,6 +2548,11 @@ class RunManager:
                     result.stdout,
                     int(candidate["message_count"]),
                 )
+        except Exception:
+            # La compaction est un confort : elle raccourcit le contexte des
+            # longues conversations. Son echec ne doit pas remonter d'un thread
+            # de fond, ou il s'affiche brut au milieu d'un run sans rapport.
+            pass
         finally:
             with self.lock:
                 self.compacting.discard(conversation_id)
@@ -3103,6 +3117,35 @@ def _existing_directory(value: Any) -> Path | None:
         return None
     path = Path(str(value)).expanduser().resolve()
     return path if path.is_dir() else None
+
+
+def _compaction_provider(configured: str, installed: Any) -> str:
+    """Qui resumera la conversation, ou "" si personne ne le peut.
+
+    Le defaut livre nommait Gemini CLI, retiree des comptes grand public depuis
+    le 18 juin 2026. La compaction visait donc une CLI qui echoue — ou absente,
+    un `KeyError` — a chaque declenchement, dans un thread de fond, au milieu
+    d'un run sans rapport.
+
+    L'ordre est : ce qui est configure s'il est installe, sinon le successeur
+    declare de ce fournisseur, sinon n'importe quel fournisseur en service.
+    Une CLI depreciee n'est retenue que faute de mieux : elle repond encore aux
+    licences entreprise, ce qui vaut mieux que ne pas compacter du tout.
+    """
+    if configured and configured in installed:
+        return configured
+    if configured:
+        try:
+            successeur = get_provider_spec(configured).successor_provider
+        except (KeyError, ValueError):
+            successeur = ""
+        if successeur and successeur in installed:
+            return successeur
+    noms = [name for name in get_provider_names() if name in installed]
+    en_service = [
+        name for name in noms if not get_provider_spec(name).deprecated_since
+    ]
+    return (en_service or noms or [""])[0]
 
 
 def _resolve_execution_mode(
