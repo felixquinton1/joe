@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 import webbrowser
@@ -31,7 +32,7 @@ def parser() -> argparse.ArgumentParser:
             "Interfaces: `joe <request>` for a one-shot command, `joe cli` or "
             "`joe chat` for the interactive terminal, and `joe web` for the "
             "local interface. Useful commands: `url`, `auth rotate`, `doctor`, "
-            "`sync`, `restart`, `stop`, and `kill`."
+            "`sync`, `restart`, `stop`, `logs`, and `kill`."
         ),
     )
     result.add_argument("request", nargs="*", help="natural-language request")
@@ -55,6 +56,7 @@ def main(argv: list[str] | None = None) -> int:
         "auth": _auth,
         "doctor": _doctor,
         "kill": _kill,
+        "logs": _logs,
         "skills": _skills,
         "restart": _restart,
         "stop": _stop,
@@ -221,7 +223,7 @@ def _web(argv: list[str]) -> int:
     web_parser.add_argument(
         "--foreground",
         action="store_true",
-        help="run the server in this terminal instead of tmux",
+        help="run in this terminal instead of the platform background manager",
     )
     args = web_parser.parse_args(argv)
     if not args.project.is_dir():
@@ -237,8 +239,13 @@ def _web(argv: list[str]) -> int:
         return 2
 
     url = f"http://{args.host}:{args.port}"
-    if not args.foreground and shutil.which("tmux"):
-        return _tmux_web(args, url)
+    if not args.foreground:
+        from .background import is_windows
+
+        if is_windows():
+            return _windows_web(args, url)
+        if shutil.which("tmux"):
+            return _tmux_web(args, url)
     print(f"Joe Web — {args.project.resolve()}\n{url}\nCtrl+C to stop.")
     if not args.no_browser:
         threading.Timer(0.4, webbrowser.open, args=(_pairing_url(url),)).start()
@@ -266,6 +273,74 @@ def _self_command() -> list[str]:
     return [sys.executable, "-m", "joe.cli"]
 
 
+def _server_command(args: argparse.Namespace) -> list[str]:
+    command = [
+        *_self_command(),
+        "web",
+        "-C",
+        str(args.project.resolve()),
+        "--host",
+        args.host,
+        "--port",
+        str(args.port),
+        "--no-browser",
+        "--foreground",
+        "--profile",
+        args.profile,
+    ]
+    if args.allow_remote:
+        command.append("--allow-remote")
+    return command
+
+
+def _wait_for_server(url: str, timeout: float = 8.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _server_status(url) is not None:
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def _windows_web(args: argparse.Namespace, url: str) -> int:
+    from .background import (
+        load_state,
+        process_is_running,
+        start_windows_background,
+    )
+
+    current = load_state(args.port)
+    if current is not None and process_is_running(current.pid):
+        log = current.log
+        if not _wait_for_server(url):
+            print(
+                f"joe: the managed Windows server is not responding; see {log}",
+                file=sys.stderr,
+            )
+            return 1
+    elif _server_status(url) is not None:
+        log = "unavailable (server was not started by this Joe installation)"
+    else:
+        current, process = start_windows_background(
+            _server_command(args),
+            port=args.port,
+            project=args.project,
+            host=args.host,
+            profile=args.profile,
+        )
+        log = current.log
+        if not _wait_for_server(url) and process.poll() is not None:
+            print(
+                f"joe: the Windows background server exited; see {log}",
+                file=sys.stderr,
+            )
+            return process.returncode or 1
+    print(f"Joe is running in the background\n{url}\nLog: {log}")
+    if not args.no_browser:
+        webbrowser.open(_pairing_url(url))
+    return 0
+
+
 def _tmux_web(args: argparse.Namespace, url: str) -> int:
     session = f"joe-{args.port}"
     exists = subprocess.run(
@@ -278,22 +353,7 @@ def _tmux_web(args: argparse.Namespace, url: str) -> int:
         # Se relancer soi-même, et non le premier `joe` du PATH : sur une
         # machine qui porte plusieurs installations, la session tmux exécutait
         # un autre Joe que celui invoqué, avec son propre code.
-        command = [
-            *_self_command(),
-            "web",
-            "-C",
-            str(args.project.resolve()),
-            "--host",
-            args.host,
-            "--port",
-            str(args.port),
-            "--no-browser",
-            "--foreground",
-            "--profile",
-            args.profile,
-        ]
-        if args.allow_remote:
-            command.append("--allow-remote")
+        command = _server_command(args)
         created = subprocess.run(
             ["tmux", "new-session", "-d", "-s", session, *command],
             check=False,
@@ -313,9 +373,20 @@ def _tmux_web(args: argparse.Namespace, url: str) -> int:
 def _kill(argv: list[str]) -> int:
     kill_parser = argparse.ArgumentParser(
         prog="joe kill",
-        description="Stop every tmux session started by Joe.",
+        description="Stop every background server started by Joe.",
     )
     kill_parser.parse_args(argv)
+    from .background import is_windows, managed_ports, stop_windows_background
+
+    if is_windows():
+        ports = managed_ports()
+        stopped = sum(stop_windows_background(port) for port in ports)
+        if stopped:
+            suffix = "s" if stopped > 1 else ""
+            print(f"Joe: stopped {stopped} background server{suffix}.")
+        else:
+            print("Joe: no active background server.")
+        return 0
     if not shutil.which("tmux"):
         print("Joe: tmux is not installed.")
         return 0
@@ -348,10 +419,18 @@ def _kill(argv: list[str]) -> int:
 def _stop(argv: list[str]) -> int:
     stop_parser = argparse.ArgumentParser(
         prog="joe stop",
-        description="Stop the tmux-managed Joe server on one port.",
+        description="Stop the Joe background server on one port.",
     )
     stop_parser.add_argument("--port", type=int, default=8765)
     args = stop_parser.parse_args(argv)
+    from .background import is_windows, stop_windows_background
+
+    if is_windows():
+        if not stop_windows_background(args.port):
+            print(f"Joe: no managed background instance on port {args.port}.")
+            return 1
+        print(f"Joe: stopped the instance on port {args.port}.")
+        return 0
     if not shutil.which("tmux"):
         print(
             "Joe: automatic stop is unavailable without tmux; interrupt the "
@@ -375,7 +454,7 @@ def _stop(argv: list[str]) -> int:
 def _restart(argv: list[str]) -> int:
     restart_parser = argparse.ArgumentParser(
         prog="joe restart",
-        description="Restart one tmux-managed Joe web server.",
+        description="Restart one Joe web server.",
     )
     restart_parser.add_argument("-C", "--project", type=Path)
     restart_parser.add_argument("--host", default="127.0.0.1")
@@ -403,7 +482,9 @@ def _restart(argv: list[str]) -> int:
             file=sys.stderr,
         )
         return 2
-    if not shutil.which("tmux"):
+    from .background import is_windows, stop_windows_background
+
+    if not is_windows() and not shutil.which("tmux"):
         print(
             "joe restart: tmux is required for automatic restart.",
             file=sys.stderr,
@@ -425,12 +506,15 @@ def _restart(argv: list[str]) -> int:
         )
         return 3
 
-    subprocess.run(
-        ["tmux", "kill-session", "-t", f"joe-{args.port}"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    )
+    if is_windows():
+        stop_windows_background(args.port)
+    else:
+        subprocess.run(
+            ["tmux", "kill-session", "-t", f"joe-{args.port}"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
     profile = args.profile or (
         str(status.get("profile")) if status and status.get("profile") else "maintainer"
     )
@@ -447,6 +531,26 @@ def _restart(argv: list[str]) -> int:
             profile,
         ]
     )
+
+
+def _logs(argv: list[str]) -> int:
+    logs_parser = argparse.ArgumentParser(
+        prog="joe logs",
+        description="Print the log of a Joe background server.",
+    )
+    logs_parser.add_argument("--port", type=int, default=8765)
+    logs_parser.add_argument("--tail", type=int, default=200)
+    args = logs_parser.parse_args(argv)
+    from .background import log_path
+
+    target = log_path(args.port)
+    try:
+        lines = target.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        print(f"Joe: no background log on port {args.port}.", file=sys.stderr)
+        return 1
+    print("\n".join(lines[-max(1, args.tail) :]))
+    return 0
 
 
 def _active_runs(url: str) -> list[dict] | None:
@@ -474,8 +578,18 @@ def _active_runs(url: str) -> list[dict] | None:
 
 
 def _server_status(url: str) -> dict | None:
+    from .auth import auth_token_path
+
     try:
-        with urllib.request.urlopen(f"{url}/api/status", timeout=2) as response:
+        token = auth_token_path().read_text(encoding="utf-8").strip()
+        request = urllib.request.Request(
+            f"{url}/api/status",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        with urllib.request.urlopen(
+            request,
+            timeout=2,
+        ) as response:
             payload = json.loads(response.read())
     except (
         OSError,

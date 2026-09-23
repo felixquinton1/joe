@@ -36,9 +36,10 @@ python -m pip install -e .
 ```
 
 The Python package is platform-independent. Linux, macOS and Windows use the
-same commands. `tmux` improves detached operation on Linux and macOS; without
-it — notably on Windows — `joe web` stays in the foreground and closes with its
-terminal.
+same commands. Joe uses `tmux` when available on Linux and macOS, and a native
+detached process on Windows. Both survive closing the launching terminal.
+Windows state and logs live below `%LOCALAPPDATA%\\Joe\\run`. Use
+`joe web --foreground` to keep the server attached deliberately.
 
 Check the installation:
 
@@ -130,9 +131,11 @@ From the project you want to work on:
 joe web
 ```
 
-Joe listens only on `127.0.0.1:8765` by default. On Linux and macOS, `joe`
-opens that interface directly and uses `tmux` when available. To keep the
-server in the terminal:
+Joe listens only on `127.0.0.1:8765` by default. It uses `tmux` when
+available on Linux and macOS and a detached process managed by Joe on Windows.
+The same `stop`, `restart` and `kill` commands work on each platform.
+Windows additionally records the detached server output for `joe logs`. To
+keep the server in the terminal:
 
 ```bash
 joe web --foreground
@@ -326,11 +329,14 @@ joe web --foreground [-C /project]
 joe restart [-C /project]
 joe stop [--port 8765]
 joe kill
+joe logs [--port 8765] [--tail 200]  # Windows background server
 joe sync
 ```
 
-`restart` and `kill` only automate servers managed by `tmux`. Closing a client
-interface does not erase any conversation.
+`restart`, `stop` and `kill` manage tmux sessions on Linux/macOS and native
+detached processes on Windows. On Windows, `logs` reads the persistent server
+log. Closing a client interface does not erase any conversation.
+
 
 ## Quick troubleshooting
 

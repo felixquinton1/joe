@@ -6,6 +6,21 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.3.1] — 2026-09-23
+
+### Added
+
+- Windows now keeps Joe Web alive in a native detached process without tmux or
+  administrator rights. `joe stop`, `joe restart`, `joe kill` and the new
+  `joe logs` command use the persisted process state under
+  `%LOCALAPPDATA%\\Joe\\run`.
+
+### Fixed
+
+- `joe restart` authenticates its status probe, so it restores the running
+  server's project and profile instead of silently falling back to the current
+  terminal directory.
+
 ## [1.3.0] — 2026-09-23
 
 ### Added

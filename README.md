@@ -90,8 +90,10 @@ Then open a terminal in a project and run:
 joe
 ```
 
-Joe opens the local Web interface on `127.0.0.1:8765`. On Linux and macOS,
-`tmux` can keep the server alive after the terminal or remote connection closes.
+Joe opens the local Web interface on `127.0.0.1:8765`. On Linux and macOS it
+uses `tmux` when available. On Windows it starts a native detached process
+managed by Joe. In both cases the server stays alive when its launching terminal
+closes; `joe web --foreground` opts out.
 
 Check the local installation without consuming provider quota:
 
@@ -229,7 +231,8 @@ Useful lifecycle commands:
 joe url          # reopen an authenticated Web session
 joe restart      # restart Joe Web
 joe stop         # stop the current instance
-joe kill         # stop all Joe tmux instances
+joe kill         # stop all Joe-managed background instances
+joe logs         # show the Windows background server log
 joe auth rotate  # rotate the local browser/API secret
 ```
 

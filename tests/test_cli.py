@@ -161,3 +161,153 @@ def test_joe_relaunches_itself_not_another_installation(monkeypatch, tmp_path):
     monkeypatch.setattr("sys.argv", ["-c"])
     command = _self_command()
     assert command[1:] == ["-m", "joe.cli"]
+
+
+def test_web_uses_the_native_windows_background_manager(tmp_path, monkeypatch):
+    from joe import background
+    from joe.cli import _web
+
+    calls = []
+    monkeypatch.setattr(background, "is_windows", lambda: True)
+    monkeypatch.setattr(
+        "joe.cli._windows_web",
+        lambda args, url: calls.append((args, url)) or 0,
+    )
+
+    assert _web(["-C", str(tmp_path), "--no-browser"]) == 0
+    assert calls[0][1] == "http://127.0.0.1:8765"
+
+
+def test_windows_background_launches_the_same_joe_in_foreground(
+    tmp_path, monkeypatch, capsys
+):
+    from joe import background
+    from joe.cli import _windows_web
+
+    calls = []
+    state = background.BackgroundState(
+        pid=4321,
+        port=8765,
+        project=str(tmp_path),
+        host="127.0.0.1",
+        profile="maintainer",
+        command=[],
+        log=str(tmp_path / "server.log"),
+        started_at="2026-09-23T00:00:00+00:00",
+    )
+    process = SimpleNamespace(poll=lambda: None, returncode=None)
+    monkeypatch.setattr(background, "load_state", lambda port: None)
+    monkeypatch.setattr(
+        background,
+        "start_windows_background",
+        lambda command, **kwargs: calls.append((command, kwargs))
+        or (state, process),
+    )
+    monkeypatch.setattr("joe.cli._wait_for_server", lambda url: True)
+    monkeypatch.setattr("joe.cli._server_status", lambda url: None)
+    monkeypatch.setattr("joe.cli._self_command", lambda: ["joe.exe"])
+    args = SimpleNamespace(
+        project=tmp_path,
+        host="127.0.0.1",
+        port=8765,
+        no_browser=True,
+        profile="maintainer",
+        allow_remote=False,
+    )
+
+    assert _windows_web(args, "http://127.0.0.1:8765") == 0
+    command = calls[0][0]
+    assert command[:2] == ["joe.exe", "web"]
+    assert "--foreground" in command
+    assert "--no-browser" in command
+    assert "running in the background" in capsys.readouterr().out
+
+
+def test_stop_uses_the_windows_background_state(monkeypatch, capsys):
+    from joe import background
+
+    calls = []
+    monkeypatch.setattr(background, "is_windows", lambda: True)
+    monkeypatch.setattr(
+        background,
+        "stop_windows_background",
+        lambda port: calls.append(port) or True,
+    )
+
+    assert _stop(["--port", "9000"]) == 0
+    assert calls == [9000]
+    assert "port 9000" in capsys.readouterr().out
+
+
+def test_restart_uses_the_windows_background_state(tmp_path, monkeypatch):
+    from joe import background
+
+    calls = []
+    monkeypatch.setattr(background, "is_windows", lambda: True)
+    monkeypatch.setattr(
+        background,
+        "stop_windows_background",
+        lambda port: calls.append(("stop", port)) or True,
+    )
+    monkeypatch.setattr("joe.cli._active_runs", lambda url: [])
+    monkeypatch.setattr(
+        "joe.cli._server_status",
+        lambda url: {"profile": "viewer", "project": str(tmp_path)},
+    )
+    monkeypatch.setattr(
+        "joe.cli._web",
+        lambda args: calls.append(("web", args)) or 0,
+    )
+
+    assert _restart(["--port", "9000"]) == 0
+    assert calls[0] == ("stop", 9000)
+    assert calls[1][0] == "web"
+    assert calls[1][1][-2:] == ["--profile", "viewer"]
+
+
+def test_logs_prints_the_tail_of_the_background_log(tmp_path, monkeypatch, capsys):
+    from joe import background
+    from joe.cli import _logs
+
+    target = tmp_path / "server-8765.log"
+    target.write_text("one\ntwo\nthree\n", encoding="utf-8")
+    monkeypatch.setattr(background, "log_path", lambda port: target)
+
+    assert _logs(["--tail", "2"]) == 0
+    assert capsys.readouterr().out == "two\nthree\n"
+
+
+def test_server_status_authenticates_to_recover_the_active_project(
+    tmp_path, monkeypatch
+):
+    from joe import auth
+    from joe.cli import _server_status
+
+    token_path = tmp_path / "auth-token"
+    token_path.write_text("secret", encoding="utf-8")
+    monkeypatch.setattr(auth, "auth_token_path", lambda: token_path)
+    seen = {}
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return b'{"project": "C:/work/project", "profile": "viewer"}'
+
+    def fake_urlopen(request, timeout):
+        seen["request"] = request
+        seen["timeout"] = timeout
+        return Response()
+
+    monkeypatch.setattr("joe.cli.urllib.request.urlopen", fake_urlopen)
+
+    assert _server_status("http://127.0.0.1:8765") == {
+        "project": "C:/work/project",
+        "profile": "viewer",
+    }
+    assert seen["request"].get_header("Authorization") == "Bearer secret"
+    assert seen["timeout"] == 2
