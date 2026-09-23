@@ -6,6 +6,8 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-09-23
+
 ### Added
 
 - Antigravity CLI joins the supported providers, as `agy`. It replaces Gemini
@@ -31,6 +33,20 @@ All notable changes to Joe are documented here. The format follows
 - The Agent menu follows a language change. Its "Automatic" entry is built in
   JavaScript and carries no translation marker, so the document-wide
   translation never reached it and nothing rebuilt that menu.
+
+- Antigravity's models are ranked rather than picked by position. Its
+  catalogue publishes an identifier and a label, no description and no cost, so
+  nothing was classified and the requested tier fell back to a place in the
+  list: "standard" served a 3.6 generation while "strong" served a 3.8. The
+  tier table is now keyed by provider as well as by model, because the same
+  identifier does not mean the same thing everywhere — `claude-sonnet-4-6` is a
+  previous generation in Claude Code's catalogue and the most recent Sonnet
+  Antigravity offers, and one table gave the first ranking to the second.
+
+- A large-context request reaches the CLI that still serves it. The rule that
+  picks a provider for that work named Gemini outright, so Antigravity was
+  never chosen for it, and with Gemini absent the fallback led to Codex instead
+  of to its replacement. Naming Gemini, or forcing it, still runs it.
 
 - A machine with a single provider CLI works. The router picked a provider from
   the request alone — codex for anything code-shaped — whether or not it was
