@@ -14,6 +14,7 @@ from .prompt_language import (
     question_rules,
     response_language,
 )
+from .git_review import changed_paths, snapshot
 from .provider_registry import arbitration_order, counterpart
 
 
@@ -39,8 +40,12 @@ STAGE_TIERS = {
     "cross_review": "standard",
     "synthesis": "strong",
     "implementation": None,   # suit le niveau de la demande
-    "review": "standard",
-    "correction": None,       # meme niveau que l'implementation
+    # L'examen ne critique plus un texte, il rouvre le code et le corrige.
+    # Le laisser a « standard » revenait a confier la seconde passe a un modele
+    # plus leger que celui qui a ecrit la premiere. Le niveau se resout dans le
+    # catalogue de l'examinateur, qui n'est pas celui de l'auteur : lui passer
+    # le modele de l'auteur nommerait un identifiant que sa CLI ne connait pas.
+    "review": "strong",
 }
 
 
@@ -141,6 +146,10 @@ def run_review_workflow(
     language: str = DEFAULT_LANGUAGE,
 ) -> tuple[str, str]:
     language = normalize_language(language)
+    # Pris avant l'implementation : c'est la comparaison avec l'etat d'apres
+    # qui dira a l'examinateur ou regarder, sans confondre le travail du run
+    # avec ce que le depot portait deja.
+    before = snapshot(orchestrator.project)
     implementation_request = (
         context
         + "\n\nPresent the implementation report in a factual, collective voice. "
@@ -184,7 +193,19 @@ def run_review_workflow(
     reviewer = route.reviewer or (
         counterpart(primary.provider)
     )
-    review_request = review_prompt(context, primary.stdout, language)
+    # Une demande de lecture seule n'a rien modifie : il n'y a pas de seconde
+    # passe a faire, seulement un avis a rendre.
+    examines = route.intent is Intent.MODIFY
+    review_request = (
+        examination_prompt(
+            context,
+            primary.stdout,
+            changed_paths(orchestrator.project, before),
+            language,
+        )
+        if examines
+        else review_prompt(context, primary.stdout, language)
+    )
     workflow_event(
         on_event,
         "review",
@@ -193,13 +214,18 @@ def run_review_workflow(
         "Revue indépendante",
         "running",
     )
+    before_examination = snapshot(orchestrator.project)
     review = orchestrator._run_with_fallback(
         reviewer,
         review_request,
-        Intent.ANALYZE,
+        Intent.MODIFY if examines else Intent.ANALYZE,
         results,
         exclude={primary.provider},
         model=stage_model(orchestrator, reviewer, "review", None),
+        effort=effort if examines else None,
+        # Les memes droits que l'auteur, jamais plus : si la demande etait en
+        # lecture seule, l'examen l'est aussi.
+        execution_mode=execution_mode if examines else None,
         on_event=on_event,
         cancel_event=cancel_event,
         respect_cooldown=True,
@@ -213,42 +239,20 @@ def run_review_workflow(
         "complete",
         review.stdout,
     )
-    correction = None
-    if route.intent is Intent.MODIFY and review_requires_correction(review.stdout):
-        workflow_event(
-            on_event,
-            "review",
-            "correction",
-            primary.provider,
-            "Corrections justifiées",
-            "running",
-        )
-        correction = orchestrator._run_with_fallback(
-            primary.provider,
-            correction_prompt(context, primary.stdout, review.stdout, language),
-            Intent.MODIFY,
-            results,
-            model=model,
-            effort=effort,
-            execution_mode=execution_mode,
-            on_event=on_event,
-            cancel_event=cancel_event,
-        )
-        workflow_event(
-            on_event,
-            "review",
-            "correction",
-            correction.provider,
-            "Corrections justifiées",
-            "complete",
-            correction.stdout,
-        )
+    # Le texte du fournisseur ne suffit pas pour affirmer qu'il a corrigé le
+    # dépôt. Dans un dépôt Git, l'état matériel fait foi ; hors Git, le verdict
+    # reste le seul signal disponible et préserve le fonctionnement historique.
+    corrected = (
+        bool(changed_paths(orchestrator.project, before_examination))
+        if before_examination.available
+        else corrections_were_applied(review.stdout)
+    )
     return review_final(
         primary,
         review,
-        correction,
+        corrected=examines and corrected,
         language=language,
-    ), primary.provider
+    ), review.provider if examines and corrected else primary.provider
 
 
 def run_consensus_workflow(
@@ -561,29 +565,56 @@ def review_prompt(
     )
 
 
-def review_requires_correction(review: str) -> bool:
-    return "VERDICT: CORRECTIONS_REQUIRED" in review.upper()
+def corrections_were_applied(examination: str) -> bool:
+    return "VERDICT: CORRECTIONS_APPLIED" in examination.upper()
 
 
-def correction_prompt(
+def examination_prompt(
     context: str,
     implementation: str,
-    review: str,
+    changed: list[str],
     language: str = DEFAULT_LANGUAGE,
 ) -> str:
+    """La seconde passe : un examinateur rouvre le code et le corrige.
+
+    Une fonctionnalite qui marche a moitie est le cas courant, et elle ne se
+    voit pas dans le compte rendu de celui qui l'a ecrite — il rapporte ce
+    qu'il a voulu faire. D'ou deux exigences : juger le code plutot que le
+    rapport, et corriger soi-meme plutot que decrire a l'auteur ce qu'il
+    devrait refaire.
+
+    Les chemins touches sont donnes parce qu'une CLI agentique sait ouvrir un
+    fichier mais pas deviner lesquels ont bouge.
+    """
+    files = (
+        "\n\n<CHANGED_FILES>\n" + "\n".join(changed) + "\n</CHANGED_FILES>"
+        if changed
+        else "\n\nNo changed file could be listed: locate the work yourself "
+        "from the report and the repository."
+    )
     return (
         context
-        + "\n\nA reviewer audited the implementation below. Re-check every "
-        "finding, apply only justified corrections, run focused validation, "
-        "and report the final result. This is the only correction pass. "
+        + "\n\nAnother agent has just done the work described below. Take a "
+        "second pass over it, directly in the repository.\n"
+        "1. Read the code that changed. Judge the code, not the report: the "
+        "report says what was intended, the files say what happened, and "
+        "where they disagree the files win.\n"
+        "2. Check every condition of the original request is actually met, "
+        "including those the report does not mention. A feature that works "
+        "halfway, or that misses a case, is the usual outcome of a first "
+        "pass — that is what this pass exists to catch.\n"
+        "3. Fix what you find: bugs, omissions, conditions left unmet. Edit "
+        "the files yourself rather than describing what should be changed. "
+        "Leave alone what already works, and do not widen the scope beyond "
+        "the original request.\n"
+        "4. Start your answer with exactly `VERDICT: APPROVED` when you "
+        "changed nothing, or `VERDICT: CORRECTIONS_APPLIED` when you did, "
+        "then report the final state of the work.\n"
         + collective_voice(language)
-        + "Integrate the useful review findings "
-        "and mention only material remaining disagreements.\n\n"
-        "<IMPLEMENTATION>\n"
+        + files
+        + "\n\n<IMPLEMENTATION_REPORT>\n"
         + implementation
-        + "\n</IMPLEMENTATION>\n\n<REVIEW>\n"
-        + review
-        + "\n</REVIEW>"
+        + "\n</IMPLEMENTATION_REPORT>"
         + REPORT_RULES
         + question_rules(language)
         + response_language(language)
@@ -593,34 +624,39 @@ def correction_prompt(
 def review_final(
     primary: ProviderResult,
     review: ProviderResult,
-    correction: ProviderResult | None,
     *,
+    corrected: bool,
     language: str = DEFAULT_LANGUAGE,
 ) -> str:
-    result = clean_report(
-        correction.stdout if correction else primary.stdout
-    )
+    """Le rapport qui fait foi est celui du dernier a avoir touche au code.
+
+    Quand l'examinateur a corrige, c'est son compte rendu qui decrit l'etat
+    final ; celui de l'auteur decrit un etat qui n'existe plus.
+    """
+    result = clean_report(review.stdout if corrected else primary.stdout)
     if normalize_language(language) == "en":
         status = (
-            "Justified corrections were applied and verified."
-            if correction
-            else "The review requested no justified correction."
+            f"{review.provider.capitalize()} took a second pass and corrected "
+            "the work."
+            if corrected
+            else f"{review.provider.capitalize()} examined the work and found "
+            "nothing to correct."
         )
         footer = (
             "## Cross-check\n\n"
-            f"{status} The detailed {review.provider.capitalize()} review remains "
-            "available in the review panel."
+            f"{status} The detail remains available in the review panel."
         )
     else:
         status = (
-            "Les corrections justifiées ont été appliquées et vérifiées."
-            if correction
-            else "La revue n’a demandé aucune correction justifiée."
+            f"{review.provider.capitalize()} est repassé sur le travail et l’a "
+            "corrigé."
+            if corrected
+            else f"{review.provider.capitalize()} a examiné le travail sans "
+            "relever de correction à apporter."
         )
         footer = (
             "## Contrôle croisé\n\n"
-            f"{status} Le détail de l’avis de {review.provider.capitalize()} reste "
-            "disponible dans le panneau de revue."
+            f"{status} Le détail reste disponible dans le panneau de revue."
         )
     return result + "\n\n" + footer
 

@@ -1404,7 +1404,6 @@ function renderWorkflowUpdate(event, finalBubble, runId) {
 function workflowStageLabel(event) {
   if (event.stage === "implementation") return t("workflow_implementation");
   if (event.stage === "review") return t("workflow_review");
-  if (event.stage === "correction") return t("workflow_correction");
   if (event.stage === "synthesis") return t("workflow_synthesis");
   if (event.stage?.startsWith("proposal_")) return t("workflow_proposal");
   if (event.stage?.startsWith("review_")) return t("workflow_cross_review");

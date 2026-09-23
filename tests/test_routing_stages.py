@@ -36,7 +36,21 @@ def test_a_cross_review_costs_less_than_the_proposal_it_reads(catalogue):
     assert stage_model(None, "codex", "cross_review", None) == "sol"
     # La synthese rend la reponse finale et tranche les desaccords.
     assert stage_model(None, "codex", "synthesis", None) == "astra"
-    assert stage_model(None, "codex", "review", None) == "sol"
+
+
+def test_the_examiner_is_not_given_a_lighter_model_than_the_author(catalogue):
+    """L'examen a cesse de critiquer un texte : il rouvre le code et le corrige.
+
+    Tant qu'il ne faisait que lire, un modele plus leger suffisait. Depuis
+    qu'il ecrit, le plafonner reviendrait a confier la seconde passe a moins
+    capable que la premiere — l'inverse du but.
+    """
+    assert STAGE_TIERS["review"] == "strong"
+    assert stage_model(None, "codex", "review", None) == "astra"
+
+    # Et le niveau se resout dans le catalogue de l'examinateur : lui passer le
+    # modele de l'auteur nommerait un identifiant que sa CLI ne connait pas.
+    assert stage_model(None, "claude", "review", None) != "astra"
 
 
 def test_a_stage_that_follows_the_request_keeps_its_model(catalogue):

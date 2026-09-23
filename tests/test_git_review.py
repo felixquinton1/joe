@@ -1,6 +1,6 @@
 import subprocess
 
-from joe.git_review import build_report, deliver, reject, snapshot
+from joe.git_review import build_report, changed_paths, deliver, reject, snapshot
 
 
 def git(project, *args):
@@ -158,3 +158,46 @@ def test_deliver_commits_and_pushes_only_attributed_changes(tmp_path):
     assert git(
         project, "ls-remote", "origin", f"refs/heads/{branch}"
     ).stdout.startswith(delivery["commit"])
+
+
+def test_the_examiner_is_pointed_at_what_this_run_touched(tmp_path):
+    """L'examinateur sait ouvrir un fichier, pas deviner lesquels ont bouge.
+
+    Le depot porte souvent des modifications anterieures au run. Les lui
+    donner l'enverrait relire du travail qui n'est pas celui qu'il examine.
+    """
+    tracked = repository(tmp_path)
+    deja_sale = tmp_path / "prealable.txt"
+    deja_sale.write_text("avant le run\n", encoding="utf-8")
+
+    avant = snapshot(tmp_path)
+
+    tracked.write_text("one\ntwo\n", encoding="utf-8")
+    (tmp_path / "nouveau.py").write_text("print('bonjour')\n", encoding="utf-8")
+
+    touches = changed_paths(tmp_path, avant)
+
+    assert "tracked.txt" in touches
+    assert "nouveau.py" in touches
+    assert "prealable.txt" not in touches
+
+
+def test_work_the_author_committed_is_still_seen(tmp_path):
+    """Un fournisseur qui commite sort de `git status`.
+
+    Sans comparaison avec le HEAD d'avant, son travail serait invisible et
+    l'examen porterait sur un depot qui parait intact.
+    """
+    tracked = repository(tmp_path)
+    avant = snapshot(tmp_path)
+
+    tracked.write_text("one\ntwo\n", encoding="utf-8")
+    git(tmp_path, "add", "tracked.txt")
+    git(tmp_path, "commit", "-m", "travail du run")
+
+    assert changed_paths(tmp_path, avant) == ["tracked.txt"]
+
+
+def test_a_project_without_git_examines_the_report_alone(tmp_path):
+    """Joe tourne aussi hors depot : l'examen doit degrader, pas echouer."""
+    assert changed_paths(tmp_path, snapshot(tmp_path)) == []

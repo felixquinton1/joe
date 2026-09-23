@@ -154,7 +154,7 @@
       profile_forbidden: "Le profil de ce serveur Joe n’autorise pas cette action. Relance Joe avec --profile maintainer si nécessaire.",
       consensus_running: "Consensus en cours", consensus_complete: "Consensus terminé", consensus_detail: "Avis et examens croisés",
       review_running: "Implémentation contrôlée", review_complete: "Implémentation contrôlée terminée", review_detail: "Réalisation, revue et correction",
-      workflow_implementation: "Implémentation principale", workflow_review: "Revue indépendante", workflow_correction: "Corrections justifiées", workflow_proposal: "Proposition indépendante", workflow_cross_review: "Examen croisé", workflow_synthesis: "Synthèse du consensus",
+      workflow_implementation: "Implémentation principale", workflow_review: "Examen et corrections", workflow_proposal: "Proposition indépendante", workflow_cross_review: "Examen croisé", workflow_synthesis: "Synthèse du consensus",
       execution_running: "Exécution en cours", execution_complete: "Exécution terminée", execution_detail: "Traitement par un agent",
       fallback_from_lower: "relais de {provider}", running_lower: "en cours", done_lower: "terminé", failed_lower: "échec",
       you: "Toi", joe_limit_reached: "Joe · limite atteinte",
@@ -354,7 +354,7 @@
       pairing_refused: "Joe local pairing refused", session_unpaired: "Joe session is not paired. Run `joe url` to reopen the interface.", profile_forbidden: "This Joe server profile does not allow that action. Restart Joe with --profile maintainer if needed."
       ,consensus_running: "Consensus in progress", consensus_complete: "Consensus complete", consensus_detail: "Independent opinions and cross-reviews",
       review_running: "Controlled implementation", review_complete: "Controlled implementation complete", review_detail: "Implementation, review, and correction",
-      workflow_implementation: "Primary implementation", workflow_review: "Independent review", workflow_correction: "Justified corrections", workflow_proposal: "Independent proposal", workflow_cross_review: "Cross-review", workflow_synthesis: "Consensus synthesis",
+      workflow_implementation: "Primary implementation", workflow_review: "Examination and fixes", workflow_proposal: "Independent proposal", workflow_cross_review: "Cross-review", workflow_synthesis: "Consensus synthesis",
       execution_running: "Execution in progress", execution_complete: "Execution complete", execution_detail: "Handled by one agent",
       fallback_from_lower: "fallback for {provider}", running_lower: "running", done_lower: "done", failed_lower: "failed",
       you: "You", joe_limit_reached: "Joe · limit reached",

@@ -6,6 +6,31 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- REVIEW mode is a second pass over the code, not a second opinion about a
+  report. The reviewer received the implementer's own write-up as the thing to
+  judge, was launched read-only, and was told not to rerun anything but to
+  "evaluate the candidate's recorded evidence" — so it assessed what the first
+  agent said it had done. Any correction then went back to that same first
+  agent, from a prose description of its mistake rather than from the code.
+
+  The examiner now runs with the same rights as the author, is given the list
+  of files the run touched, and fixes bugs and unmet conditions itself. A
+  feature that works halfway is the usual outcome of a first pass, and that is
+  what this pass exists to catch. The separate correction round disappears:
+  three provider calls become two, and the final report comes from whoever
+  last touched the code. A read-only request still gets an opinion, never a
+  second pass — nothing was modified, so there is nothing to correct.
+
+  The examination stage no longer runs on a deliberately lighter model either:
+  capping it made sense while it only read, not now that it writes.
+
+  In Git workspaces, Joe now verifies the repository delta made during the
+  examination instead of trusting the examiner's verdict marker. The provider
+  that materially produced the final state is also recorded as the final
+  provider for conversation continuity and subsequent routing.
+
 ## [1.3.1] — 2026-09-23
 
 ### Added

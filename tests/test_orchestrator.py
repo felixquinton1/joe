@@ -1,4 +1,5 @@
 import json
+import subprocess
 import time
 
 from joe.models import Intent, Mode, ProviderResult, Route
@@ -175,18 +176,46 @@ def test_fallback_preserves_explicit_read_only_permission(tmp_path):
     assert providers["claude"].execution_modes == ["plan"]
 
 
-def test_review_uses_primary_intent_then_read_only_review(tmp_path):
+def test_the_examiner_may_correct_the_code_it_examines(tmp_path):
+    """Une fonctionnalite qui marche a moitie est le cas courant.
+
+    L'examinateur etait lance en lecture seule et ne pouvait que decrire les
+    defauts ; c'est l'auteur qui reecrivait, d'apres cette description plutot
+    que d'apres le code. Celui qui a commis l'erreur etait celui a qui on
+    demandait de la reparer, sans jamais la voir.
+    """
     providers = {name: FakeProvider(name) for name in ("codex", "claude", "gemini", "copilot")}
     orchestrator = Orchestrator(tmp_path, providers=providers)
     response, _ = orchestrator.execute(
-        "change", Route(Intent.MODIFY, Mode.REVIEW, "codex", "claude")
+        "change",
+        Route(Intent.MODIFY, Mode.REVIEW, "codex", "claude"),
+        execution_mode="acceptEdits",
     )
     assert "## Contrôle croisé" in response
-    assert "Le détail de l’avis de Claude reste disponible" in response
-    assert "claude response" not in response
     assert providers["codex"].calls[0][2] is Intent.MODIFY
-    assert providers["claude"].calls[0][2] is Intent.ANALYZE
+    # L'examinateur aussi : sans intention modifiante, il n'a pas le droit
+    # d'ecrire et son examen ne peut rien corriger.
+    assert providers["claude"].calls[0][2] is Intent.MODIFY
+    # Les memes droits que l'auteur, jamais plus.
+    assert providers["claude"].execution_modes == ["acceptEdits"]
     assert "Do not invoke another AI provider" in providers["codex"].calls[0][0]
+
+
+def test_a_read_only_request_gets_an_opinion_not_a_second_pass(tmp_path):
+    """Rien n'a ete modifie : il n'y a pas de seconde passe a faire.
+
+    Donner le droit d'ecrire a l'examinateur ferait modifier le depot par une
+    demande qui avait justement exclu cela.
+    """
+    providers = {name: FakeProvider(name) for name in ("codex", "claude", "gemini", "copilot")}
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    orchestrator.execute(
+        "analyse", Route(Intent.ANALYZE, Mode.REVIEW, "codex", "claude")
+    )
+
+    assert providers["claude"].calls[0][2] is Intent.ANALYZE
+    assert "Do not modify files" in providers["claude"].calls[0][0]
 
 
 def test_review_fallback_never_uses_implementation_provider(tmp_path):
@@ -228,7 +257,9 @@ def test_review_skips_provider_in_recent_cooldown(tmp_path):
         "change", Route(Intent.MODIFY, Mode.REVIEW, "codex", "gemini")
     )
 
-    assert "Le détail de l’avis de Claude reste disponible" in response
+    # Gemini est en cooldown : c'est Claude qui a examine, et le pied de
+    # page le nomme.
+    assert "Claude a examiné le travail" in response
     assert providers["gemini"].calls == []
     assert len(providers["claude"].calls) == 1
     clear_cooldowns()
@@ -473,13 +504,24 @@ def test_consensus_still_fails_closed_on_process_error(tmp_path):
     assert providers["gemini"].calls == []
 
 
-def test_review_applies_one_correction_pass_when_requested(tmp_path):
+def test_the_examination_replaces_the_separate_correction_round(tmp_path):
+    """Trois appels devenaient deux, et le rapport final change d'auteur.
+
+    L'auteur rapportait un etat que l'examinateur venait de modifier : c'est
+    desormais le dernier a avoir touche au code qui decrit le resultat.
+    """
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+
+    class CorrectingProvider(FakeProvider):
+        def run(self, prompt, cwd, intent, timeout, **kwargs):
+            (cwd / "correction.py").write_text("fixed\n", encoding="utf-8")
+            return super().run(prompt, cwd, intent, timeout, **kwargs)
+
     providers = {
-        "codex": FakeProvider(
-            "codex", responses=["implementation", "corrected implementation"]
-        ),
-        "claude": FakeProvider(
-            "claude", responses=["VERDICT: CORRECTIONS_REQUIRED\nFix the test."]
+        "codex": FakeProvider("codex", responses=["implementation"]),
+        "claude": CorrectingProvider(
+            "claude",
+            responses=["VERDICT: CORRECTIONS_APPLIED\ncorrected implementation"],
         ),
         "gemini": FakeProvider("gemini"),
         "copilot": FakeProvider("copilot"),
@@ -493,14 +535,75 @@ def test_review_applies_one_correction_pass_when_requested(tmp_path):
         on_event=events.append,
     )
 
-    assert response.startswith("corrected implementation")
-    assert len(providers["codex"].calls) == 2
+    assert "corrected implementation" in response
+    # L'auteur n'est plus rappele pour une troisieme etape.
+    assert len(providers["codex"].calls) == 1
     assert len(providers["claude"].calls) == 1
-    assert any(
-        event.get("stage") == "correction"
-        and event.get("status") == "complete"
-        for event in events
+    assert not any(event.get("stage") == "correction" for event in events)
+    assert "est repassé sur le travail" in response
+    assert orchestrator.memory.previous_provider() == "claude"
+
+
+def test_an_unsubstantiated_correction_marker_does_not_replace_the_report(tmp_path):
+    """Un verdict textuel ne constitue pas une modification du dépôt."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    providers = {
+        "codex": FakeProvider("codex", responses=["implementation"]),
+        "claude": FakeProvider(
+            "claude",
+            responses=["VERDICT: CORRECTIONS_APPLIED\nclaimed correction"],
+        ),
+    }
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    response, _ = orchestrator.execute(
+        "large change", Route(Intent.MODIFY, Mode.REVIEW, "codex", "claude")
     )
+
+    assert response.startswith("implementation")
+    assert "claimed correction" not in response
+    assert orchestrator.memory.previous_provider() == "codex"
+
+
+def test_a_material_correction_wins_even_without_the_expected_marker(tmp_path):
+    """L'état du dépôt prime sur un marqueur omis par le modèle."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+
+    class CorrectingProvider(FakeProvider):
+        def run(self, prompt, cwd, intent, timeout, **kwargs):
+            (cwd / "correction.py").write_text("fixed\n", encoding="utf-8")
+            return super().run(prompt, cwd, intent, timeout, **kwargs)
+
+    providers = {
+        "codex": FakeProvider("codex", responses=["implementation"]),
+        "claude": CorrectingProvider("claude", responses=["Final corrected state"]),
+    }
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    response, _ = orchestrator.execute(
+        "large change", Route(Intent.MODIFY, Mode.REVIEW, "codex", "claude")
+    )
+
+    assert response.startswith("Final corrected state")
+    assert "est repassé sur le travail" in response
+
+
+def test_an_approved_examination_keeps_the_author_report(tmp_path):
+    """Rien n'a ete corrige : le compte rendu de l'auteur decrit encore l'etat."""
+    providers = {
+        "codex": FakeProvider("codex", responses=["implementation"]),
+        "claude": FakeProvider("claude", responses=["VERDICT: APPROVED"]),
+        "gemini": FakeProvider("gemini"),
+        "copilot": FakeProvider("copilot"),
+    }
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    response, _ = orchestrator.execute(
+        "large change", Route(Intent.MODIFY, Mode.REVIEW, "codex", "claude")
+    )
+
+    assert response.startswith("implementation")
+    assert "sans relever de correction" in response
 
 
 def test_consensus_emits_structured_completed_opinions(tmp_path):
@@ -668,7 +771,7 @@ def test_only_the_step_that_answers_the_user_may_ask_a_question():
     et les relectures d'un consensus : chacune finissait sur une question que
     personne ne pouvait cliquer, et qui polluait le matériau de la synthèse.
     """
-    from joe.orchestrator_workflows import correction_prompt, review_prompt
+    from joe.orchestrator_workflows import examination_prompt, review_prompt
     from joe.prompt_language import question_rules
 
     marker = "joe:question"
@@ -677,7 +780,7 @@ def test_only_the_step_that_answers_the_user_may_ask_a_question():
     assert marker not in review_prompt("contexte", "candidat")
 
     # Étapes qui rendent la réponse : la consigne est présente.
-    assert marker in correction_prompt("contexte", "implémentation", "revue")
+    assert marker in examination_prompt("contexte", "implémentation", [])
     assert marker in question_rules("fr")
 
 
@@ -688,19 +791,19 @@ def test_every_stage_ends_on_the_requested_response_language():
     synthétiser peuvent peser des milliers de mots dans l'autre langue : la
     consigne placée avant eux ne tenait pas.
     """
-    from joe.orchestrator_workflows import correction_prompt, review_prompt
+    from joe.orchestrator_workflows import examination_prompt, review_prompt
     from joe.prompt_language import response_language
 
     for prompt in (
         review_prompt("context", "candidate", "en"),
-        correction_prompt("context", "implementation", "review", "en"),
+        examination_prompt("context", "implementation", [], "en"),
     ):
         assert prompt.endswith(response_language("en"))
         assert "Réponds à l'utilisateur" not in prompt
 
     # L'exemple de question suit lui aussi la langue : cité en français, il
     # produisait des boutons français dans une interface anglaise.
-    assert "Where should we start?" in correction_prompt("c", "i", "r", "en")
+    assert "Where should we start?" in examination_prompt("c", "i", [], "en")
 
 
 def test_an_english_run_carries_no_french_instruction_to_any_stage(tmp_path):
@@ -733,7 +836,41 @@ def test_an_english_run_carries_no_french_instruction_to_any_stage(tmp_path):
 
 def test_the_collective_voice_names_the_pronoun_of_the_answer():
     """« Use 'nous' » dans un prompt anglais suffisait à faire basculer la réponse."""
-    from joe.orchestrator_workflows import correction_prompt
+    from joe.orchestrator_workflows import examination_prompt
 
-    assert "'we'" in correction_prompt("context", "implementation", "review", "en")
-    assert "'nous'" in correction_prompt("contexte", "implémentation", "revue", "fr")
+    assert "'we'" in examination_prompt("context", "implementation", [], "en")
+    assert "'nous'" in examination_prompt("contexte", "implémentation", [], "fr")
+
+
+def test_the_examiner_is_told_which_files_the_author_touched(tmp_path):
+    """Sans cette liste, l'examinateur part du rapport et cherche a l'aveugle.
+
+    Le diff entier n'est pas passe a dessein : la CLI sait ouvrir les fichiers
+    elle-meme, et le contexte est deja plafonne. Ce qui lui manque, c'est
+    l'endroit ou regarder.
+    """
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+
+    class ProviderQuiEcrit(FakeProvider):
+        def run(self, prompt, cwd, intent, timeout, **kwargs):
+            (cwd / "fonctionnalite.py").write_text("a moitie\n", encoding="utf-8")
+            return super().run(prompt, cwd, intent, timeout, **kwargs)
+
+    providers = {
+        "codex": ProviderQuiEcrit("codex"),
+        "claude": FakeProvider("claude"),
+        "gemini": FakeProvider("gemini"),
+        "copilot": FakeProvider("copilot"),
+    }
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    orchestrator.execute(
+        "ajoute la fonctionnalite",
+        Route(Intent.MODIFY, Mode.REVIEW, "codex", "claude"),
+    )
+
+    examen = providers["claude"].calls[0][0]
+    assert "<CHANGED_FILES>" in examen
+    assert "fonctionnalite.py" in examen
+    # Et la consigne qui distingue cette etape d'une relecture : corriger.
+    assert "Edit the files yourself" in examen

@@ -49,6 +49,34 @@ def snapshot(project: Path) -> GitSnapshot:
     )
 
 
+def changed_paths(project: Path, before: GitSnapshot) -> list[str]:
+    """Les fichiers que ce run a touches, hors ceux qui l'etaient deja.
+
+    Sert a diriger l'examinateur. Une CLI agentique sait lire le depot toute
+    seule ; ce qui lui manque, c'est ou regarder. Une liste de chemins tient
+    dans un prompt deja plafonne, un diff complet non — et le diff dirait moins
+    que le fichier entier, que le relecteur peut ouvrir lui-meme.
+
+    Un depot absent ou illisible rend une liste vide : l'examen porte alors sur
+    le rapport seul, comme avant.
+    """
+    if not before.available:
+        return []
+    after = snapshot(project)
+    if not after.available:
+        return []
+    touched = {
+        path
+        for path in after.dirty_files
+        if _changed_since_snapshot(project, path, before)
+    }
+    # Un fournisseur qui commite ses modifications les sort de `git status` :
+    # sans cette comparaison, son travail serait invisible pour l'examinateur.
+    committed = _git(project, "diff", "--name-only", before.head or "HEAD", "--")
+    touched.update(path for path in committed.stdout.split("\n") if path.strip())
+    return sorted(touched)
+
+
 def build_report(
     project: Path,
     before: GitSnapshot,
