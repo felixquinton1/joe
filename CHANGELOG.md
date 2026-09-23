@@ -6,6 +6,25 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- Full access no longer rides on the confirmation setting. A project set to
+  run unattended stopped requiring approval *for everything*, so an
+  `execution_mode` passed in a request body was enough to obtain
+  `danger-full-access` with no approval and no `maintainer` profile — an
+  `operator` could do it. Not wanting to confirm ordinary work is not granting
+  unrestricted access; the two now have separate locks. Access beyond the
+  project always requires a durable approval, validated and consumed once,
+  whatever the project's setting.
+
+### Changed
+
+- A project runs unattended by default. Confirming every request defeated the
+  REVIEW and CONSENSUS workflows, where several providers run in sequence with
+  nobody at the screen. The scope is unchanged: `manual` and `auto` both grant
+  writing **inside the project** and nothing beyond — only the confirmation
+  disappears. `read_only` remains available per project.
+
 ## [1.3.2] — 2026-09-23
 
 ### Security

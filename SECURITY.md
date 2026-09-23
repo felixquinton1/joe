@@ -22,6 +22,13 @@ Joe is a local orchestrator:
 - it launches provider CLIs that are already installed and authenticated;
 - it grants them the project access level selected by the user, including
   command execution and file modification when explicitly allowed;
+- a project runs unattended by default: the agent reads, writes and runs
+  commands **inside the project** without confirming each request. Set the
+  project to `read_only` to forbid modification, or to `manual` to confirm
+  every request;
+- access beyond the project (`danger-full-access`) is never granted by that
+  default. It always requires a durable approval, explicitly validated,
+  consumed once, from a `maintainer` profile — whatever the project's setting;
 - it binds the Web interface to loopback by default;
 - remote binds require `--allow-remote` and remain authenticated;
 - autonomous campaigns can call models and commands without interaction, but

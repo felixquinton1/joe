@@ -20,7 +20,16 @@ _VALID_AGENTS = {"", *get_provider_names()}
 # conversation, « Permission des validations opérationnelles » du projet) dont
 # le recouvrement rendait le comportement imprévisible.
 AI_ACCESS_LEVELS = ("read_only", "manual", "auto")
-DEFAULT_AI_ACCESS = "manual"
+
+# « auto » par défaut : Joe est un orchestrateur autonome, et demander une
+# approbation à chaque étape annulait l'intérêt des modes REVIEW et CONSENSUS,
+# où plusieurs fournisseurs s'enchaînent sans personne devant l'écran.
+#
+# Le périmètre ne change pas pour autant : `manual` et `auto` accordent tous
+# deux `workspace-write`, c'est-à-dire l'écriture dans le projet et rien
+# au-delà. Seule l'approbation disparaît. `read_only` reste disponible pour un
+# projet qu'on ne veut pas voir modifier, et se choisit par projet.
+DEFAULT_AI_ACCESS = "auto"
 
 # Reprise de l'ancien réglage : une valeur d'exécution déjà choisie exprimait
 # une intention d'autoriser, on la traduit en « automatique » pour ne pas

@@ -100,11 +100,22 @@ class RunDecision:
 
         Une action locale ne lance aucun fournisseur : elle n'a rien à faire
         approuver.
+
+        L'accès complet, lui, s'approuve toujours. Il était adossé au même
+        réglage que la confirmation ordinaire : passer un projet en
+        « automatique » — ne plus valider chaque demande — désarmait du même
+        geste le garde-fou de l'accès complet, et un `execution_mode` glissé
+        dans le corps d'une requête suffisait alors à obtenir `project-full`
+        sans approbation ni profil maintainer. Ne plus vouloir confirmer le
+        travail courant n'est pas accorder les pleins pouvoirs : ce sont deux
+        décisions distinctes, elles ont maintenant deux verrous distincts.
         """
         if self.local_action or self.plan_stage == "propose":
             return False
         if not self.will_execute:
             return False
+        if _access_level(self.execution_mode, modifying=True) == "project-full":
+            return True
         return self.ai_access == "manual"
 
 

@@ -286,6 +286,7 @@ def test_operator_cannot_approve_a_project_default_full_access(tmp_path):
             {
                 "conversation_id": conversation["id"],
                 "request": "go",
+                "execution_mode": "danger-full-access",
                 "full_access_approved": True,
             },
             token="test-token",
@@ -312,6 +313,7 @@ def test_full_access_flag_in_the_body_never_authorizes_a_run(tmp_path):
         body = {
             "conversation_id": conversation["id"],
             "request": "Corrige le bug",
+            "execution_mode": "danger-full-access",
             "full_access_approved": True,
         }
 
@@ -379,6 +381,7 @@ def test_a_consumed_approval_cannot_be_replayed(tmp_path):
             {
                 "conversation_id": conversation["id"],
                 "request": "Corrige le bug",
+                "execution_mode": "danger-full-access",
                 "approval_id": approval["id"],
             },
             token="test-token",
@@ -446,6 +449,54 @@ def test_a_viewer_can_acknowledge_a_completion_but_not_edit(tmp_path):
         assert server.manager.conversations.get(
             conversation["id"]
         )["title"] != "Renommée"
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_auto_access_drops_the_confirmation_not_the_full_access_guard(tmp_path):
+    """Ne plus confirmer le travail courant n'est pas accorder les pleins pouvoirs.
+
+    Les deux dependaient du meme reglage : un projet passe en « automatique »
+    n'exigeait plus d'approbation du tout, et un `execution_mode` glisse dans
+    le corps d'une requete suffisait alors a obtenir `project-full` sans
+    approbation ni profil maintainer. Un profil `operator` y parvenait.
+    """
+    server, thread = start_server(tmp_path, "operator")
+    try:
+        project = server.manager.conversations.create_project("Autonome")
+        # Le defaut, rendu explicite : l'IA travaille seule.
+        assert server.manager.conversations.get_project(
+            project["id"]
+        )["ai_access"] == "auto"
+        conversation = server.manager.conversations.create(project["id"])
+
+        # Le travail courant part sans rien demander.
+        courant = server.manager.decide("corrige ce bug", conversation["id"])
+        assert courant.execution_mode == "workspace-write"
+        assert courant.needs_approval is False
+
+        # L'acces complet, lui, reste verrouille.
+        complet = server.manager.decide(
+            "corrige ce bug",
+            conversation["id"],
+            execution_mode="danger-full-access",
+        )
+        assert complet.needs_approval is True
+
+        status, payload, _ = request(
+            server,
+            "POST",
+            "/api/runs",
+            {
+                "conversation_id": conversation["id"],
+                "request": "corrige ce bug",
+                "execution_mode": "danger-full-access",
+            },
+            token="test-token",
+        )
+        assert status == 403
+        assert "maintainer" in payload["error"]
     finally:
         server.shutdown()
         thread.join(timeout=2)
