@@ -1,5 +1,10 @@
 name: CI
 
+# Moindre privilege explicite : sans ce bloc, le jeton du job herite du defaut
+# du depot, qui peut autoriser l'ecriture. Aucun job de CI n'en a besoin.
+permissions:
+  contents: read
+
 on:
   push:
   pull_request:
@@ -20,8 +25,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
       # Le plugin publie chaque test en échec comme annotation : lisible sur
@@ -41,17 +46,18 @@ jobs:
       matrix:
         python-version: ["3.10", "3.12"]
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
       # Version épinglée : une montée de ruff ne doit pas faire échouer la CI
       # sans qu'une ligne de code ait changé.
-      - run: python -m pip install -e . pytest ruff==0.15.4
+      - run: python -m pip install -e . pytest ruff==0.15.4 bandit==1.9.4
       - run: ruff check src tests
+      - run: bandit -r src/joe -ll -q
       - run: pytest -q
       # Tout script livré est vérifié : en nommer cinq sur sept laissait
       # passer une erreur de syntaxe dans les deux autres.
@@ -73,6 +79,6 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.live_smokes
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: python -m pip install -e . pytest
       - run: JOE_LIVE_SMOKE=1 pytest -q tests/test_live_cli_smoke.py

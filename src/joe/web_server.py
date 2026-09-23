@@ -57,6 +57,7 @@ _ASSETS = {
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
 }
 API_VERSION = "1.3"
+_LOOPBACK_NAMES = {"localhost", "localhost."}
 
 # Champs qu'un profil viewer peut écrire sur une conversation : acquitter un
 # état lu ne constitue pas une mutation de contenu.
@@ -70,10 +71,32 @@ def _is_ipv6(host: str) -> bool:
         return False
 
 
+def _request_host_allowed(value: str | None, *, allow_remote: bool) -> bool:
+    """Accept only loopback authorities unless remote exposure was explicit."""
+    if allow_remote:
+        return True
+    if not value:
+        return False
+    try:
+        parsed = urlparse(f"//{value}")
+        if parsed.username or parsed.password or not parsed.hostname:
+            return False
+        host = parsed.hostname.lower()
+    except ValueError:
+        return False
+    if host in _LOOPBACK_NAMES:
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 class JoeServer(ThreadingHTTPServer):
     manager: RunManager
     auth = LocalAuth("", "viewer", True)
     auth_path = auth_token_path()
+    allow_remote = False
 
     def __init__(self, address: tuple[str, int], handler: Any) -> None:
         # `validate_bind` accepte `::1`, mais la famille d'adresses par défaut
@@ -108,6 +131,14 @@ class Handler(BaseHTTPRequestHandler):
         Les motifs étant ancrés et exclusifs, une route non déclarée échoue en
         404 franc au lieu d'être détournée vers un préfixe fourre-tout.
         """
+        if not _request_host_allowed(
+            self.headers.get("Host"),
+            allow_remote=self.server.allow_remote,
+        ):
+            return self._json(
+                {"error": "Invalid Host header."},
+                HTTPStatus.MISDIRECTED_REQUEST,
+            )
         parsed = urlparse(self.path)
         if method == "GET" and parsed.path in _ASSETS:
             name, content_type = _ASSETS[parsed.path]
@@ -1009,6 +1040,19 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def end_headers(self) -> None:
+        """Attach browser hardening headers to assets, API and error replies."""
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self'; style-src 'self' "
+            "'unsafe-inline'; img-src 'self' data:; connect-src 'self'; "
+            "base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+        )
+        super().end_headers()
+
     def log_message(self, format: str, *args: Any) -> None:
         return
 
@@ -1023,6 +1067,7 @@ def serve(
 ) -> None:
     validate_bind(host, allow_remote=allow_remote)
     server = JoeServer((host, port), Handler)
+    server.allow_remote = allow_remote
     server.auth = LocalAuth.enabled_for(profile)
     server.manager = RunManager(project, profile=profile)
     companion = _loopback_companion(server, host, port)
@@ -1052,6 +1097,7 @@ def _loopback_companion(
         return None
     companion.auth = server.auth
     companion.manager = server.manager
+    companion.allow_remote = server.allow_remote
     return companion
 
 

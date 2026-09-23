@@ -40,8 +40,14 @@ Please report behavior such as:
 
 ## Known limitations
 
-- The `Host` header is not restricted. Sensitive endpoints still require the
-  local token, and the authentication cookie uses `SameSite=Strict`.
+- Loopback servers accept only loopback `Host` authorities, reducing DNS
+  rebinding exposure. An explicit `--allow-remote` bind accepts forwarded host
+  names so it remains compatible with reverse proxies.
 - `/api/status` is intentionally public so the UI can detect and pair with the
   server. It exposes product version, provider catalog, modes, and whether
   authentication is required; workspace paths and profiles remain protected.
+- `--allow-remote` serves plain HTTP. Joe terminates no TLS, and the session
+  cookie carries no `Secure` attribute, so on a non-loopback bind the pairing
+  token and the cookie travel unencrypted and anyone on the path can replay
+  them. Prefer an SSH port-forward to the default loopback bind, or put a
+  TLS-terminating reverse proxy in front.

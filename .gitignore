@@ -6,6 +6,7 @@ __pycache__/
 *.egg-info/
 *.py[cod]
 .venv/
+.release-venv/
 artifacts/
 checkpoints/
 # Synthèse écrite par une campagne autonome dans le projet qu'elle travaille.

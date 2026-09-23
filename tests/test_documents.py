@@ -58,3 +58,16 @@ def test_unsupported_binary_is_not_misread_as_text(tmp_path):
     path.write_bytes(b"\x89PNG")
 
     assert extract_document_text(path, "image/png") is None
+
+
+def test_docx_rejects_dtds_and_custom_entities(tmp_path):
+    path = tmp_path / "untrusted.docx"
+    document = """<?xml version="1.0"?>
+<!DOCTYPE document [<!ENTITY repeated "untrusted">]>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body><w:p><w:r><w:t>&repeated;</w:t></w:r></w:p></w:body>
+</w:document>"""
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("word/document.xml", document)
+
+    assert extract_document_text(path) == ""

@@ -6,6 +6,42 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.3.2] — 2026-09-23
+
+### Security
+
+- Loopback servers now reject non-loopback `Host` headers, and every HTTP
+  response carries content-type, framing, referrer, and content-security
+  protections. Explicit remote binds remain compatible with reverse proxies.
+- DOCX extraction rejects DTD and custom-entity declarations before parsing.
+- CI now runs Bandit in addition to Ruff and the platform test matrix.
+- GitHub Actions, including the trusted PyPI publisher, are pinned to audited
+  commit SHAs while Dependabot remains responsible for update proposals.
+- CI declares least-privilege token permissions. The workflow carried no
+  `permissions` block, so its `GITHUB_TOKEN` inherited whatever the repository
+  grants by default — write, on many repositories. No CI job needs it.
+- The security policy states what `--allow-remote` costs. Joe terminates no TLS
+  and the session cookie carries no `Secure` attribute, so on a non-loopback
+  bind the pairing token and the cookie travel unencrypted and can be replayed
+  by anyone on the path. The loopback default was documented; the price of
+  leaving it was not.
+
+### Changed
+
+- The README describes the current two-agent REVIEW workflow: the examiner
+  reopens the changed files and applies justified fixes directly.
+- The README opens with the providers Joe leads with. Its first two paragraphs
+  still listed Gemini CLI, retired for consumer accounts, and left out
+  Antigravity — while the installation table below had it right.
+- The test suite no longer depends on how fast the machine's provider CLIs
+  answer. Discovery runs once per session instead of falling on whichever test
+  first crossed a request path, where it could outlast the client timeout: a
+  privilege-escalation test failed on a socket timeout roughly one run in
+  seven, while the refusal it checks was correct and immediate.
+- Obsolete screenshots from a real Joe workspace were removed before the
+  repository becomes public. Future media must use synthetic project data and
+  opaque redaction rather than blur.
+
 ## [1.3.1] — 2026-09-23
 
 ### Changed

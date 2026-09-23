@@ -104,6 +104,51 @@ def test_root_never_distributes_the_token(tmp_path):
         thread.join(timeout=2)
 
 
+def test_loopback_server_rejects_foreign_host_and_adds_security_headers(tmp_path):
+    server, thread = start_server(tmp_path, "maintainer")
+    try:
+        status, payload, response = request(
+            server,
+            "GET",
+            "/api/status",
+            headers={"Host": "attacker.example"},
+        )
+        assert status == 421
+        assert payload == {"error": "Invalid Host header."}
+        assert response.getheader("X-Content-Type-Options") == "nosniff"
+        assert response.getheader("X-Frame-Options") == "DENY"
+        assert "frame-ancestors 'none'" in response.getheader(
+            "Content-Security-Policy"
+        )
+
+        status, _, _ = request(
+            server,
+            "GET",
+            "/api/status",
+            headers={"Host": f"localhost:{server.server_port}"},
+        )
+        assert status == 200
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_explicit_remote_bind_accepts_forwarded_host(tmp_path):
+    server, thread = start_server(tmp_path, "maintainer")
+    server.allow_remote = True
+    try:
+        status, _, _ = request(
+            server,
+            "GET",
+            "/api/status",
+            headers={"Host": "joe.example.test"},
+        )
+        assert status == 200
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
 def test_pairing_requires_possession_and_returns_an_http_only_cookie(tmp_path):
     server, thread = start_server(tmp_path, "maintainer")
     try:

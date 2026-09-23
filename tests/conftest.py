@@ -17,6 +17,26 @@ def assert_mode(path, expected):
         assert stat.S_IMODE(path.stat().st_mode) == expected
 
 
+@pytest.fixture(scope="session", autouse=True)
+def warm_provider_catalogue():
+    """Interroger les CLI du poste une fois, avant le premier test.
+
+    `provider_capabilities` lance un sous-processus par fournisseur installe :
+    environ trois secondes a froid sur une machine complete. Ce cout tombait
+    sur le premier test a traverser un chemin de requete, dont le client
+    attend cinq secondes — et sous charge la limite etait franchie. Les tests
+    viraient au rouge selon la machine et non selon le code, dont un test
+    d'escalade de privileges qui echouait sur un timeout de socket alors que
+    le refus, lui, etait correct.
+
+    La chauffe se fait ici, hors de tout delai de client. Le contenu reste
+    celui du poste : on supprime la latence, pas la realite.
+    """
+    from joe.capabilities import provider_capabilities
+
+    provider_capabilities()
+
+
 @pytest.fixture(autouse=True)
 def isolated_joe_data_home(tmp_path, monkeypatch):
     clear_cooldowns()
