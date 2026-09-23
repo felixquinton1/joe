@@ -265,7 +265,9 @@ def _antigravity() -> dict[str, Any]:
                 [executable, "models"],
                 text=True,
                 capture_output=True,
-                timeout=20,
+                # Meme borne que les autres lecteurs de catalogue : cet appel
+                # interroge le reseau, et `/api/capabilities` l'attend.
+                timeout=8,
                 check=False,
                 encoding="utf-8",
                 errors="replace",
