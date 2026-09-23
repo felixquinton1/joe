@@ -7,10 +7,10 @@
 [![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/joe-orchestrator.svg)](https://pypi.org/project/joe-orchestrator/)
 
-Joe brings Codex, Claude Code, Gemini CLI, GitHub Copilot CLI, and Cursor CLI
-into one persistent local workspace. Write a request naturally; Joe selects an
-appropriate workflow and agent, carries project context between providers, and
-shows what is happening as it runs.
+Joe brings Codex, Claude Code, Antigravity CLI, GitHub Copilot CLI, and Cursor
+CLI into one persistent local workspace. Write a request naturally; Joe selects
+an appropriate workflow and agent, carries project context between providers,
+and shows what is happening as it runs.
 
 It uses the CLI subscriptions you already have. Joe is not an AI provider,
 proxy, or additional billing service.
@@ -21,8 +21,8 @@ proxy, or additional billing service.
   changes, provider activity, quotas, and settings.
 - **Automatic routing** based on the request, model capabilities, provider
   availability, recent failures, and known quota windows.
-- **Persistent context** that lets Codex, Claude, Gemini, Copilot, and Cursor
-  continue the same project without asking you to restate everything.
+- **Persistent context** that lets Codex, Claude, Antigravity, Copilot, and
+  Cursor continue the same project without asking you to restate everything.
 - **Live, honest progress** showing the provider, model, effort, stage, tools,
   fallbacks, and failures that actually occurred.
 - **Concurrent conversations** with queued prompts, cancellation, durable task
@@ -37,7 +37,7 @@ Joe chooses a workflow automatically, while always allowing a manual override.
 | Mode | How it works | Best suited to |
 | --- | --- | --- |
 | **FAST** | One agent answers or implements directly | Questions and focused changes |
-| **REVIEW** | One agent works, another reviews, then at most one justified correction pass runs | Meaningful implementation work |
+| **REVIEW** | One agent works, then a different agent reopens the changed files and fixes justified issues directly | Meaningful implementation work |
 | **CONSENSUS** | Independent proposals run in parallel, each is challenged, then a final synthesis reconciles the evidence | Research, architecture, scientific plans, and important decisions |
 
 ### Consensus, visible from start to finish

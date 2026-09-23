@@ -86,7 +86,8 @@ joe doctor
 1. Ensure `CHANGELOG.md`, `pyproject.toml`, `src/joe/__init__.py`, and the Web
    application version agree.
 2. Commit and push the final release candidate.
-3. Create and push an annotated tag, for example `v1.1.1`.
+3. Create and push an annotated tag matching the package version, for example
+   `v1.3.2` for package version `1.3.2`.
 4. Run **Release packages** manually from that tag with target `pypi`.
 5. Approve the protected `pypi` environment after reviewing the build.
 6. Verify PyPI installation on a clean Linux, macOS, or Windows environment.
@@ -98,3 +99,20 @@ available as source in `vscode-extension/` and can be packaged locally.
 
 PyPI versions are immutable. If any check fails after publication, bump the
 version and publish a new release instead of replacing files.
+
+## Public switch checklist
+
+Run these steps together so the repository is never left public without its
+intended controls:
+
+1. enable the **CI** workflow (kept disabled while the private repository would
+   consume billed Actions minutes);
+2. make the repository public;
+3. apply `.github/branch-protection.json` to `main`;
+4. require full-length commit SHA references for GitHub Actions;
+5. enable private vulnerability reporting;
+6. confirm that CI and CodeQL complete successfully on the public `main`;
+7. upload `docs/assets/joe-social-preview.png` as the repository social preview.
+
+The social preview is a GitHub UI operation; the other controls can be applied
+with `gh` and the commands in this guide.

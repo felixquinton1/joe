@@ -51,7 +51,14 @@ def _extract_docx(path: Path, *, max_chars: int) -> str:
                 total_xml_bytes += info.file_size
                 if total_xml_bytes > MAX_XML_BYTES:
                     break
-                root = ElementTree.fromstring(archive.read(info))
+                xml = archive.read(info)
+                declarations = xml.upper()
+                if b"<!DOCTYPE" in declarations or b"<!ENTITY" in declarations:
+                    return ""
+                # WordprocessingML does not need DTDs or custom entities. They
+                # are rejected above, so the standard parser cannot resolve an
+                # external resource or expand an attacker-controlled entity.
+                root = ElementTree.fromstring(xml)  # nosec B314
                 for paragraph in root.iter(f"{WORD}p"):
                     text: list[str] = []
                     for node in paragraph.iter():

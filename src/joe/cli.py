@@ -562,7 +562,9 @@ def _active_runs(url: str) -> list[dict] | None:
             f"{url}/api/runs/active",
             headers={"Authorization": f"Bearer {token}"},
         )
-        with urllib.request.urlopen(
+        # The URL is assembled by Joe with an explicit HTTP scheme and is only
+        # used to probe the user-selected Joe server.
+        with urllib.request.urlopen(  # nosec B310
             request,
             timeout=2,
         ) as response:
@@ -586,7 +588,9 @@ def _server_status(url: str) -> dict | None:
             f"{url}/api/status",
             headers={"Authorization": f"Bearer {token}"},
         )
-        with urllib.request.urlopen(
+        # The URL is assembled by Joe with an explicit HTTP scheme and is only
+        # used to probe the user-selected Joe server.
+        with urllib.request.urlopen(  # nosec B310
             request,
             timeout=2,
         ) as response:
@@ -681,7 +685,8 @@ def _auth(argv: list[str]) -> int:
             },
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=5) as response:
+        # `request` targets the explicit local Joe URL assembled just above.
+        with urllib.request.urlopen(request, timeout=5) as response:  # nosec B310
             payload = json.loads(response.read())
     except (OSError, ValueError, json.JSONDecodeError, urllib.error.URLError) as exc:
         print(f"joe auth: rotation failed: {exc}", file=sys.stderr)
