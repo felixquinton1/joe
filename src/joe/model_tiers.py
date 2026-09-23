@@ -73,10 +73,11 @@ DECLARED: dict[str, dict[str, dict[str, Any]]] = {
         # cette préférence était noyée dans un score sur les noms de modèles.
         "claude-sonnet-5": {"tier": "light", "preference": 1},
         "claude-haiku-4-5": {"tier": "light", "preference": 2},
-        "claude-opus-5": {"tier": "strong", "preference": 1},
+        "claude-opus-5-5": {"tier": "strong", "preference": 1},
         # Facturé au jeton, hors abonnement : le routage ne doit jamais
         # l'engager sans qu'on l'ait demandé. Il reste choisissable à la main.
         "claude-fable-5-1": {"tier": "strong", "metered": True},
+        "claude-opus-5": {"tier": "legacy"},
         "claude-opus-4-8": {"tier": "legacy"},
         "claude-sonnet-4-6": {"tier": "legacy"},
     },

@@ -6,14 +6,16 @@ from joe.model_tiers import choose, is_metered, model_tier
 
 
 CLAUDE = [
-    {"id": "claude-opus-5", "cost_tier": 4,
-     "description": "Le meilleur rapport qualité-prix pour le travail complexe."},
+    {"id": "claude-opus-5-5", "cost_tier": 4,
+     "description": "Le plus capable pour le travail complexe."},
     {"id": "claude-sonnet-5", "cost_tier": 2,
      "description": "Rapide et économique, pour le volume."},
     {"id": "claude-haiku-4-5", "cost_tier": 1,
      "description": "Le plus léger, pour les tâches simples."},
     {"id": "claude-fable-5-1", "cost_tier": 5,
      "description": "Le plus capable, pour le raisonnement long. Coût élevé."},
+    {"id": "claude-opus-5", "cost_tier": 4,
+     "description": "Génération précédente d'Opus."},
     {"id": "claude-opus-4-8", "cost_tier": 4,
      "description": "Génération précédente d'Opus."},
     {"id": "claude-sonnet-4-6", "cost_tier": 3,
@@ -64,6 +66,7 @@ def test_a_previous_generation_model_is_never_routed_to():
     assert model_tier(CLAUDE[4], "claude") == "legacy"
     assert model_tier(CODEX[4], "codex") == "legacy"
     chosen = {choose(CLAUDE, tier, "claude") for tier in ("light", "standard", "strong")}
+    assert "claude-opus-5" not in chosen
     assert "claude-opus-4-8" not in chosen
     assert "gpt-5.5" not in {
         choose(CODEX, tier, "codex") for tier in ("light", "standard", "strong")
@@ -95,7 +98,7 @@ def test_the_declared_catalog_settles_what_a_description_cannot():
     Laissé au seul texte, il disputerait la tête à Opus.
     """
     assert model_tier(CLAUDE[3], "claude") == "strong"
-    assert choose(CLAUDE, "strong", "claude") == "claude-opus-5"
+    assert choose(CLAUDE, "strong", "claude") == "claude-opus-5-5"
 
 
 def test_a_metered_model_is_never_chosen_automatically():

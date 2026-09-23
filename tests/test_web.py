@@ -1872,3 +1872,22 @@ def test_compaction_never_targets_a_retired_cli_by_default():
 
     # Aucun fournisseur : on renonce, sans lever.
     assert _compaction_provider("", {}) == ""
+
+
+def test_compaction_filters_declared_but_unavailable_providers(monkeypatch):
+    import joe.web_runs as web_runs_module
+    from joe.providers import Provider
+    from joe.web_runs import _installed_compaction_providers
+
+    providers = {"codex": Provider("codex", "codex")}
+    monkeypatch.setattr(web_runs_module, "disabled_providers", lambda: set())
+    monkeypatch.setattr(web_runs_module, "resolve_executable", lambda _name: None)
+    assert _installed_compaction_providers(providers) == {}
+
+    monkeypatch.setattr(
+        web_runs_module, "resolve_executable", lambda _name: "/usr/bin/codex"
+    )
+    assert _installed_compaction_providers(providers) == providers
+
+    monkeypatch.setattr(web_runs_module, "disabled_providers", lambda: {"codex"})
+    assert _installed_compaction_providers(providers) == {}

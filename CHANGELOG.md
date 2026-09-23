@@ -6,6 +6,15 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.3.5] — 2026-09-23
+
+### Changed
+
+- Claude Code 2.1.280 exposes `claude-opus-5-5`; Joe now lists it and uses it
+  for strong Claude work. Opus 5 remains selectable manually but is no longer
+  chosen automatically now that the newer, stronger, lower-cost generation is
+  available.
+
 ### Fixed
 
 - Automatic compaction no longer targets a retired CLI. It runs on long

@@ -34,8 +34,14 @@ from .files import FileLibrary
 from .git_review import GitSnapshot, reject, snapshot
 from .models import Intent, Mode, Route
 from .orchestrator import OrchestrationError, Orchestrator
+from .provider_choice import disabled_providers
 from .prompt_language import normalize as normalize_language, question_rules
-from .providers import _access_level
+from .providers import (
+    Provider,
+    _access_level,
+    resolve_executable,
+    windows_aware_executable,
+)
 from .router import _routing_text
 from .routing import resolve_route
 from .route_classifier import (
@@ -2517,8 +2523,9 @@ class RunManager:
     ) -> None:
         try:
             config = orchestrator.memory.config().get("semantic_compaction", {})
+            available = _installed_compaction_providers(orchestrator.providers)
             provider = _compaction_provider(
-                str(config.get("provider", "")), orchestrator.providers
+                str(config.get("provider", "")), available
             )
             if not provider:
                 return
@@ -3146,6 +3153,26 @@ def _compaction_provider(configured: str, installed: Any) -> str:
         name for name in noms if not get_provider_spec(name).deprecated_since
     ]
     return (en_service or noms or [""])[0]
+
+
+def _installed_compaction_providers(providers: dict[str, Any]) -> dict[str, Any]:
+    """Keep real installed providers while preserving injected test doubles."""
+    refused = disabled_providers()
+    installed: dict[str, Any] = {}
+    for name, provider in providers.items():
+        if not isinstance(provider, Provider):
+            installed[name] = provider
+            continue
+        if name in refused:
+            continue
+        executable = (
+            resolve_executable(name)
+            if provider.executable == name
+            else windows_aware_executable(provider.executable)
+        )
+        if executable:
+            installed[name] = provider
+    return installed
 
 
 def _resolve_execution_mode(
