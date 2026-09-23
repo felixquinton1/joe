@@ -84,6 +84,8 @@ def test_managed_ports_ignores_unrelated_files(tmp_path, monkeypatch):
     (tmp_path / "server-nope.json").write_text("{}", encoding="utf-8")
     (tmp_path / "other.json").write_text("{}", encoding="utf-8")
 
+    assert background.managed_ports() == [8765, 9000]
+
 
 @pytest.mark.skipif(sys.platform != "win32", reason="native Windows process lifecycle")
 def test_native_windows_background_process_lifecycle(tmp_path, monkeypatch):
@@ -105,4 +107,3 @@ def test_native_windows_background_process_lifecycle(tmp_path, monkeypatch):
                 ["taskkill", "/PID", str(state.pid), "/T", "/F"],
                 check=False,
             )
-    assert background.managed_ports() == [8765, 9000]

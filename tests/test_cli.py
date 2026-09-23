@@ -1,8 +1,22 @@
+import sys
 from types import SimpleNamespace
+
+import pytest
 
 from joe.cli import _kill, _restart, _stop, parser
 
+# Ces tests decrivent le backend tmux. Depuis que Windows dispose de son
+# gestionnaire natif, `joe.cli` n'y appelle plus tmux du tout : les commandes
+# attendues ne partent pas et les messages different. Les executer sur Windows
+# ne revelait rien sur Windows, cela signalait seulement qu'ils parlaient d'un
+# backend absent. Le cycle de vie Windows a ses propres tests plus bas.
+tmux_backend = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="backend tmux, remplace sur Windows par le gestionnaire natif",
+)
 
+
+@tmux_backend
 def test_kill_stops_only_numbered_joe_tmux_sessions(monkeypatch, capsys):
     calls = []
 
@@ -27,6 +41,7 @@ def test_kill_stops_only_numbered_joe_tmux_sessions(monkeypatch, capsys):
     assert "stopped 2 tmux sessions" in capsys.readouterr().out
 
 
+@tmux_backend
 def test_kill_succeeds_when_no_joe_session_exists(monkeypatch, capsys):
     monkeypatch.setattr("joe.cli.shutil.which", lambda name: "/usr/bin/tmux")
     monkeypatch.setattr(
@@ -46,6 +61,7 @@ def test_restart_refuses_when_a_run_is_active(tmp_path, monkeypatch, capsys):
     assert "a task is still active" in capsys.readouterr().err
 
 
+@tmux_backend
 def test_restart_recreates_only_selected_tmux_session(
     tmp_path, monkeypatch
 ):
@@ -70,6 +86,7 @@ def test_restart_recreates_only_selected_tmux_session(
     assert calls[1][-2:] == ["--profile", "viewer"]
 
 
+@tmux_backend
 def test_restart_reuses_the_active_server_project_by_default(
     tmp_path, monkeypatch
 ):
@@ -102,6 +119,7 @@ def test_restart_requires_force_when_server_is_unreachable(
     assert "use --force" in capsys.readouterr().err
 
 
+@tmux_backend
 def test_forced_restart_recovers_an_unreachable_server(
     tmp_path, monkeypatch
 ):
@@ -127,6 +145,7 @@ def test_help_explains_the_full_cli_and_web_interfaces():
     assert "doctor" in help_text
 
 
+@tmux_backend
 def test_stop_targets_only_the_requested_joe_port(monkeypatch, capsys):
     calls = []
     monkeypatch.setattr("joe.cli.shutil.which", lambda command: "/usr/bin/tmux")
