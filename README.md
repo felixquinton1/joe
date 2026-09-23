@@ -276,6 +276,7 @@ node --test tests/test_web_assets.mjs
 Documentation:
 
 - [User guide](docs/user-guide.md)
+- [Complete feature reference](docs/feature-reference.md)
 - [HTTP and SSE API contract](docs/api-contract.md)
 - [Contributing guide](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
