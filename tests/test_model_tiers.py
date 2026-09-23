@@ -41,8 +41,8 @@ def test_a_standard_task_no_longer_gets_the_most_expensive_model():
     plus cher que celui rendu pour « strong ».
     """
     assert CLAUDE[len(CLAUDE) // 2]["id"] == "claude-fable-5-1"
-    assert choose(CLAUDE, "standard") != "claude-fable-5-1"
-    assert choose(CLAUDE, "standard") == "claude-sonnet-5"
+    assert choose(CLAUDE, "standard", "claude") != "claude-fable-5-1"
+    assert choose(CLAUDE, "standard", "claude") == "claude-sonnet-5"
 
 
 def test_a_provider_that_describes_its_models_classes_itself():
@@ -51,22 +51,22 @@ def test_a_provider_that_describes_its_models_classes_itself():
     Une nouvelle sortie décrite comme « fast and affordable » est classée le
     jour de sa publication, sans qu'une table soit mise à jour.
     """
-    assert model_tier(CODEX[0]) == "strong"
-    assert model_tier(CODEX[1]) == "standard"
-    assert model_tier(CODEX[3]) == "light"
-    assert choose(CODEX, "light") == "gpt-5.6-luna"
-    assert choose(CODEX, "standard") == "gpt-5.6-sol"
-    assert choose(CODEX, "strong") == "gpt-6-astra"
+    assert model_tier(CODEX[0], "codex") == "strong"
+    assert model_tier(CODEX[1], "codex") == "standard"
+    assert model_tier(CODEX[3], "codex") == "light"
+    assert choose(CODEX, "light", "codex") == "gpt-5.6-luna"
+    assert choose(CODEX, "standard", "codex") == "gpt-5.6-sol"
+    assert choose(CODEX, "strong", "codex") == "gpt-6-astra"
 
 
 def test_a_previous_generation_model_is_never_routed_to():
     """Il reste sélectionnable à la main, jamais choisi automatiquement."""
-    assert model_tier(CLAUDE[4]) == "legacy"
-    assert model_tier(CODEX[4]) == "legacy"
-    chosen = {choose(CLAUDE, tier) for tier in ("light", "standard", "strong")}
+    assert model_tier(CLAUDE[4], "claude") == "legacy"
+    assert model_tier(CODEX[4], "codex") == "legacy"
+    chosen = {choose(CLAUDE, tier, "claude") for tier in ("light", "standard", "strong")}
     assert "claude-opus-4-8" not in chosen
     assert "gpt-5.5" not in {
-        choose(CODEX, tier) for tier in ("light", "standard", "strong")
+        choose(CODEX, tier, "codex") for tier in ("light", "standard", "strong")
     }
 
 
@@ -94,8 +94,8 @@ def test_the_declared_catalog_settles_what_a_description_cannot():
 
     Laissé au seul texte, il disputerait la tête à Opus.
     """
-    assert model_tier(CLAUDE[3]) == "strong"
-    assert choose(CLAUDE, "strong") == "claude-opus-5"
+    assert model_tier(CLAUDE[3], "claude") == "strong"
+    assert choose(CLAUDE, "strong", "claude") == "claude-opus-5"
 
 
 def test_a_metered_model_is_never_chosen_automatically():
@@ -104,13 +104,13 @@ def test_a_metered_model_is_never_chosen_automatically():
     Engager une dépense doit venir d'une décision, pas du mode retenu pour une
     demande. Le modèle reste proposé au choix manuel.
     """
-    assert is_metered(CLAUDE[3]) is True
-    assert all(not is_metered(model) for model in CODEX)
+    assert is_metered(CLAUDE[3], "claude") is True
+    assert all(not is_metered(model, "codex") for model in CODEX)
 
-    chosen = {choose(CLAUDE, tier) for tier in ("light", "standard", "strong")}
+    chosen = {choose(CLAUDE, tier, "claude") for tier in ("light", "standard", "strong")}
     assert "claude-fable-5-1" not in chosen
     # Même en haut de gamme et seul de son niveau, il n'est pas retenu.
-    assert choose([CLAUDE[3]], "strong") is None
+    assert choose([CLAUDE[3]], "strong", "claude") is None
 
 
 def test_everything_metered_still_answers_rather_than_refusing():
@@ -119,3 +119,50 @@ def test_everything_metered_still_answers_rather_than_refusing():
 
     metered = [{"id": "paid-1", "metered": True}, {"id": "paid-2", "metered": True}]
     assert len(_auto_selectable(metered)) == 2
+
+
+# Le catalogue reel d'`agy 1.2.9` : « slug<TAB>libelle », rien d'autre. Ni
+# description ni cout, donc aucun des signaux que le module sait lire.
+ANTIGRAVITY = [
+    {"id": "gemini-3.8-flash-high", "label": "Gemini 3.8 Flash (High)"},
+    {"id": "gemini-3.8-flash-medium", "label": "Gemini 3.8 Flash (Medium)"},
+    {"id": "gemini-3.8-flash-low", "label": "Gemini 3.8 Flash (Low)"},
+    {"id": "gemini-3.6-flash-medium", "label": "Gemini 3.6 Flash (Medium)"},
+    {"id": "gemini-3.1-pro-high", "label": "Gemini 3.1 Pro (High)"},
+    {"id": "claude-sonnet-4-6", "label": "Claude Sonnet 4.6 (Thinking)"},
+    {"id": "claude-opus-4-6-thinking", "label": "Claude Opus 4.6 (Thinking)"},
+]
+
+
+def test_a_catalog_without_metadata_is_still_classed():
+    """Sans table, rien n'etait classe et le niveau retombait sur un index.
+
+    « standard » prenait le milieu du tableau, soit une generation 3.6, quand
+    « strong » prenait la tete, une 3.8 : le niveau demande ne designait rien.
+    """
+    assert choose(ANTIGRAVITY, "light", "antigravity") == "gemini-3.8-flash-low"
+    assert choose(ANTIGRAVITY, "standard", "antigravity") == "gemini-3.8-flash-medium"
+    assert choose(ANTIGRAVITY, "strong", "antigravity") == "gemini-3.1-pro-high"
+
+    # Une generation depassee n'est jamais servie automatiquement.
+    assert "gemini-3.6-flash-medium" not in {
+        choose(ANTIGRAVITY, tier, "antigravity")
+        for tier in ("light", "standard", "strong")
+    }
+
+
+def test_the_same_identifier_can_mean_two_things_at_two_providers():
+    """`claude-sonnet-4-6` existe des deux cotes, et ne vaut pas pareil.
+
+    Chez Claude Code c'est une generation precedente, ecartee du routage. Chez
+    Antigravity c'est le Sonnet le plus recent publie : l'ecarter le retirerait
+    sans rien mettre a la place. Une table commune donnait a l'un le classement
+    de l'autre.
+    """
+    sonnet = {"id": "claude-sonnet-4-6"}
+
+    assert model_tier(sonnet, "claude") == "legacy"
+    assert model_tier(sonnet, "antigravity") == "standard"
+    # Sans fournisseur nomme, aucune table ne s'applique : c'est la seule
+    # reponse qui ne choisit pas arbitrairement entre les deux.
+    assert model_tier(sonnet) == ""

@@ -109,14 +109,16 @@ def provider_defaults(
     return selected_model, selected_effort
 
 
-def _auto_selectable(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _auto_selectable(
+    models: list[dict[str, Any]], provider: str = ""
+) -> list[dict[str, Any]]:
     """Ce dans quoi un choix automatique a le droit de puiser.
 
     Un modèle facturé au jeton reste dans le catalogue — on peut le choisir à
     la main — mais aucune bascule automatique ne doit engager une dépense hors
     abonnement. Si tout est au jeton, on rend la liste complète plutôt que rien.
     """
-    free = [model for model in models if not is_metered(model)]
+    free = [model for model in models if not is_metered(model, provider)]
     return free or models
 
 
@@ -124,7 +126,7 @@ def select_model(provider: str, *, complex_request: bool) -> str | None:
     """Choose from published capabilities without assuming model names."""
     capabilities = cached_provider_capabilities() or provider_capabilities()
     models = _auto_selectable(
-        list(capabilities.get(provider, {}).get("models", []))
+        list(capabilities.get(provider, {}).get("models", [])), provider
     )
     if not models:
         return None
@@ -164,11 +166,12 @@ def select_model_tier(provider: str, tier: str) -> str | None:
             (cached_provider_capabilities() or provider_capabilities())
             .get(provider, {})
             .get("models", [])
-        )
+        ),
+        provider,
     )
     if not models:
         return None
-    declared = choose(models, tier)
+    declared = choose(models, tier, provider)
     if declared:
         return declared
     # Aucun modèle classé : on garde l'ancien comportement plutôt que de
@@ -253,9 +256,9 @@ def _cursor_models(output: str) -> list[dict[str, Any]]:
 def _antigravity() -> dict[str, Any]:
     """`agy models` imprime « slug<TAB>libelle », une ligne par modele.
 
-    Aucune description ni cout publie : le niveau se deduit du libelle, que
-    `model_tiers` sait lire. Un modele non reconnu laisse Joe router comme
-    avant plutot que de deviner.
+    Ni description ni cout : aucun des signaux que `model_tiers` sait lire.
+    C'est la table declaree de ce module qui classe ce catalogue, sans quoi le
+    niveau demande retombait sur un index et ne designait rien.
     """
     executable = resolve_executable("antigravity")
     models = []

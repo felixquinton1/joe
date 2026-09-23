@@ -61,25 +61,67 @@ _SIGNALS: tuple[tuple[str, tuple[str, ...]], ...] = (
 # Ce que la description ne dit pas. Une entrée ici prime sur tout le reste.
 # `preference` départage à l'intérieur d'un niveau, du plus souhaitable au
 # moins ; sans elle, c'est le coût qui tranche.
-DECLARED: dict[str, dict[str, Any]] = {
-    # Haiku coûte moins cher que Sonnet, mais sa fenêtre est trop courte pour
-    # du code : à niveau égal, Joe a toujours préféré Sonnet, et cette
-    # préférence était jusqu'ici noyée dans un score sur les noms de modèles.
-    "claude-sonnet-5": {"tier": "light", "preference": 1},
-    "claude-haiku-4-5": {"tier": "light", "preference": 2},
-    "claude-opus-5": {"tier": "strong", "preference": 1},
-    # Facturé au jeton, hors abonnement : le routage ne doit jamais l'engager
-    # sans qu'on l'ait demandé. Il reste sélectionnable à la main.
-    "claude-fable-5-1": {"tier": "strong", "metered": True},
-    "claude-opus-4-8": {"tier": "legacy"},
-    "claude-sonnet-4-6": {"tier": "legacy"},
+#
+# La table est indexée par fournisseur, parce qu'un identifiant ne suffit pas
+# à désigner un modèle : `claude-sonnet-4-6` est une génération précédente
+# dans le catalogue de Claude Code, et le Sonnet le plus récent qu'Antigravity
+# propose. Une table commune donnait à l'un le classement de l'autre.
+DECLARED: dict[str, dict[str, dict[str, Any]]] = {
+    "claude": {
+        # Haiku coûte moins cher que Sonnet, mais sa fenêtre est trop courte
+        # pour du code : à niveau égal, Joe a toujours préféré Sonnet, et
+        # cette préférence était noyée dans un score sur les noms de modèles.
+        "claude-sonnet-5": {"tier": "light", "preference": 1},
+        "claude-haiku-4-5": {"tier": "light", "preference": 2},
+        "claude-opus-5": {"tier": "strong", "preference": 1},
+        # Facturé au jeton, hors abonnement : le routage ne doit jamais
+        # l'engager sans qu'on l'ait demandé. Il reste choisissable à la main.
+        "claude-fable-5-1": {"tier": "strong", "metered": True},
+        "claude-opus-4-8": {"tier": "legacy"},
+        "claude-sonnet-4-6": {"tier": "legacy"},
+    },
+    # `agy models` n'imprime que « slug<TAB>libellé » : ni description, ni
+    # coût, donc aucun signal à lire. Sans cette table rien n'était classé, le
+    # niveau retombait sur un index, et « standard » servait une génération 3.6
+    # là où « strong » servait une 3.8.
+    #
+    # Ce qui suit reprend le nom publié par Google : Flash est la gamme rapide,
+    # Pro la gamme capable, et le numéro ordonne les générations d'une gamme.
+    "antigravity": {
+        "gemini-3.8-flash-low": {"tier": "light", "preference": 1},
+        "gemini-3.8-flash-medium": {"tier": "standard", "preference": 1},
+        "gemini-3.8-flash-high": {"tier": "standard", "preference": 2},
+        "gemini-3.1-pro-low": {"tier": "standard", "preference": 3},
+        "gemini-3.1-pro-high": {"tier": "strong", "preference": 1},
+        "claude-opus-4-6-thinking": {"tier": "strong", "preference": 2},
+        # Le classer « legacy » comme chez Claude Code le retirerait du routage
+        # sans rien mettre à la place : Antigravity ne publie pas de Sonnet
+        # plus récent.
+        "claude-sonnet-4-6": {"tier": "standard", "preference": 4},
+        "gemini-3.7-flash-high": {"tier": "legacy"},
+        "gemini-3.7-flash-medium": {"tier": "legacy"},
+        "gemini-3.7-flash-low": {"tier": "legacy"},
+        "gemini-3.6-flash-high": {"tier": "legacy"},
+        "gemini-3.6-flash-medium": {"tier": "legacy"},
+        "gemini-3.6-flash-low": {"tier": "legacy"},
+        # `gpt-oss-120b-medium` n'est pas déclaré : rien de publié ne dit où il
+        # se place. Il reste choisissable à la main, jamais automatiquement.
+    },
 }
 
 
-def model_tier(model: dict[str, Any]) -> str:
+def _declared(model: dict[str, Any], provider: str) -> dict[str, Any]:
+    """Sans fournisseur nommé, aucune entrée ne s'applique.
+
+    Chercher l'identifiant dans toutes les tables ramènerait la collision que
+    l'indexation par fournisseur corrige.
+    """
+    return DECLARED.get(provider, {}).get(str(model.get("id", "")), {})
+
+
+def model_tier(model: dict[str, Any], provider: str = "") -> str:
     """`light`, `standard`, `strong`, `legacy`, ou `""` si rien ne le dit."""
-    identifier = str(model.get("id", ""))
-    declared = DECLARED.get(identifier, {})
+    declared = _declared(model, provider)
     if declared.get("tier"):
         return str(declared["tier"])
     if model.get("tier"):
@@ -96,19 +138,19 @@ def model_tier(model: dict[str, Any]) -> str:
     return ""
 
 
-def is_metered(model: dict[str, Any]) -> bool:
+def is_metered(model: dict[str, Any], provider: str = "") -> bool:
     """Facturé à l'usage plutôt que couvert par l'abonnement.
 
     Un tel modèle n'entre jamais dans un choix automatique : la dépense doit
     venir d'une décision, pas du mode retenu pour une demande.
     """
-    declared = DECLARED.get(str(model.get("id", "")), {})
+    declared = _declared(model, provider)
     return bool(declared.get("metered") or model.get("metered"))
 
 
-def _preference(model: dict[str, Any]) -> tuple[int, int, str]:
+def _preference(model: dict[str, Any], provider: str = "") -> tuple[int, int, str]:
     identifier = str(model.get("id", ""))
-    declared = DECLARED.get(identifier, {})
+    declared = _declared(model, provider)
     explicit = declared.get("preference")
     cost = model.get("cost_tier")
     priority = model.get("priority")
@@ -120,7 +162,9 @@ def _preference(model: dict[str, Any]) -> tuple[int, int, str]:
     )
 
 
-def choose(models: list[dict[str, Any]], tier: str) -> str | None:
+def choose(
+    models: list[dict[str, Any]], tier: str, provider: str = ""
+) -> str | None:
     """Le modèle du niveau demandé, ou le plus proche vers le bas.
 
     Renvoie `None` quand aucun modèle n'est classé : l'appelant garde alors son
@@ -128,12 +172,12 @@ def choose(models: list[dict[str, Any]], tier: str) -> str | None:
     """
     ranked = {name: index for index, name in enumerate(TIERS)}
     classified = [
-        (model, model_tier(model)) for model in models
+        (model, model_tier(model, provider)) for model in models
     ]
     usable = [
         (model, kind)
         for model, kind in classified
-        if kind in ranked and not is_metered(model)
+        if kind in ranked and not is_metered(model, provider)
     ]
     if not usable:
         return None
@@ -141,9 +185,12 @@ def choose(models: list[dict[str, Any]], tier: str) -> str | None:
     if wanted is None:
         # « long-context » et tout niveau non listé demandent le haut de gamme.
         wanted = ranked["strong"]
+    def rank(model: dict[str, Any]) -> tuple[int, int, str]:
+        return _preference(model, provider)
+
     exact = [model for model, kind in usable if ranked[kind] == wanted]
     if exact:
-        return str(min(exact, key=_preference).get("id"))
+        return str(min(exact, key=rank).get("id"))
     if wanted == ranked["strong"]:
         # Rien de classé en haut de gamme : servir un modèle léger à une
         # demande explicitement lourde serait pire que l'ancien défaut. On
@@ -154,6 +201,6 @@ def choose(models: list[dict[str, Any]], tier: str) -> str | None:
     below = [model for model, kind in usable if ranked[kind] < wanted]
     above = [model for model, kind in usable if ranked[kind] > wanted]
     candidates = sorted(
-        below, key=lambda model: -ranked[model_tier(model)]
+        below, key=lambda model: -ranked[model_tier(model, provider)]
     ) or above
-    return str(min(candidates, key=_preference).get("id")) if candidates else None
+    return str(min(candidates, key=rank).get("id")) if candidates else None
