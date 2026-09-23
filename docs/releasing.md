@@ -5,7 +5,8 @@ public or publishing packages.
 
 ## Before the first public release
 
-1. Review the sanitized screenshots under `docs/assets/` one final time.
+1. If release media is added, confirm that it comes from a synthetic demo and
+   contains no paths, accounts, private projects, or obsolete version labels.
 2. Review the complete Git history for credentials, private conversations,
    company names, internal paths, and restricted data.
 3. Confirm the repository description, topics, social preview, Discussions,
@@ -112,7 +113,8 @@ intended controls:
 4. require full-length commit SHA references for GitHub Actions;
 5. enable private vulnerability reporting;
 6. confirm that CI and CodeQL complete successfully on the public `main`;
-7. upload `docs/assets/joe-social-preview.png` as the repository social preview.
+7. optionally upload a newly generated, synthetic social preview.
 
 The social preview is a GitHub UI operation; the other controls can be applied
-with `gh` and the commands in this guide.
+with `gh` and the commands in this guide. Do not reuse removed screenshots from
+a real Joe instance.

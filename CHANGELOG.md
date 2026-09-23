@@ -38,6 +38,9 @@ All notable changes to Joe are documented here. The format follows
   first crossed a request path, where it could outlast the client timeout: a
   privilege-escalation test failed on a socket timeout roughly one run in
   seven, while the refusal it checks was correct and immediate.
+- Obsolete screenshots from a real Joe workspace were removed before the
+  repository becomes public. Future media must use synthetic project data and
+  opaque redaction rather than blur.
 
 ## [1.3.1] — 2026-09-23
 
