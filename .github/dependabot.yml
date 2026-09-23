@@ -15,12 +15,17 @@ updates:
       interval: monthly
     open-pull-requests-limit: 5
     ignore:
-      # Le pin de ruff est deliberé : ruff 0.16 a élargi son jeu de règles par
+      # Le pin de ruff est délibéré : ruff 0.16 a élargi son jeu de règles par
       # défaut, ce qui ferait passer la CI de vert à 73 erreurs sans qu'une
       # ligne de code change. L'élargir reste possible, mais comme une
       # décision, pas comme l'effet de bord d'une montée de version.
+      #
+      # Les trois types sont listés, `patch` compris : sans lui, Dependabot a
+      # rouvert une proposition 0.15.4 -> 0.15.22 dans la minute qui a suivi.
+      # Un avis de sécurité passe toujours, `ignore` ne filtre jamais ceux-là.
       - dependency-name: ruff
         update-types:
+          - version-update:semver-patch
           - version-update:semver-minor
           - version-update:semver-major
 
