@@ -6,6 +6,8 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.3.4] — 2026-09-23
+
 ### Fixed
 
 - Deleting a conversation no longer moves you somewhere unrelated. Whatever was
@@ -14,6 +16,11 @@ All notable changes to Joe are documented here. The format follows
   conversation could drop you into an older one, in another project. Deleting a
   conversation you are not looking at now leaves the view where it is, and
   deleting the one you are reading opens a blank tab in its project.
+
+### Added
+
+- Added a complete English feature reference covering routing, workflows,
+  permissions, Git worktrees, quotas, skills, recovery, and autonomous work.
 
 ## [1.3.3] — 2026-09-23
 
