@@ -14,6 +14,15 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 5
+    ignore:
+      # Le pin de ruff est deliberé : ruff 0.16 a élargi son jeu de règles par
+      # défaut, ce qui ferait passer la CI de vert à 73 erreurs sans qu'une
+      # ligne de code change. L'élargir reste possible, mais comme une
+      # décision, pas comme l'effet de bord d'une montée de version.
+      - dependency-name: ruff
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-major
 
   - package-ecosystem: npm
     directory: /vscode-extension
