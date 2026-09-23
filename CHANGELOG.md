@@ -6,6 +6,15 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Deleting a conversation no longer moves you somewhere unrelated. Whatever was
+  deleted, the interface selected another conversation: the first one of that
+  project, or failing that the first of the whole journal — so removing an old
+  conversation could drop you into an older one, in another project. Deleting a
+  conversation you are not looking at now leaves the view where it is, and
+  deleting the one you are reading opens a blank tab in its project.
+
 ## [1.3.3] — 2026-09-23
 
 ### Security

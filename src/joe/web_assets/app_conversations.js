@@ -626,14 +626,23 @@ window.createJoeConversations = function createJoeConversations({
     }
     $("delete-conversation-dialog").close();
     state.deletingConversation = null;
-    if (conversation.id === state.activeConversationId) {
-      state.activeConversationId = null;
-    }
+    // Supprimer une conversation qu'on ne regarde pas ne doit pas deplacer la
+    // vue : la suite sautait quand meme sur la premiere du projet, ou sur la
+    // premiere tout court, donc sur une vieille conversation d'ailleurs.
+    const regardee = conversation.id === state.activeConversationId;
+    const derniere = state.conversations.length === 1;
+    if (regardee) state.activeConversationId = null;
     await loadConversations(false);
-    const next = state.conversations.find(
-      item => item.project_id === conversation.project_id
-    ) || state.conversations[0];
-    if (next) await selectConversation(next.id);
+    if (!regardee) return;
+    // Celle qu'on regardait a disparu : on repart d'un onglet vierge du meme
+    // projet, jamais d'une conversation ancienne.
+    if (derniere && state.conversations.length) {
+      // `loadConversations` vient d'en recreer une, le journal etant vide :
+      // la prendre plutot que d'en empiler une seconde.
+      await selectConversation(state.conversations[0].id);
+      return;
+    }
+    await createConversation(true, conversation.project_id);
   }
 
   function createProject() {

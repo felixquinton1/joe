@@ -309,3 +309,147 @@ test("reports no step when the plan has no list", () => {
   assert.deepEqual(window.JoeMarkdown.planSteps(""), []);
   assert.deepEqual(window.JoeMarkdown.planSteps(null), []);
 });
+
+
+// Un stub DOM generique : le module cable des ecouteurs des sa construction.
+function noeudFactice() {
+  const noeud = {
+    _v: "",
+    set textContent(v) { this._v = v; },
+    get textContent() { return this._v; },
+    set innerHTML(v) { this._v = v; },
+    get innerHTML() { return this._v; },
+    value: "", hidden: false,
+    dataset: {}, style: {}, children: [],
+    addEventListener() {}, removeEventListener() {},
+    appendChild(enfant) { this.children.push(enfant); return enfant; },
+    append() {}, remove() {}, focus() {}, scrollIntoView() {},
+    showModal() {}, close() {}, click() {},
+    setAttribute() {}, removeAttribute() {}, getAttribute() { return ""; },
+    querySelector() { return noeudFactice(); },
+    querySelectorAll() { return []; },
+    insertAdjacentHTML() {}, replaceChildren() {}, prepend() {},
+    insertBefore() {}, cloneNode() { return noeudFactice(); },
+    closest() { return null; }, contains() { return false; },
+    getBoundingClientRect() { return { top: 0, left: 0, width: 0, height: 0 }; },
+    classList: {
+      add() {}, remove() {}, toggle() {}, contains() { return false; },
+    },
+  };
+  return noeud;
+}
+
+function conversationsFactices(initial, actif) {
+  const require2 = createRequire(import.meta.url);
+  const source = readFileSync(
+    new URL("../src/joe/web_assets/app_conversations.js", import.meta.url),
+    "utf8"
+  );
+  const appels = [];
+  let journal = initial.map(item => ({ ...item }));
+  const state = {
+    conversations: journal.map(item => ({ ...item })),
+    projects: [{ id: "joe", name: "Joe" }, { id: "autre", name: "Autre" }],
+    activeConversationId: actif,
+    activeProjectId: "joe",
+    runs: new Map(),
+    panels: new Map(),
+    queues: new Map(),
+  };
+  let compteur = 0;
+
+  async function fetcher(chemin, options = {}) {
+    const methode = options.method || "GET";
+    appels.push(`${methode} ${chemin}`);
+    if (methode === "DELETE") {
+      journal = journal.filter(item => !chemin.endsWith(item.id));
+      return { ok: true, status: 200, json: async () => ({}) };
+    }
+    if (methode === "POST" && chemin === "/api/conversations") {
+      compteur += 1;
+      const creee = {
+        id: `neuve-${compteur}`, title: "Nouvelle conversation",
+        project_id: "joe", message_count: 0, messages: [],
+      };
+      journal.push(creee);
+      return { ok: true, status: 200, json: async () => creee };
+    }
+    if (chemin === "/api/conversations") {
+      return { ok: true, status: 200, json: async () => journal.map(i => ({ ...i })) };
+    }
+    if (chemin === "/api/projects") {
+      return { ok: true, status: 200, json: async () => state.projects };
+    }
+    const id = chemin.split("/").pop();
+    const trouvee = journal.find(item => item.id === id) || journal[0];
+    return {
+      ok: true, status: 200,
+      json: async () => ({ ...trouvee, messages: [], project_id: trouvee.project_id }),
+    };
+  }
+
+  globalThis.window.localStorage = { getItem: () => "", setItem() {}, removeItem() {} };
+  // Le module fabrique ses propres noeuds : sans `dataset` ni `classList`,
+  // le rendu de la liste echoue avant d'atteindre ce qu'on veut verifier.
+  globalThis.document.createElement = () => noeudFactice();
+  globalThis.document.querySelector = () => noeudFactice();
+  globalThis.window.dispatchEvent = () => true;
+  // `t` vient de app.js, pas des dependances injectees.
+  globalThis.t = (cle) => cle;
+  globalThis.window.CustomEvent = class { constructor(nom, init) { Object.assign(this, init); this.type = nom; } };
+  globalThis.document.querySelectorAll = () => [];
+  globalThis.document.getElementById = () => noeudFactice();
+  const rien = () => {};
+  const usine = new Function(
+    "window", "readFileSync", `${source}\nreturn window.createJoeConversations;`
+  )(globalThis.window, readFileSync);
+
+  const api = usine({
+    state, $: () => noeudFactice(), escapeHtml: v => String(v),
+    closeMobilePanels: rien, clearConversation: rien, addMessage: rien,
+    renderAnswer: rien, renderGitReport: rien, renderHistoricalRunSummary: rien,
+    attachPlanControls: rien, translate: k => k, applySettings: rien,
+    refreshSelectMenu: rien, renderWorkflowUpdate: rien, renderPromptQueue: rien,
+    fetcher,
+  });
+  return { api, state, appels, journal: () => journal };
+}
+
+test("deleting another conversation leaves the open one alone", async () => {
+  // La suite sautait sur la premiere conversation du projet, ou sur la
+  // premiere tout court : supprimer une vieille conversation deplacait la vue
+  // vers une autre, plus vieille encore.
+  // Le projet de la conversation supprimee ne contient plus rien apres coup :
+  // l'ancien repli tombait alors sur `state.conversations[0]`, c'est-a-dire la
+  // premiere conversation du journal, sans rapport avec ce qu'on regardait.
+  const { api, state, appels } = conversationsFactices(
+    [
+      { id: "ancienne", title: "Vieille", project_id: "joe", message_count: 4 },
+      { id: "ouverte", title: "En cours", project_id: "joe", message_count: 2 },
+      { id: "cible", title: "A supprimer", project_id: "autre", message_count: 1 },
+    ],
+    "ouverte"
+  );
+  state.deletingConversation = { id: "cible", project_id: "autre" };
+
+  await api.deleteConversation({ preventDefault() {} });
+
+  assert.equal(state.activeConversationId, "ouverte");
+  assert.ok(!appels.some(appel => appel === "POST /api/conversations"));
+});
+
+test("deleting the open conversation opens a blank tab, not an old one", async () => {
+  const { api, state, appels } = conversationsFactices(
+    [
+      { id: "ancienne", title: "Vieille", project_id: "joe", message_count: 9 },
+      { id: "ouverte", title: "En cours", project_id: "joe", message_count: 2 },
+    ],
+    "ouverte"
+  );
+  state.deletingConversation = { id: "ouverte", project_id: "joe" };
+
+  await api.deleteConversation({ preventDefault() {} });
+
+  assert.ok(appels.includes("POST /api/conversations"));
+  assert.notEqual(state.activeConversationId, "ancienne");
+});
