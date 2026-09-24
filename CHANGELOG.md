@@ -6,6 +6,17 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.4.1] — 2026-09-24
+
+### Fixed
+
+- Final answers no longer repeat a completed-work preamble such as
+  `What I will do`; progress remains in the execution panel, while the durable
+  response starts directly with `Result` or `Résultat` in the requested
+  language.
+- Conceptual questions containing words such as `run`, `file`, or `process` no
+  longer trigger a repository-state audit or an irrelevant validation warning.
+
 ## [1.4.0] — 2026-09-24
 
 ### Changed
