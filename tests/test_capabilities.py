@@ -21,7 +21,15 @@ def test_capabilities_have_safe_defaults_and_provider_specific_controls():
     )
     assert "xhigh" in capabilities["claude"]["efforts"]
     assert "gemini" not in capabilities
-    assert capabilities["antigravity"]["models"]
+
+    # Le catalogue d'Antigravity est lu sur la CLI `agy`. L'exiger non vide
+    # faisait dependre la suite de ce qui est installe sur la machine : vert
+    # ici, rouge sur un runner nu, sans qu'une ligne de code change. On verifie
+    # la forme, et le contenu seulement quand la CLI a repondu.
+    antigravity = capabilities["antigravity"]
+    assert isinstance(antigravity["models"], list)
+    if antigravity["available"]:
+        assert antigravity["models"]
 
 
 def test_codex_catalog_efforts_follow_selected_model_when_available():
