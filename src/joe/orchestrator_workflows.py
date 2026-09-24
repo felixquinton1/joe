@@ -636,7 +636,9 @@ def review_final(
     final ; celui de l'auteur decrit un etat qui n'existe plus.
     """
     result = clean_report(review.stdout if corrected else primary.stdout)
-    if not corrected:
+    if corrected:
+        result = _completed_review_report(result)
+    else:
         result = _remove_stale_review_forecast(result)
     if normalize_language(language) == "en":
         status = (
@@ -663,6 +665,18 @@ def review_final(
             f"{status} Le détail reste disponible dans le panneau de revue."
         )
     return result + "\n\n" + footer
+
+
+def _completed_review_report(report: str) -> str:
+    """Keep the completed finding, not the examiner's live progress preamble."""
+    verdict = re.search(
+        r"(?im)^VERDICT:\s*(?:APPROVED|CORRECTIONS_APPLIED|CORRECTIONS_REQUIRED)\s*$",
+        report,
+    )
+    if not verdict:
+        return report.strip()
+    completed = report[verdict.end():].strip()
+    return completed or report[:verdict.start()].strip()
 
 
 def _remove_stale_review_forecast(report: str) -> str:

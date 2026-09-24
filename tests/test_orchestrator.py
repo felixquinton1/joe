@@ -629,6 +629,36 @@ def test_a_material_correction_wins_even_without_the_expected_marker(tmp_path):
     assert "est repassé sur le travail" in response
 
 
+def test_a_corrected_review_drops_live_progress_before_the_verdict(tmp_path):
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+
+    class CorrectingProvider(FakeProvider):
+        def run(self, prompt, cwd, intent, timeout, **kwargs):
+            (cwd / "correction.py").write_text("fixed\n", encoding="utf-8")
+            return super().run(prompt, cwd, intent, timeout, **kwargs)
+
+    review = (
+        "We’ll inspect the code and run the tests.\n\n"
+        "We reproduced a bug. We’ll correct it now.\n\n"
+        "VERDICT: CORRECTIONS_APPLIED\n\n"
+        "Verified the final implementation. All tests pass."
+    )
+    providers = {
+        "codex": FakeProvider("codex", responses=["implementation"]),
+        "claude": CorrectingProvider("claude", responses=[review]),
+    }
+    orchestrator = Orchestrator(tmp_path, providers=providers)
+
+    response, _ = orchestrator.execute(
+        "large change", Route(Intent.MODIFY, Mode.REVIEW, "codex", "claude")
+    )
+
+    assert response.startswith("Verified the final implementation.")
+    assert "We’ll inspect" not in response
+    assert "We’ll correct" not in response
+    assert "VERDICT:" not in response
+
+
 def test_an_approved_examination_keeps_the_author_report(tmp_path):
     """Rien n'a ete corrige : le compte rendu de l'auteur decrit encore l'etat."""
     providers = {
