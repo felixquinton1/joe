@@ -108,6 +108,9 @@ def test_mutable_state_request_requires_current_workspace_inspection(tmp_path):
         "Est-ce que les worktrees sont déjà implémentés ?"
     )
     assert not requires_fresh_workspace("Qu'est-ce qu'un worktree ?")
+    assert not requires_fresh_workspace(
+        "Should every code-modifying task run in an isolated Git worktree?"
+    )
     assert "# Current workspace observation" in prompt
     assert "# Grounding requirement" in prompt
     assert "untrusted historical context" in prompt

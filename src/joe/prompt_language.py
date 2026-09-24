@@ -102,22 +102,21 @@ def response_language(language: str) -> str:
 
 
 def response_organization(language: str) -> str:
-    """Separate progress announcements from the final answer."""
+    """Keep transient progress out of the durable final answer."""
     code = normalize(language)
     return (
         "# Response organization\n"
-        "Clearly separate progress announcements from the final answer.\n"
+        "Joe displays tool activity and execution progress separately from the "
+        "durable final answer.\n"
         "\n"
-        "- Before acting, briefly state what you are about to do under "
-        f"`{PLAN_HEADING[code]}`.\n"
-        "- Keep intermediate updates to useful progress information.\n"
-        "- Once the work is finished, start the final answer with "
+        "- Do not include a plan or a progress preamble in the final answer.\n"
+        "- Return only the completed answer once the work is finished, starting "
+        "with "
         f"`{RESULT_HEADING[code]}`.\n"
         "- Make the final answer self-contained and centred on the result. Do "
-        "not repeat the initial plan, and do not mix future intentions with "
-        "completed work.\n"
-        "- Write those two headings, and everything else the user reads, in the "
-        "requested response language.\n"
+        "not mix future intentions with completed work.\n"
+        "- Write the heading and everything else the user reads in the requested "
+        "response language.\n"
     )
 
 

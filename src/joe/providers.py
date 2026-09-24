@@ -1039,14 +1039,16 @@ def _final_gemini(event: dict, text_parts: list[str]) -> str:
 def _final_section(text: str) -> str:
     matches = list(
         re.finditer(
-            r"(?im)^(?:#{1,3}\s*)?Résultat\s*:\s*",
+            r"(?im)^(?:#{1,3}\s*)?(Résultat|Result)\s*:\s*",
             text,
         )
     )
     if not matches:
         return text
-    content = text[matches[-1].end():].strip()
-    return f"## Résultat\n\n{content}" if content else "## Résultat"
+    match = matches[-1]
+    heading = match.group(1)
+    content = text[match.end():].strip()
+    return f"## {heading}\n\n{content}" if content else f"## {heading}"
 
 
 def _secret_values(env: dict[str, str]) -> tuple[str, ...]:

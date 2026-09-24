@@ -532,6 +532,17 @@ def test_final_output_keeps_only_the_structured_result():
     )
 
 
+def test_final_output_removes_english_progress_preamble():
+    result = (
+        '{"type":"result","result":"## What I will do:\\nAnalyze.\\n\\n'
+        '## Result:\\nThe recommendation is ready."}'
+    )
+
+    assert _final_output("claude", result) == (
+        "## Result\n\nThe recommendation is ready."
+    )
+
+
 def test_network_control_declaration_matches_commands():
     """La portée déclarée du réglage réseau doit refléter les commandes réelles.
 

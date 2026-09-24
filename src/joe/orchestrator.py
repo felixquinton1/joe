@@ -35,7 +35,7 @@ _MUTABLE_STATE_PATTERN = re.compile(
     r"disponib(?:le|les|ilité)|version|statut|status|état|s[uû]r|audit|"
     r"amélior(?:ation|er)|recommand(?:e|es|ation)|vérifi(?:e|er)|check|"
     r"branche|commit|tests?\s+(?:pass(?:e|ent)|réussi(?:s|es)?|vert(?:s|es)?)|"
-    r"quota(?:s)?|run(?:s)?|processus|fichier(?:s)?"
+    r"quota(?:s)?"
     r")\b"
 )
 

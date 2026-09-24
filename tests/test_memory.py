@@ -61,12 +61,13 @@ def test_context_includes_global_skills_shared_across_projects(tmp_path, monkeyp
     assert "tests ciblés" in context
 
 
-def test_context_requires_a_clear_plan_and_result_separation(tmp_path):
+def test_context_keeps_progress_out_of_the_final_answer(tmp_path):
     memory = ProjectMemory(tmp_path)
 
     context = memory.context("organise la réponse")
 
-    assert "`Ce que je vais faire :`" in context
+    assert "Do not include a plan" in context
+    assert "Ce que je vais faire" not in context
     assert "`Résultat :`" in context
     assert "self-contained" in context
 
@@ -81,7 +82,8 @@ def test_the_response_headings_follow_the_selected_language(tmp_path):
 
     english = memory.context("organise the answer", "en")
 
-    assert "`What I will do:`" in english
+    assert "Do not include a plan" in english
+    assert "What I will do" not in english
     assert "`Result:`" in english
     assert "Ce que je vais faire" not in english
     assert "Résultat" not in english
