@@ -6,10 +6,15 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.4.2] — 2026-09-24
+
 ### Fixed
 
 - REVIEW reports no longer retain an implementation-time sentence claiming
   that the independent review has not run after that review has completed.
+- When a reviewer applies corrections, the final synthesis now starts after
+  its `VERDICT` marker instead of repeating live progress such as
+  `We’ll inspect…` or `We’ll correct…`.
 - Rich provider reports keep their heading, bold, inline-code, and list text in
   the REVIEW and CONSENSUS detail panels.
 - Local pytest runs now import Joe from the repository's `src/` tree instead of
