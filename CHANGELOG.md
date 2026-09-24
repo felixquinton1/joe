@@ -6,6 +6,8 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-09-24
+
 ### Changed
 
 - Gemini CLI is no longer an active Joe provider. Antigravity now owns the
