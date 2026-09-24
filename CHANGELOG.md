@@ -6,6 +6,15 @@ All notable changes to Joe are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- REVIEW reports no longer retain an implementation-time sentence claiming
+  that the independent review has not run after that review has completed.
+- Rich provider reports keep their heading, bold, inline-code, and list text in
+  the REVIEW and CONSENSUS detail panels.
+- Local pytest runs now import Joe from the repository's `src/` tree instead of
+  silently exercising an older user-installed package.
+
 ## [1.4.1] — 2026-09-24
 
 ### Fixed

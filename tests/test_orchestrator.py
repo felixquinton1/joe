@@ -632,7 +632,13 @@ def test_a_material_correction_wins_even_without_the_expected_marker(tmp_path):
 def test_an_approved_examination_keeps_the_author_report(tmp_path):
     """Rien n'a ete corrige : le compte rendu de l'auteur decrit encore l'etat."""
     providers = {
-        "codex": FakeProvider("codex", responses=["implementation"]),
+        "codex": FakeProvider(
+            "codex",
+            responses=[
+                "Implementation complete. The separate review by another "
+                "provider has not run yet; Joe does that step next."
+            ],
+        ),
         "claude": FakeProvider("claude", responses=["VERDICT: APPROVED"]),
         "gemini": FakeProvider("gemini"),
         "copilot": FakeProvider("copilot"),
@@ -643,8 +649,11 @@ def test_an_approved_examination_keeps_the_author_report(tmp_path):
         "large change", Route(Intent.MODIFY, Mode.REVIEW, "codex", "claude")
     )
 
-    assert response.startswith("implementation")
+    assert response.startswith("Implementation complete.")
+    assert "has not run yet" not in response
+    assert "does that step next" not in response
     assert "sans relever de correction" in response
+    assert "Do not mention a future" in providers["codex"].calls[0][0]
 
 
 def test_consensus_emits_structured_completed_opinions(tmp_path):

@@ -287,6 +287,26 @@ test("renders LaTeX delimiters as math blocks and inline math", () => {
   assert.doesNotMatch(target.innerHTML, /<em>\{prix\}/);
 });
 
+test("keeps rich REVIEW report text inside headings and list items", () => {
+  const target = {
+    innerHTML: "",
+    dataset: {},
+    classList: { add() {} },
+    querySelectorAll() { return []; }
+  };
+  window.JoeMarkdown.renderMarkdown(
+    target,
+    "## Result\n\n**Files**\n"
+      + "- `scheduler.py`: the scheduler itself.\n"
+      + "- **Validation:** all 24 tests pass."
+  );
+  assert.match(target.innerHTML, /<h2>Result<\/h2>/);
+  assert.match(target.innerHTML, /<strong>Files<\/strong>/);
+  assert.match(target.innerHTML, /<code>scheduler\.py<\/code>: the scheduler itself/);
+  assert.match(target.innerHTML, /<strong>Validation:<\/strong> all 24 tests pass/);
+  assert.doesNotMatch(target.innerHTML, /<li><\/li>/);
+});
+
 test("vendored KaTeX converts Joe formulas to native MathML", () => {
   const rendered = katex.renderToString(
     String.raw`\mathcal L=\lambda_V\mathcal L_{\text{prix}}+\lambda_\Delta\mathcal L_\Delta`,

@@ -2,9 +2,12 @@
   "use strict";
 
   function escapeHtml(value) {
-    const node = document.createElement("span");
-    node.textContent = value;
-    return node.innerHTML;
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   function renderMarkdown(target, source) {

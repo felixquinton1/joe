@@ -156,7 +156,9 @@ def run_review_workflow(
         + collective_voice(language)
         + "Focus on the completed result and validation. Do not invoke "
         "another AI provider or perform an independent review yourself: Joe "
-        "owns the review stage after this implementation finishes."
+        "owns the review stage after this implementation finishes. Do not "
+        "mention a future, pending, or not-yet-run review in this report; Joe "
+        "will add the actual review outcome after that stage completes."
         + REPORT_RULES
         + question_rules(language)
         + response_language(language)
@@ -634,6 +636,8 @@ def review_final(
     final ; celui de l'auteur decrit un etat qui n'existe plus.
     """
     result = clean_report(review.stdout if corrected else primary.stdout)
+    if not corrected:
+        result = _remove_stale_review_forecast(result)
     if normalize_language(language) == "en":
         status = (
             f"{review.provider.capitalize()} took a second pass and corrected "
@@ -659,6 +663,29 @@ def review_final(
             f"{status} Le détail reste disponible dans le panneau de revue."
         )
     return result + "\n\n" + footer
+
+
+def _remove_stale_review_forecast(report: str) -> str:
+    """Remove implementation-time claims invalidated by a completed review.
+
+    The author's report is still the richest description when the examiner
+    changes nothing, but it was written before that examination. Providers
+    sometimes append a sentence saying the review has not run yet; retaining
+    it beside the completed cross-check makes the durable answer contradict
+    itself.
+    """
+    patterns = (
+        r"\s*The separate review by another provider has not run yet;\s*"
+        r"Joe does that step next\.",
+        r"\s*The (?:independent )?review has not (?:yet )?run(?: yet)?[.;]?\s*"
+        r"(?:Joe (?:will|does) (?:run|do) (?:it|that) next\.)?",
+        r"\s*La revue (?:indépendante )?(?:par un autre fournisseur )?"
+        r"n['’]a pas encore (?:eu lieu|été exécutée|tourné)[.;]?\s*"
+        r"(?:Joe (?:la lancera|s['’]en charge) ensuite\.)?",
+    )
+    for pattern in patterns:
+        report = re.sub(pattern, "", report, flags=re.IGNORECASE)
+    return report.strip()
 
 
 def workflow_event(
