@@ -12,8 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .capabilities import select_model_tier
-from .provider_registry import get_provider_names
+from .capabilities import provider_defaults, select_model_tier
+from .provider_registry import get_provider_names, get_provider_spec
 from .approvals import ApprovalStore
 from .automations import AutomationStore, START_MODES
 from .autonomous import AutonomousStore, TERMINAL_STATUSES, build_autonomous_skill
@@ -52,8 +52,8 @@ from .skills import create_skill
 from .tasks import TaskStore
 from .usage import (
     _next_quota_reset,
-    cached_usage_status,
     next_window_reset,
+    routing_usage_status,
     usage_status,
 )
 from .worktrees import Worktree, WorktreeError, WorktreeManager
@@ -69,6 +69,23 @@ def _quota_backoff(defer_count: int, now: float | None = None) -> float:
     timestamp = time.time() if now is None else now
     delay = min(3600, 300 * (2 ** min(max(0, defer_count), 4)))
     return timestamp + delay
+
+
+def _quota_retry_allowed(exc: Exception) -> bool:
+    """Only an unresolved subscription quota of the failed stage is retried.
+
+    Le message cite aussi les échecs déjà rattrapés par un repli : un quota
+    Codex résolu ne doit pas transformer un solde DeepSeek épuisé (402,
+    `retry_at=None`) en reprise automatique.
+    """
+    if not isinstance(exc, OrchestrationError):
+        return False
+    if exc.failures is None:
+        return ":quota" in str(exc)
+    return any(kind == "quota" for _, kind in exc.failures) and not any(
+        kind == "insufficient_balance" or get_provider_spec(name).manual_only
+        for name, kind in exc.failures
+    )
 
 
 @dataclass(frozen=True)
@@ -224,6 +241,7 @@ class LiveRun:
     finished_at: float | None = None
     not_before: float | None = None
     defer_count: int = 0
+    requested_reviewer: str | None = None
 
     def emit(self, event: dict[str, Any]) -> None:
         with self.condition:
@@ -308,6 +326,7 @@ class RunManager:
         execution_mode: str | None,
         attachments: list[str] | None = None,
         *,
+        reviewer: str | None = None,
         run_id: str | None = None,
         resumed: bool = False,
         classification: RouteClassification | None = None,
@@ -332,6 +351,7 @@ class RunManager:
                 effort,
                 execution_mode,
                 classification=classification,
+                reviewer=reviewer,
                 plan_stage=plan_stage,
             )
         workspace, _, _, _ = self._project_scope(conversation_id)
@@ -364,6 +384,7 @@ class RunManager:
             git_before=snapshot(workspace),
             not_before=not_before,
             defer_count=defer_count,
+            requested_reviewer=reviewer,
         )
         self.tasks.create(
             run_id,
@@ -615,6 +636,7 @@ class RunManager:
         effort: str | None = None,
         execution_mode: str | None = None,
         *,
+        reviewer: str | None = None,
         classification: RouteClassification | None = None,
         local_action: str = "",
         local_payload: dict[str, Any] | None = None,
@@ -662,9 +684,10 @@ class RunManager:
                 local_payload=dict(local_payload or {}),
             )
 
+        statuses = routing_usage_status()
         if classification is None and os.environ.get(
             "JOE_DISABLE_LLM_ROUTER"
-        ) != "1":
+        ) != "1" and not reviewer:
             orchestrator = Orchestrator(
                 workspace,
                 additional_roots=additional_roots,
@@ -680,7 +703,7 @@ class RunManager:
                 request,
                 baseline,
                 orchestrator.providers,
-                cached_usage_status(),
+                statuses,
                 workspace,
                 forced_agent=bool(effective_agent),
                 forced_mode=forced_mode is not None,
@@ -688,9 +711,10 @@ class RunManager:
         resolved = resolve_route(
             self.orchestrator.router,
             request,
-            cached_usage_status(),
+            statuses,
             forced_agent=effective_agent,
             forced_mode=forced_mode,
+            forced_reviewer=reviewer,
             previous_provider=previous,
             classification=classification,
             wait_for_provider=wait_for_provider,
@@ -703,12 +727,14 @@ class RunManager:
             if plan_stage == "propose"
             else _resolve_execution_mode(execution_mode, ai_access, route)
         )
-        if classification is not None:
+        if get_provider_spec(route.primary).manual_only:
+            model, effort = provider_defaults(route.primary, model, effort)
+        elif classification is not None:
             effort = effort or classification.effort
             model = model or select_model_tier(
                 route.primary,
                 _tier_under_quota_pressure(
-                    route.primary, classification.model_tier
+                    route.primary, classification.model_tier, statuses
                 ),
             )
         else:
@@ -718,7 +744,7 @@ class RunManager:
             tier, default_effort = _route_tier(request, route)
             effort = effort or default_effort
             model = model or select_model_tier(
-                route.primary, _tier_under_quota_pressure(route.primary, tier)
+                route.primary, _tier_under_quota_pressure(route.primary, tier, statuses)
             )
         if "health-check" in route.reason:
             effort = effort or "low"
@@ -803,6 +829,7 @@ class RunManager:
                     model,
                     effort,
                     execution_mode,
+                    reviewer=run.requested_reviewer,
                 )
             route = decision.route
             classification = decision.classification
@@ -850,6 +877,7 @@ class RunManager:
                     retry_at = quota_admission.get("retry_at")
                     if (
                         self._project_uses_quota_automation(run.conversation_id)
+                        and quota_admission.get("automatic_retry", True)
                     ):
                         if not isinstance(retry_at, (int, float)):
                             retry_at = _quota_backoff(run.defer_count)
@@ -966,8 +994,7 @@ class RunManager:
             )
         except Exception as exc:
             if (
-                isinstance(exc, OrchestrationError)
-                and ":quota" in str(exc)
+                _quota_retry_allowed(exc)
                 and self._project_uses_quota_automation(run.conversation_id)
                 and not run.cancel_event.is_set()
             ):
@@ -1043,7 +1070,7 @@ class RunManager:
                         if event.get("error")
                         else "evidence_run_stopped_unknown"
                     ),
-                    "detail_params": {"error": str(event.get("error") or "")},
+                    "detail_params": {"error": str(event.get("error_message") or event.get("error") or "")},
                 }
             )
         if event.get("type") != "provider_end" or event.get("error") != "quota":
@@ -2577,6 +2604,7 @@ class RunManager:
             "request": run.request,
             "conversation_id": run.conversation_id,
             "agent": agent,
+            "reviewer": run.requested_reviewer,
             "mode": mode,
             "model": model,
             "effort": effort,
@@ -2626,6 +2654,7 @@ class RunManager:
                 item.get("attachments") or [],
                 run_id=run_id,
                 resumed=True,
+                reviewer=item.get("reviewer"),
                 not_before=item.get("not_before"),
                 defer_count=int(item.get("defer_count", 0)),
                 language=str(item.get("language", "fr")),
@@ -3065,9 +3094,11 @@ QUOTA_PRESSURE_PERCENT = 20.0
 _TIER_LADDER = ("light", "standard", "strong")
 
 
-def _remaining_percent(provider: str) -> float | None:
+def _remaining_percent(
+    provider: str, statuses: list[dict[str, Any]] | None = None,
+) -> float | None:
     """Le plus petit reste connu parmi les fenetres de ce fournisseur."""
-    for item in usage_status(force=False):
+    for item in statuses if statuses is not None else routing_usage_status():
         if str(item.get("provider")) != provider:
             continue
         valeurs = [
@@ -3079,7 +3110,9 @@ def _remaining_percent(provider: str) -> float | None:
     return None
 
 
-def _tier_under_quota_pressure(provider: str, tier: str) -> str:
+def _tier_under_quota_pressure(
+    provider: str, tier: str, statuses: list[dict[str, Any]] | None = None,
+) -> str:
     """Descendre d'un cran quand la reserve du fournisseur s'epuise.
 
     L'information etait lue depuis longtemps pour choisir un fournisseur, mais
@@ -3091,7 +3124,10 @@ def _tier_under_quota_pressure(provider: str, tier: str) -> str:
     """
     if tier not in _TIER_LADDER or tier == "light":
         return tier
-    remaining = _remaining_percent(provider)
+    remaining = (
+        _remaining_percent(provider) if statuses is None
+        else _remaining_percent(provider, statuses)
+    )
     if remaining is None or remaining >= QUOTA_PRESSURE_PERCENT:
         return tier
     return _TIER_LADDER[_TIER_LADDER.index(tier) - 1]
@@ -3136,7 +3172,8 @@ def _compaction_provider(configured: str, installed: Any) -> str:
         configured = "antigravity"
     if configured and configured in installed:
         return configured
-    noms = [name for name in get_provider_names() if name in installed]
+    noms = [name for name in get_provider_names() if name in installed
+            and not get_provider_spec(name).manual_only]
     return (noms or [""])[0]
 
 
@@ -3202,6 +3239,7 @@ def _run_summary(run: LiveRun) -> dict[str, Any]:
                 key: event.get(key)
                 for key in (
                     "level", "message", "forced", "blocked", "retry_at",
+                    "automatic_retry", "reserved_provider",
                 )
             }
         elif event_type == "workflow_update":
@@ -3250,6 +3288,7 @@ def _run_summary(run: LiveRun) -> dict[str, Any]:
                             "input_tokens", "output_tokens", "cache_read_tokens",
                             "cache_creation_tokens", "reasoning_tokens", "cost_usd",
                             "cost_status", "source",
+                            "total_tokens", "cost_provider", "cost_rate_basis", "cost_rates_as_of",
                         )
                     }
                     break
@@ -3263,6 +3302,9 @@ def _run_summary(run: LiveRun) -> dict[str, Any]:
                         "complete" if event.get("ok") else "failed"
                     )
                     attempt["error"] = event.get("error")
+                    if event.get("error_message"):
+                        attempt["error_message"] = event["error_message"]
+                        attempt["http_status"] = event.get("http_status")
                     break
     return {
         "route": route,

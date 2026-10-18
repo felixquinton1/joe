@@ -9,8 +9,7 @@ from pathlib import Path
 from typing import Callable
 
 from .capabilities import provider_defaults
-from .provider_registry import counterpart
-from .usage_tracking import parse_provider_usage
+from .provider_registry import counterpart, get_provider_spec
 from .memory import ProjectMemory
 from .models import Intent, Mode, ProviderResult, Route
 from .orchestrator_workflows import (
@@ -96,7 +95,13 @@ def _freshness_context(observation: dict[str, object]) -> str:
 
 
 class OrchestrationError(RuntimeError):
-    pass
+    def __init__(
+        self, message: str, failures: tuple[tuple[str, str | None], ...] | None = None
+    ):
+        super().__init__(message)
+        # (provider, error_kind) des seules tentatives de l'étape qui a échoué :
+        # le message, lui, cite aussi les échecs déjà rattrapés plus tôt.
+        self.failures = failures
 
 
 class Orchestrator:
@@ -304,11 +309,14 @@ class Orchestrator:
         output_validator: Callable[[str], bool] | None = None,
     ) -> ProviderResult:
         config = self.memory.config()
+        first_attempt = len(results)
         candidates = [provider_name]
         if allow_fallback:
             candidates.extend(config["fallbacks"].get(provider_name, []))
         seen: set[str] = set()
         for name in candidates:
+            if name != provider_name and get_provider_spec(name).manual_only:
+                continue
             if name in seen or name not in self.providers or name in (exclude or set()):
                 continue
             failure = recent_failure(name) if respect_cooldown else None
@@ -318,6 +326,7 @@ class Orchestrator:
                 if candidate not in seen
                 and candidate != name
                 and candidate in self.providers
+                and not get_provider_spec(candidate).manual_only
                 and candidate not in (exclude or set())
                 and recent_failure(candidate) is None
             ]
@@ -391,7 +400,7 @@ class Orchestrator:
                 ).lstrip()
             results.append(result)
             record_result(result)
-            usage = parse_provider_usage(name, result.stdout, selected_model)
+            usage = result.usage
             if usage and on_event:
                 on_event({"type": "usage", **usage})
             if on_event:
@@ -401,6 +410,8 @@ class Orchestrator:
                         "provider": name,
                         "ok": result.ok,
                         "error": result.error_kind,
+                        **({"error_message": result.error_message, "http_status": result.http_status}
+                           if result.error_message else {}),
                     }
                 )
             # Une annulation est une fin de tentative comme les autres. Lever
@@ -422,6 +433,7 @@ class Orchestrator:
                         for candidate in candidates
                         if candidate not in seen
                         and candidate in self.providers
+                        and not get_provider_spec(candidate).manual_only
                         and candidate not in (exclude or set())
                     ),
                     None,
@@ -435,8 +447,14 @@ class Orchestrator:
                             "error": result.error_kind,
                         }
                     )
-        errors = ", ".join(f"{r.provider}:{r.error_kind}" for r in results)
-        raise OrchestrationError(f"All providers failed ({errors})")
+        errors = ", ".join(
+            f"{r.provider}:{r.error_kind}" + (f" ({r.error_message})" if r.error_message else "")
+            for r in results
+        )
+        raise OrchestrationError(
+            f"All providers failed ({errors})",
+            tuple((r.provider, r.error_kind) for r in results[first_attempt:]),
+        )
 
     @staticmethod
     def _health_check_prompt(request: str, provider: str) -> str:

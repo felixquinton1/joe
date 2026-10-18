@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import vm from "node:vm";
 
 const require = createRequire(import.meta.url);
 const { authenticatedFetch, pairBrowser } = require(
@@ -18,6 +19,21 @@ globalThis.document = globalThis.document || {
 require("../src/joe/web_assets/markdown.js");
 const { window } = globalThis;
 const katex = require("../src/joe/web_assets/katex.min.js");
+require("../src/joe/web_assets/app_usage.js");
+
+test("DeepSeek cost is visibly an API estimate and inclusive tokens are not added twice", () => {
+  const usage = window.createJoeUsage({
+    state: {}, translate: (key, params) => translate("en", key, params)
+  });
+  const description = usage.usageDescription({
+    provider: "deepseek", input_tokens: 100, output_tokens: 10,
+    cache_read_tokens: 40, reasoning_tokens: 3, total_tokens: 110,
+    cost_usd: 0.00003, cost_status: "estimated_api", cost_provider: "deepseek"
+  });
+  assert.match(description, /DeepSeek.*estimate.*peak/i);
+  assert.match(description, /110 tokens/);
+  assert.match(description, /\$0\.000030/);
+});
 
 test("uses automatic AI access for new and legacy project dialogs", () => {
   const source = readFileSync(
@@ -482,4 +498,118 @@ test("deleting the open conversation opens a blank tab, not an old one", async (
 
   assert.ok(appels.includes("POST /api/conversations"));
   assert.notEqual(state.activeConversationId, "ancienne");
+});
+
+
+test("reviewer selection is preserved in conversation settings and queued run payloads", () => {
+  const source = readFileSync(new URL("../src/joe/web_assets/app.js", import.meta.url), "utf8");
+  const controls = {
+    agent: { value: "codex" }, reviewer: { value: "deepseek" },
+    mode: { value: "review" }, model: { value: "gpt-fixture" },
+    effort: { value: "xhigh" }, "tool-web-access": { checked: true },
+    "tool-plan-first": { checked: false }
+  };
+  const context = vm.createContext({ $: id => controls[id], selectedFileIds: [] });
+  for (const [name, next] of [["currentSettings", "applySettings"], ["currentRunSettings", "enqueueRequest"]]) {
+    const code = source.slice(source.indexOf(`function ${name}(`), source.indexOf(`function ${next}(`));
+    vm.runInContext(code, context);
+    const settings = vm.runInContext(`${name}()`, context);
+    assert.equal(settings.reviewer, "deepseek");
+    assert.equal(settings.agent, "codex");
+    assert.equal(settings.model, "gpt-fixture");
+  }
+  const handlers = {};
+  let saves = 0;
+  context.saveSettings = () => saves++;
+  context.refreshSelectMenu = () => {};
+  for (const id of ["reviewer", "mode", "effort"]) {
+    controls[id].addEventListener = (event, handler) => { handlers[id] = handler; };
+  }
+  vm.runInContext(source.slice(source.indexOf('$("reviewer").addEventListener'),
+    source.indexOf('$("effort").addEventListener')), context);
+  controls.mode.value = "fast";
+  handlers.reviewer();
+  assert.equal(controls.mode.value, "review");
+  controls.mode.value = "consensus";
+  handlers.mode();
+  assert.equal(controls.reviewer.value, "");
+  assert.equal(saves, 2);
+});
+
+function quotaView(provider) {
+  const usage = window.createJoeUsage({
+    state: {}, translate: (key, params) => translate("en", key, params)
+  });
+  return usage.balanceView(provider);
+}
+
+test("DeepSeek displays account money in its actual currency, including a real zero", () => {
+  const base = { provider: "deepseek", quota_display: "token_billing", available: true };
+  const usd = quotaView({ ...base, balance: { data_available: true, currency: "USD", amount: 4.5, funds_sufficient: true } });
+  assert.equal(usd.text, "$4.50");
+  assert.equal(usd.note, "");
+  const zero = quotaView({ ...base, balance: { data_available: true, currency: "USD", amount: 0, funds_sufficient: false } });
+  assert.equal(zero.text, "$0.00");
+  assert.match(zero.note, /insufficient/i);
+  const cny = quotaView({ ...base, balance: { data_available: true, currency: "CNY", amount: 12.34 } });
+  assert.match(cny.text, /12\.34/);
+  assert.doesNotMatch(cny.text, /\$/);
+});
+
+test("a failed balance lookup is unknown money, not a broken agent or a fake zero", () => {
+  const base = { provider: "deepseek", quota_display: "token_billing", available: true };
+  for (const balance of [null, { data_available: false, error_kind: "network" }, { data_available: true, amount: NaN }]) {
+    const view = quotaView({ ...base, balance });
+    assert.equal(view.text, "Unavailable");
+    assert.doesNotMatch(view.text, /0\.00/);
+  }
+  const auth = quotaView({ ...base, balance: { data_available: false, error_kind: "authentication", http_status: 401 } });
+  assert.match(auth.note, /401.*API key/);
+});
+
+test("the reviewer menu excludes the currently selected agent", () => {
+  const source = readFileSync(new URL("../src/joe/web_assets/app.js", import.meta.url), "utf8");
+  const menu = source.split("function updateReviewerMenu(")[1].split("\n}")[0];
+  assert.match(menu, /provider\.id\) !== agent/);
+  assert.match(menu, /reviewer !== agent/);
+  assert.match(menu, /providerMenuItems\(candidates, reviewer\)/);
+});
+
+test("restoring a conversation keeps its saved reviewer across reciprocal agents", () => {
+  const source = readFileSync(new URL("../src/joe/web_assets/app.js", import.meta.url), "utf8");
+  // A native select only accepts a value that one of its options carries.
+  const select = (value = "") => ({
+    options: [{ value: "" }], _value: value,
+    get value() { return this._value; },
+    set value(next) { this._value = this.options.some(option => option.value === next) ? next : ""; }
+  });
+  const controls = {
+    agent: select(), reviewer: select(), mode: { value: "" }, model: select(), effort: select(),
+    "tool-web-access": { checked: true }
+  };
+  const providers = ["codex", "deepseek", "claude"];
+  const setOptions = (element, items) => {
+    element.options = items.map(item => ({ value: item.id }));
+    element.value = "";
+  };
+  setOptions(controls.agent, [{ id: "" }, ...providers.map(id => ({ id }))]);
+  const context = vm.createContext({
+    $: id => controls[id], state: { providerCatalog: providers }, setOptions,
+    refreshSelectMenu: () => {}, updateCapabilityMenus: () => {}, updateEfforts: () => {},
+    t: key => key, capitalize: value => value
+  });
+  for (const [name, next] of [["providerMenuItems", "function updateProviderMenu("],
+    ["applySettings", "async function saveSettings("]]) {
+    vm.runInContext(source.slice(source.indexOf(`function ${name}(`), source.indexOf(next)), context);
+  }
+  const restore = (agent, reviewer) => {
+    vm.runInContext(`applySettings(${JSON.stringify({ agent, reviewer, mode: "review" })})`, context);
+    return [controls.agent.value, controls.reviewer.value, controls.mode.value];
+  };
+  restore("deepseek", "codex");
+  assert.deepEqual(restore("codex", "deepseek"), ["codex", "deepseek", "review"]);
+  assert.deepEqual(restore("deepseek", "codex"), ["deepseek", "codex", "review"]);
+  assert.ok(!controls.reviewer.options.some(option => option.value === "deepseek"));
+  // A reviewer equal to the restored agent is invalid and falls back to automatic.
+  assert.equal(restore("codex", "codex")[1], "");
 });

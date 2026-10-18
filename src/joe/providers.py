@@ -11,7 +11,8 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, TypedDict
+from urllib.parse import quote, quote_plus
 
 from .models import Intent, ProviderResult
 from .mcp import allowed_tool_patterns
@@ -20,8 +21,11 @@ from .provider_registry import (
     get_provider_spec,
     get_provider_specs,
     provider_executables,
+    provider_backend,
 )
 from .usage import record_gemini_usage
+from .usage_tracking import parse_provider_usage
+from .codex_results import codex_failure
 
 StreamCallback = Callable[[str, str], None]
 PROVIDER_HEARTBEAT_SECONDS = 10.0
@@ -43,7 +47,7 @@ RESTRICTED_MODES = {"dontAsk"}
 # contraint pas, et l'interface doit le dire au lieu de laisser croire à une
 # garantie globale. Voir tests/test_providers.py::
 # test_network_control_declaration_matches_commands.
-NETWORK_CONTROLLED_PROVIDERS = ("codex",)
+NETWORK_CONTROLLED_PROVIDERS = ("codex", "deepseek")
 
 
 def provider_runtime_issue(name: str, executable: str) -> str | None:
@@ -53,6 +57,10 @@ def provider_runtime_issue(name: str, executable: str) -> str | None:
     npm package supplies its own layout, so this check intentionally applies
     only to Joe's managed native installation.
     """
+    if name == "deepseek":
+        from .deepseek_profile import setup_error
+
+        return setup_error() or provider_runtime_issue("codex", executable)
     if name != "codex":
         return None
     path = Path(executable)
@@ -249,21 +257,32 @@ class Provider:
         command.extend(["--config", "project_doc_max_bytes=0"])
         if effort:
             command.extend(["--config", f'model_reasoning_effort="{effort}"'])
+        if self.remote_access and sandbox == "workspace-write":
+            # La liste --config de exec remplace la liste globale de Codex.
+            # On garde le reseau ici pour preserver connexion et effort.
+            command.extend(
+                ["--config", "sandbox_workspace_write.network_access=true"]
+            )
         command.extend([
             "exec", "--json",
             "--ephemeral", "--skip-git-repo-check", "--color", "never",
             "--sandbox", sandbox,
         ])
-        if self.remote_access and sandbox == "workspace-write":
-            command.extend(
-                ["--config", "sandbox_workspace_write.network_access=true"]
-            )
         command.extend(self._roots("--add-dir"))
         if model:
             command.extend(["--model", model])
         # A dash reads the prompt from stdin, avoiding Windows argv limits.
         # The same transport is supported on macOS and Linux.
         return [*command, "-C", str(cwd), "-"]
+
+    def _argv_deepseek(
+        self, access: str, prompt: str, cwd: Path,
+        model: str | None, effort: str | None,
+    ) -> list[str]:
+        from .deepseek_profile import apply_codex_profile, model_defaults
+
+        model, effort = model_defaults(model, effort)
+        return apply_codex_profile(self._argv_codex(access, prompt, cwd, model, effort))
 
     def _argv_claude(
         self,
@@ -465,8 +484,20 @@ class Provider:
         )
         command[0] = executable
         env = os.environ.copy()
+        if self.name == "deepseek":
+            from .deepseek_profile import process_environment
+
+            try:
+                env = process_environment(env)
+            except (OSError, ValueError):
+                return ProviderResult(
+                    self.name, command, "", "DeepSeek API key requires setup", 127, 0,
+                    error_kind="authentication",
+                )
+        uses_stdin = provider_backend(self.name) == "codex"
         secret_values = _secret_values(env)
         start = time.monotonic()
+        process: subprocess.Popen[str] | None = None
         try:
             group_options = _process_group_options()
             process = subprocess.Popen(
@@ -476,18 +507,29 @@ class Provider:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                stdin=(subprocess.PIPE if self.name == "codex" else None),
+                stdin=(subprocess.PIPE if uses_stdin else None),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 bufsize=1,
                 **group_options,
             )
-            if self.name == "codex" and process.stdin is not None:
+            if uses_stdin and process.stdin is not None:
                 try:
                     process.stdin.write(prompt)
                     process.stdin.close()
                 except BrokenPipeError:
                     pass
+        except (OSError, ValueError):
+            if process is not None:
+                _stop_process(process, force=True)
+            # Une exception OS ou d'encodage peut contenir argv ou
+            # l'environnement : on renvoie un diagnostic fixe, sans message.
+            return ProviderResult(
+                self.name, [_redact_values(part, secret_values) for part in command],
+                "", "Provider process could not be started", 127,
+                time.monotonic() - start, error_kind="unavailable",
+            )
+        try:
             stdout, stderr = _collect_streams(
                 process,
                 timeout,
@@ -499,6 +541,14 @@ class Provider:
             )
             if self.name == "gemini":
                 record_gemini_usage(stdout)
+            usage = parse_provider_usage(self.name, stdout, model)
+            failure = codex_failure(stdout, process.returncode) if uses_stdin else None
+            if failure is not None:
+                if self.name == "deepseek":
+                    from .deepseek_errors import classify_failure
+
+                    failure = classify_failure(failure)
+                stderr = (stderr.rstrip() + "\n" + failure.error_message).lstrip()
             stdout = _final_output(self.name, stdout)
             duration = time.monotonic() - start
             kind = classify_error(
@@ -506,30 +556,41 @@ class Provider:
                 process.returncode,
                 self.name,
             )
+            redacted_command = [_redact_values(part, secret_values) for part in command]
             return ProviderResult(
-                self.name, command, stdout, stderr,
-                process.returncode, duration, error_kind=kind,
+                self.name, redacted_command, stdout, stderr,
+                process.returncode, duration,
+                usage=usage, error_kind=(failure.error_kind or kind) if failure else kind,
+                error_message=failure.error_message if failure else None,
+                http_status=failure.http_status if failure else None,
+                retry_after_seconds=failure.retry_after_seconds if failure else None,
             )
         except TimeoutError as exc:
+            redacted_command = [_redact_values(part, secret_values) for part in command]
+            partial = getattr(exc, "stdout", "")
             return ProviderResult(
                 self.name,
-                command,
-                getattr(exc, "stdout", ""),
+                redacted_command,
+                _final_output(self.name, partial),
                 getattr(exc, "stderr", ""),
                 124,
                 time.monotonic() - start,
                 timed_out=True,
                 error_kind="timeout",
+                usage=parse_provider_usage(self.name, partial, model),
             )
         except ProviderCancelled as exc:
+            redacted_command = [_redact_values(part, secret_values) for part in command]
+            partial = getattr(exc, "stdout", "")
             return ProviderResult(
                 self.name,
-                command,
-                getattr(exc, "stdout", ""),
+                redacted_command,
+                _final_output(self.name, partial),
                 getattr(exc, "stderr", ""),
                 130,
                 time.monotonic() - start,
                 error_kind="cancelled",
+                usage=parse_provider_usage(self.name, partial, model),
             )
 
 
@@ -569,6 +630,7 @@ def classify_error(
 # Un fournisseur déclaré au registre sans constructeur d'argv — ou l'inverse —
 # échoue ici, à l'import, au lieu de lever au premier run.
 _ARGV_BUILDERS = {
+    "deepseek": Provider._argv_deepseek,
     "codex": Provider._argv_codex,
     "claude": Provider._argv_claude,
     "copilot": Provider._argv_copilot,
@@ -624,9 +686,13 @@ def active_providers(
     usable = {
         name: provider
         for name, provider in declared.items()
-        if name not in refused and resolve_executable(name)
+        if name not in refused and (executable := resolve_executable(name))
+        and (name != "deepseek" or not provider_runtime_issue(name, executable))
     }
-    return usable or declared
+    return usable or {
+        name: provider for name, provider in declared.items()
+        if not get_provider_spec(name).manual_only
+    }
 
 
 def _text(value: str | bytes | None) -> str:
@@ -645,7 +711,7 @@ def _collect_streams(
     watchdog_seconds: float | None = None,
 ) -> tuple[str, str]:
     events: queue.Queue[tuple[str, str | None]] = queue.Queue()
-    output = {"stdout": [], "stderr": []}
+    output: dict[str, list[str]] = {"stdout": [], "stderr": []}
 
     def read(stream_name: str, stream) -> None:
         try:
@@ -673,6 +739,7 @@ def _collect_streams(
     )
     closed = 0
     process_exited_at: float | None = None
+    error: ProviderCancelled | TimeoutError
     while closed < 2:
         if cancel_event and cancel_event.is_set():
             _stop_process(process)
@@ -768,7 +835,8 @@ def _stop_orphaned_process_group(process: subprocess.Popen[str]) -> None:
     if os.name == "nt":
         for stream in (process.stdout, process.stderr):
             try:
-                stream.close()
+                if stream is not None:
+                    stream.close()
             except (AttributeError, OSError):
                 pass
         return
@@ -778,9 +846,14 @@ def _stop_orphaned_process_group(process: subprocess.Popen[str]) -> None:
         pass
 
 
+class ProcessGroupOptions(TypedDict, total=False):
+    creationflags: int
+    start_new_session: bool
+
+
 def _process_group_options(
     platform_name: str | None = None,
-) -> dict[str, int | bool]:
+) -> ProcessGroupOptions:
     platform = os.name if platform_name is None else platform_name
     if platform == "nt":
         return {
@@ -963,12 +1036,11 @@ def _activity_gemini(event: dict) -> dict[str, str] | None:
 
 def _event_model(event: dict[str, object]) -> str | None:
     """Best-effort extraction of the precise model id from a CLI init event."""
+    data, session = event.get("data"), event.get("session")
     candidates = (
         event.get("model"),
-        (event.get("data") if isinstance(event.get("data"), dict) else {}).get("model"),
-        (event.get("session") if isinstance(event.get("session"), dict) else {}).get(
-            "model"
-        ),
+        data.get("model") if isinstance(data, dict) else None,
+        session.get("model") if isinstance(session, dict) else None,
     )
     for candidate in candidates:
         if isinstance(candidate, str) and candidate.strip():
@@ -1056,9 +1128,15 @@ def _secret_values(env: dict[str, str]) -> tuple[str, ...]:
     values = {
         value
         for name, value in env.items()
-        if value and len(value) >= 8 and any(marker in name.upper() for marker in markers)
+        if value and (len(value) >= 8 or name == "DEEPSEEK_API_KEY")
+        and any(marker in name.upper() for marker in markers)
     }
-    return tuple(sorted(values, key=len, reverse=True))
+    variants = {
+        variant
+        for value in values
+        for variant in (value, json.dumps(value, ensure_ascii=False)[1:-1], quote(value, safe=""), quote_plus(value))
+    }
+    return tuple(sorted(variants, key=len, reverse=True))
 
 
 def _redact_values(text: str, values: tuple[str, ...]) -> str:
@@ -1071,16 +1149,18 @@ def _redact_values(text: str, values: tuple[str, ...]) -> str:
 # et un extracteur de réponse. Sans cette validation, il se dégradait
 # silencieusement : aucun événement affiché, réponse brute renvoyée.
 _ACTIVITY_PARSERS = {
+    "deepseek": _activity_codex,
     "codex": _activity_codex,
     "claude": _activity_claude,
     "antigravity": _activity_antigravity,
 }
 _FINAL_EXTRACTORS = {
+    "deepseek": _final_codex,
     "codex": _final_codex,
     "claude": _final_claude,
     "antigravity": _final_antigravity,
 }
-_FINAL_SEPARATORS = {}
+_FINAL_SEPARATORS: dict[str, str] = {}
 
 _STREAMING = {
     spec.name for spec in get_provider_specs() if spec.streams_json

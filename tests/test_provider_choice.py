@@ -34,7 +34,7 @@ def test_routing_only_receives_cli_that_are_installed(monkeypatch):
     assert len(default_providers()) == len(get_provider_names())
 
 
-def test_nothing_installed_keeps_every_provider(monkeypatch):
+def test_nothing_installed_keeps_automatic_provider_diagnostics(monkeypatch):
     """Une liste vide priverait le routage de destinataire.
 
     L'erreur au run doit rester « exécutable introuvable », qui dit la vérité,
@@ -43,7 +43,7 @@ def test_nothing_installed_keeps_every_provider(monkeypatch):
     monkeypatch.setattr("joe.providers.resolve_executable", lambda name, **kwargs: None)
     monkeypatch.setattr("joe.provider_choice.disabled_providers", set)
 
-    assert sorted(active_providers()) == sorted(get_provider_names())
+    assert sorted(active_providers()) == sorted(set(get_provider_names()) - {"deepseek"})
 
 
 def test_a_refused_provider_leaves_the_routing(monkeypatch, isolated_preferences):

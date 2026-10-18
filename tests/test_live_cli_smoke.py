@@ -30,4 +30,5 @@ def test_installed_provider_clis_answer_doctor_live(tmp_path):
     assert all(
         provider["installed"] and provider["live"]["ok"]
         for provider in report["providers"]
+        if not provider.get("manual_only")
     )

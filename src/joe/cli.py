@@ -22,7 +22,7 @@ from .routing import resolve_route
 from .route_classifier import classify_request
 from .capabilities import select_model_tier
 from .skills import create_skill, import_skill, list_skills, parse_skill_request
-from .usage import usage_status
+from .usage import routing_usage_status
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
@@ -105,7 +105,7 @@ def _handle(
     dry_run: bool,
 ) -> int:
     local_skill = parse_skill_request(request)
-    statuses = usage_status()
+    statuses = routing_usage_status()
     baseline = orchestrator.router.route(
         request,
         forced_agent=agent,

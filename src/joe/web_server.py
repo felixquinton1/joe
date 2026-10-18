@@ -697,6 +697,7 @@ class Handler(BaseHTTPRequestHandler):
             if not self.server.manager.conversations.get(conversation_id):
                 raise ValueError("valid conversation_id is required")
             agent = payload.get("agent") or None
+            reviewer = payload.get("reviewer") or None
             mode = payload.get("mode") or None
             model = str(payload.get("model", "")).strip() or None
             effort = str(payload.get("effort", "")).strip() or None
@@ -717,6 +718,8 @@ class Handler(BaseHTTPRequestHandler):
             plan_stage = "propose" if payload.get("plan") is True else ""
             if agent is not None and agent not in set(get_provider_names()):
                 raise ValueError("invalid agent")
+            if reviewer is not None and (not isinstance(reviewer, str) or reviewer not in get_provider_names()):
+                raise ValueError("invalid reviewer")
             if mode not in {None, *(item.value for item in Mode)}:
                 raise ValueError("invalid mode")
         except ValueError as exc:
@@ -743,16 +746,20 @@ class Handler(BaseHTTPRequestHandler):
         decision = None
         classification = None
         if skill_request is None:
-            decision = self.server.manager.decide(
-                request,
-                conversation_id,
-                agent,
-                mode,
-                model,
-                effort,
-                execution_mode,
-                plan_stage=plan_stage,
-            )
+            try:
+                decision = self.server.manager.decide(
+                    request,
+                    conversation_id,
+                    agent,
+                    mode,
+                    model,
+                    effort,
+                    execution_mode,
+                    plan_stage=plan_stage,
+                    reviewer=reviewer,
+                )
+            except ValueError as exc:
+                return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             classification = decision.classification
             if (
                 classification is not None
@@ -809,6 +816,9 @@ class Handler(BaseHTTPRequestHandler):
             conversation_id,
             request,
         )
+        if approved:
+            approval = self.server.manager.approvals.get(approval_id) or {}
+            approved = (approval.get("payload", {}).get("reviewer") or None) == reviewer
         if needs_approval and not approved:
             conversation = self.server.manager.conversations.get(
                 conversation_id
@@ -867,6 +877,7 @@ class Handler(BaseHTTPRequestHandler):
                 execution_mode,
                 attachments,
                 decision=decision,
+                reviewer=reviewer,
                 plan_stage=plan_stage,
                 prompt_label=prompt_label,
                 language=language,

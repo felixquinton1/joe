@@ -23,6 +23,7 @@ def resolve_route(
     *,
     forced_agent: str | None = None,
     forced_mode: Mode | None = None,
+    forced_reviewer: str | None = None,
     previous_provider: str | None = None,
     classification: RouteClassification | None = None,
     wait_for_provider: bool = False,
@@ -32,17 +33,18 @@ def resolve_route(
         request,
         forced_agent=forced_agent,
         forced_mode=forced_mode,
+        forced_reviewer=forced_reviewer,
         previous_provider=previous_provider,
     )
-    if not forced_agent and forced_mode is None:
+    if not forced_agent and forced_mode is None and not forced_reviewer:
         route = apply_classification(route, classification)
-    if not forced_agent:
+    if not forced_agent and not forced_reviewer:
         route = balance_route(route, statuses)
     route, quota_admission = admit_route(
         route,
         statuses,
         forced_agent=bool(forced_agent),
-        forced_mode=forced_mode is not None,
+        forced_mode=forced_mode is not None or bool(forced_reviewer),
         wait_for_provider=wait_for_provider,
     )
     return RoutingDecision(route, quota_admission, classification)

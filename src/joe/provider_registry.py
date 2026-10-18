@@ -12,12 +12,16 @@ premier run.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 
 @dataclass(frozen=True)
 class ProviderSpec:
     name: str
     label: str
+    cli_backend: str = ""
+    manual_only: bool = False
+    quota_kind: Literal["windows", "balance"] = "windows"
 
     streams_json: bool = False
     """La CLI émet des événements JSON sur stdout plutôt que du texte brut.
@@ -219,6 +223,15 @@ PROVIDERS = (
         homepage="https://cursor.com/docs/cli/installation",
         sign_in="agent login",
     ),
+    ProviderSpec(
+        "deepseek", "DeepSeek", cli_backend="codex", manual_only=True, quota_kind="balance",
+        streams_json=True, executables=("codex",), identity_marker="codex",
+        reviewer_peers=("codex", "claude"), minimum_version="0.163.0",
+        install_posix="npm install -g @openai/codex", requires_node="22",
+        install_windows="npm install -g @openai/codex",
+        homepage="https://api-docs.deepseek.com/quick_start/agent_integrations/codex/",
+        sign_in="Configure Joe's isolated DeepSeek profile and credentials.json",
+    ),
 )
 
 _BY_NAME = {provider.name: provider for provider in PROVIDERS}
@@ -266,6 +279,10 @@ def provider_executables(name: str) -> tuple[str, ...]:
     return spec.executables or (spec.name,)
 
 
+def provider_backend(name: str) -> str:
+    return get_provider_spec(name).cli_backend or name
+
+
 def install_hint(name: str, *, windows: bool = False) -> dict[str, str]:
     """Tout ce qu'il faut pour installer et connecter une CLI absente."""
     spec = get_provider_spec(name)
@@ -311,7 +328,10 @@ def arbitration_order(
     consensus. Ils passent simplement en fin de liste.
     """
     allowed = eligible if eligible is not None else get_provider_names()
-    candidates = [name for name in allowed if name in _BY_NAME]
+    candidates = [
+        name for name in allowed if name in _BY_NAME
+        and (not get_provider_spec(name).manual_only or name in proposers)
+    ]
 
     def rank(name: str) -> tuple[int, int, str]:
         return (
@@ -325,7 +345,10 @@ def arbitration_order(
 
 def counterpart(primary: str, eligible: tuple[str, ...] | None = None) -> str | None:
     """Return the preferred reviewer for `primary`, honouring the registry."""
-    allowed = eligible if eligible is not None else get_provider_names()
+    allowed = tuple(
+        name for name in (eligible if eligible is not None else get_provider_names())
+        if not get_provider_spec(name).manual_only
+    )
     for peer in get_provider_spec(primary).reviewer_peers:
         if peer != primary and peer in allowed:
             return peer

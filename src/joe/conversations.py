@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .provider_registry import get_provider_names
+from .usage_tracking import usage_token_count
 
 # Le jeu d'agents acceptés se dérive du registre : le recopier ici laissait un
 # nouveau fournisseur être silencieusement remis à « automatique ».
@@ -52,6 +53,7 @@ def _ai_access(value: Any, legacy: Any = None) -> str:
 
 DEFAULT_SETTINGS = {
     "agent": "",
+    "reviewer": "",
     "mode": "",
     "model": "",
     "effort": "",
@@ -420,13 +422,7 @@ class ConversationStore:
                         stats.setdefault("cost_statuses", [])
                         stats["input_tokens"] += usage.get("input_tokens") or 0
                         stats["output_tokens"] += usage.get("output_tokens") or 0
-                        known_tokens = (
-                            (usage.get("input_tokens") or 0)
-                            + (usage.get("output_tokens") or 0)
-                            + (usage.get("cache_read_tokens") or 0)
-                            + (usage.get("cache_creation_tokens") or 0)
-                            + (usage.get("reasoning_tokens") or 0)
-                        )
+                        known_tokens = usage_token_count(usage)
                         if known_tokens or item["tokens"] is not None:
                             item["tokens"] = (item["tokens"] or 0) + known_tokens
                         if usage.get("cost_usd") is not None:
@@ -820,6 +816,9 @@ class ConversationStore:
             settings = conversation.setdefault("settings", dict(DEFAULT_SETTINGS))
             if settings.get("agent", "") not in _VALID_AGENTS:
                 settings["agent"] = ""
+            settings.setdefault("reviewer", "")
+            if settings["reviewer"] not in _VALID_AGENTS:
+                settings["reviewer"] = ""
             conversation.setdefault(
                 "last_call_at",
                 conversation.get("updated_at", conversation.get("created_at", 0)),

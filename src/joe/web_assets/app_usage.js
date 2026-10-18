@@ -2,6 +2,40 @@ window.createJoeUsage = function createJoeUsage({
   state, $, escapeHtml, capitalize, addMessage, translate, fetcher
 }) {
   const tr = (key, params) => translate ? translate(key, params) : key;
+  function usageDescription(usage) {
+    const tokens = usage.total_tokens ?? ((usage.input_tokens || 0) + (usage.output_tokens || 0));
+    // Older DeepSeek summaries were saved with a provider-specific status.
+    const deepseekEstimate = usage.cost_status === "estimated_deepseek_api"
+      || (usage.cost_status === "estimated_api" && (usage.cost_provider || usage.provider) === "deepseek");
+    if (deepseekEstimate && typeof usage.cost_usd === "number") {
+      return tr("deepseek_usage_estimate", { cost: usage.cost_usd.toFixed(6), tokens });
+    }
+    return tr("usage_tokens_count", { tokens });
+  }
+
+  function balanceView(provider) {
+    const balance = provider.balance;
+    const amount = balance?.amount ?? balance?.balance_usd;
+    const currency = balance?.currency || "USD";
+    const known = balance?.data_available === true && typeof amount === "number"
+      && Number.isFinite(amount) && ["USD", "CNY"].includes(currency);
+    const view = { text: tr("usage_balance_unavailable"), note: "" };
+    if (known) {
+      view.text = new Intl.NumberFormat(document.documentElement?.lang || "en", {
+        style: "currency", currency, minimumFractionDigits: 2,
+        maximumFractionDigits: amount > 0 && amount < 0.01 ? 6 : 2
+      }).format(amount);
+      if (balance.funds_sufficient === false) view.note = tr("usage_balance_insufficient");
+    } else if (balance?.error_kind === "authentication") {
+      view.note = tr("usage_balance_auth", { status: balance.http_status || 401 });
+    } else if (balance?.error_kind === "credentials") {
+      view.note = tr("usage_balance_credentials");
+    } else {
+      view.note = tr("usage_balance_retry");
+    }
+    return view;
+  }
+
   async function loadUsage(force = false) {
     const button = $("refresh-usage");
     if (force) {
@@ -25,25 +59,38 @@ window.createJoeUsage = function createJoeUsage({
     const target = $("usage");
     target.replaceChildren();
     for (const provider of state.usage) {
+      const metered = provider.quota_display === "token_billing";
       const card = document.createElement("article");
-      card.className = `usage-card ${provider.available ? "" : "unavailable"} ${provider.stale ? "stale" : ""}`;
+      card.className = ["usage-card", provider.available ? "" : "unavailable",
+        metered ? "usage-card--metered" : "", provider.stale ? "stale" : ""]
+        .filter(Boolean).join(" ");
       const plan = provider.plan ? `<span>${escapeHtml(provider.plan)}</span>` : "";
-      card.innerHTML = `<header><strong>${escapeHtml(provider.provider)}</strong>${plan}</header>`;
+      const label = provider.label || provider.provider;
+      card.innerHTML = `<header><strong>${escapeHtml(label)}</strong>${plan}</header>`;
+      let balance;
+      if (metered) {
+        balance = balanceView(provider);
+        const row = document.createElement("div");
+        row.className = "usage-balance";
+        row.innerHTML = `<span>${escapeHtml(tr("usage_balance_label"))}</span><strong>${escapeHtml(balance.text)}</strong>`;
+        card.appendChild(row);
+      }
       if (!provider.available) {
         const message = document.createElement("p");
         message.textContent = provider.message;
         card.appendChild(message);
       } else {
-        for (const window of provider.windows) card.appendChild(usageWindow(window));
+        for (const window of provider.windows || []) card.appendChild(usageWindow(window));
         for (const metric of provider.metrics || []) {
           const row = document.createElement("div");
           row.className = "usage-metric";
           row.innerHTML = `<span>${escapeHtml(metric.name)}</span><strong>${escapeHtml(metric.value)}</strong>`;
           card.appendChild(row);
         }
-        if (provider.message) {
+        const note = balance?.note || provider.message;
+        if (note) {
           const message = document.createElement("p");
-          message.textContent = provider.message;
+          message.textContent = note;
           card.appendChild(message);
         }
       }
@@ -127,6 +174,8 @@ window.createJoeUsage = function createJoeUsage({
   }
 
   return {
+    usageDescription,
+    balanceView,
     formatPercent,
     loadUsage,
     renderUsage,

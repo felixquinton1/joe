@@ -33,6 +33,7 @@
       <div class="controls">
         <div class="control-group routing-controls">
           <label><span data-i18n="agent">Agent</span><select id="agent"><option value="">Automatique</option></select></label>
+          <label><span data-i18n="reviewer">Reviewer</span><select id="reviewer"><option value="" data-i18n="automatic">Automatique</option></select></label>
           <label><span data-i18n="workflow">Workflow</span><select id="mode"><option value="" data-i18n="automatic">Automatique</option><option value="fast">FAST</option><option value="review">REVIEW</option><option value="consensus">CONSENSUS</option></select></label>
         </div>
         <details class="advanced-config">
@@ -290,7 +291,7 @@
         <div class="automation-section-head"><h3 data-i18n="plan_configuration">Configuration du plan</h3><p data-i18n="plan_configuration_help">Chaque étape démarre après validation de la précédente.</p></div>
         <fieldset class="dialog-section automation-policy">
           <legend data-i18n="quota_strategy">Stratégie de quotas</legend>
-          <label><span data-i18n="reserved_ai">IA réservée</span><select id="automation-provider"><option value="" data-i18n="automatic_balancing">Équilibrage automatique</option><option value="claude">Claude</option><option value="codex">Codex</option><option value="antigravity">Antigravity</option><option value="copilot">Copilot</option><option value="cursor-agent">Cursor</option></select></label>
+          <label><span data-i18n="reserved_ai">IA réservée</span><select id="automation-provider"><option value="" data-i18n="automatic_balancing">Équilibrage automatique</option><option value="claude">Claude</option><option value="codex">Codex</option><option value="antigravity">Antigravity</option><option value="copilot">Copilot</option><option value="cursor-agent">Cursor</option><option value="deepseek">DeepSeek</option></select></label>
           <small data-i18n="quota_help">Joe peut attendre la prochaine fenêtre de quota. Une relecture ou un consensus peut appeler une autre IA.</small>
         </fieldset>
         <label><span data-i18n="title">Titre</span><input id="automation-title" maxlength="80" placeholder="Ex. Campagne de tests nocturne"></label>

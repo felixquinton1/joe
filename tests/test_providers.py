@@ -231,6 +231,25 @@ def test_codex_prompt_uses_stdin_without_platform_command_line_limits(tmp_path):
     assert prompt not in result.command
 
 
+def test_usage_parser_errors_are_not_masked_as_start_failures(tmp_path, monkeypatch):
+    import pytest
+
+    class Fixture(Provider):
+        def command(
+            self, prompt, cwd, intent, model=None, effort=None, execution_mode=None
+        ):
+            return [sys.executable, "-c", "print('fixture')"]
+
+    def broken_parser(*args, **kwargs):
+        raise ValueError("usage parser bug")
+
+    monkeypatch.setattr(providers, "parse_provider_usage", broken_parser)
+    with pytest.raises(ValueError, match="usage parser bug"):
+        Fixture("codex", sys.executable).run(
+            "prompt", tmp_path, Intent.ANALYZE, timeout=10,
+        )
+
+
 def test_model_is_forwarded_to_each_cli():
     cwd = Path("/tmp/project")
     for name, executable in (
@@ -403,6 +422,18 @@ def test_additional_project_roots_are_forwarded_to_each_cli():
             "p", cwd, Intent.ANALYZE
         )
         assert command[command.index(flag) + 1] == str(extra[0])
+
+
+def test_codex_network_setting_preserves_global_connection_and_effort_overrides():
+    # Codex exec's own --config list replaces the global list rather than
+    # merging it. Keep networking alongside connection/model overrides.
+    for name in ("codex", "deepseek"):
+        command = Provider(name, "codex", remote_access=True).command(
+            "hello", Path("/tmp/project"), Intent.MODIFY,
+            effort="low", execution_mode="workspace-write",
+        )
+        assert command.index("sandbox_workspace_write.network_access=true") < command.index("exec"), name
+        assert '--config' not in command[command.index("exec") + 1:], name
 
 
 def test_codex_remote_access_enables_native_search_and_write_network():

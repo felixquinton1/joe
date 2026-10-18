@@ -1,5 +1,6 @@
 import http.client
 import json
+from types import SimpleNamespace
 
 from conftest import assert_mode, build_test_server
 
@@ -8,7 +9,10 @@ from joe.auth import load_or_create_token, required_role, rotate_token
 
 def start_server(tmp_path, role):
     # Ces tests exercent la porte d'approbation : accès manuel explicite.
-    return build_test_server(tmp_path, role=role, ai_access="manual")
+    server, thread = build_test_server(tmp_path, role=role, ai_access="manual")
+    # Approval tests must never launch an installed CLI after authorization.
+    server.manager.orchestrator.execute = lambda *args, **kwargs: ("OK", "")
+    return server, thread
 
 
 def request(server, method, path, payload=None, token=None, headers=None):
@@ -339,6 +343,9 @@ def test_full_access_flag_in_the_body_never_authorizes_a_run(tmp_path):
         assert status == 428
 
         server.manager.approvals.decide(approval_id, "approved")
+        server.manager.start = lambda *args, **kwargs: SimpleNamespace(
+            run_id="run-approved"
+        )
         status, _, _ = request(
             server,
             "POST",

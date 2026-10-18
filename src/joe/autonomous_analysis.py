@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .autonomous_scale import scale_audit
+from .usage_tracking import usage_token_count
 
 
 TOKEN_FIELDS = (
@@ -264,7 +265,7 @@ def model_usage(campaign: dict[str, Any]) -> dict[str, int]:
             if usage is None:
                 unknown += 1
                 continue
-            known_tokens += sum(int(usage.get(field) or 0) for field in TOKEN_FIELDS)
+            known_tokens += usage_token_count(usage)
     return {
         "prompts": prompts,
         "model_calls": calls,

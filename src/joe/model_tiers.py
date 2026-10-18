@@ -67,6 +67,10 @@ _SIGNALS: tuple[tuple[str, tuple[str, ...]], ...] = (
 # dans le catalogue de Claude Code, et le Sonnet le plus récent qu'Antigravity
 # propose. Une table commune donnait à l'un le classement de l'autre.
 DECLARED: dict[str, dict[str, dict[str, Any]]] = {
+    "deepseek": {
+        "deepseek-flash": {"tier": "light", "preference": 1, "metered": True},
+        "deepseek-v4-pro": {"tier": "strong", "preference": 1, "metered": True},
+    },
     "claude": {
         # Haiku coûte moins cher que Sonnet, mais sa fenêtre est trop courte
         # pour du code : à niveau égal, Joe a toujours préféré Sonnet, et

@@ -24,6 +24,7 @@ class Route:
     primary: str
     reviewer: str | None = None
     reason: str = ""
+    explicit_reviewer: bool = False
 
 
 @dataclass
@@ -36,6 +37,10 @@ class ProviderResult:
     duration_seconds: float
     timed_out: bool = False
     error_kind: str | None = None
+    error_message: str | None = None
+    http_status: int | None = None
+    retry_after_seconds: float | None = None
+    usage: dict[str, Any] | None = None
 
     @property
     def ok(self) -> bool:
@@ -50,3 +55,11 @@ class ProviderResult:
         data.pop("stdout")
         data.pop("stderr")
         return data
+
+
+@dataclass(frozen=True)
+class ProviderFailure:
+    error_message: str
+    http_status: int | None = None
+    retry_after_seconds: float | None = None
+    error_kind: str | None = None

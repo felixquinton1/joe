@@ -6,6 +6,7 @@ import subprocess
 import threading
 import time
 import uuid
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -13,8 +14,10 @@ from typing import Any
 from . import __version__
 from .models import Mode, Route
 from .provider_health import apply_cooldowns
-from .provider_registry import counterpart, usage_providers
+from .provider_registry import counterpart, usage_providers, get_provider_spec
 from .usage_claude import (
+    CLAUDE_STALE_SECONDS,
+    claude_unscoped_limit,
     claude_account_plan as _claude_account_plan,
     claude_reset_timestamp as _claude_reset_timestamp,
     claude_status as _claude_status_impl,
@@ -51,7 +54,7 @@ def usage_status(force: bool = False) -> list[dict[str, Any]]:
     global _cache
     with _lock:
         if not force and _cache and time.monotonic() - _cache[0] < _CACHE_SECONDS:
-            return _cache[1]
+            return apply_cooldowns(_cache[1])
     antigravity_installed = bool(shutil.which("agy"))
     fresh = [
         _codex_status(),
@@ -74,9 +77,13 @@ def usage_status(force: bool = False) -> list[dict[str, Any]]:
             "copilot",
             "Disponible uniquement dans la session interactive Copilot",
         ),
+        _deepseek_status(),
     ]
     with _lock:
-        providers = [_with_last_available(item) for item in fresh]
+        providers = [
+            item if force and item.get("stale") else _with_last_available(item)
+            for item in fresh
+        ]
         _cache = (time.monotonic(), providers)
         return apply_cooldowns(providers)
 
@@ -85,6 +92,87 @@ def cached_usage_status() -> list[dict[str, Any]]:
     """Return quota data immediately without probing provider CLIs."""
     with _lock:
         return apply_cooldowns(list(_cache[1])) if _cache else []
+
+
+def _deepseek_status() -> dict[str, Any]:
+    # Le solde d'API n'est pas une fenetre d'abonnement Codex. On ne sonde
+    # jamais un modele facture pour l'obtenir.
+    from .deepseek_profile import fetch_deepseek_balance, setup_error
+    from .providers import resolve_executable
+
+    issue = setup_error()
+    installed = bool(resolve_executable("deepseek"))
+    return {
+        "provider": "deepseek", "label": "DeepSeek",
+        "quota_display": "token_billing", "installed": installed, "setup_required": issue,
+        "available": installed and issue is None,
+        "availability_state": "quota_unknown" if installed and issue is None else "unavailable",
+        "plan": "DeepSeek API", "windows": [],
+        "balance": fetch_deepseek_balance(),
+        "message": issue or ("DeepSeek API: solde et reprise inconnus, facturation par token"
+                             if installed else "Codex CLI non installée"),
+    }
+
+
+def _quota_observation_invalid(status: dict[str, Any], now: float) -> bool:
+    if status.get("stale") or status.get("refresh_required"):
+        return True
+    observed_at = status.get("observed_at")
+    if (
+        status.get("provider") == "claude"
+        and isinstance(observed_at, (int, float))
+        and now - observed_at > CLAUDE_STALE_SECONDS
+    ):
+        return True
+    return any(
+        (
+            isinstance(window.get("resets_at"), (int, float))
+            and float(window["resets_at"]) <= now
+        ) or (
+            status.get("provider") == "claude"
+            and isinstance(window.get("observed_at"), (int, float))
+            and now - window["observed_at"] > CLAUDE_STALE_SECONDS
+        )
+        for window in status.get("windows") or []
+    )
+
+
+def routing_usage_status() -> list[dict[str, Any]]:
+    """Obtenir un instantane de routage avec les regles de cache existantes."""
+    statuses = usage_status()
+    now = time.time()
+    if any(
+        item.get("provider") in {"claude", "codex"}
+        and (
+            _quota_observation_invalid(item, now)
+            or (
+                item.get("provider") == "claude"
+                and not item.get("windows")
+                and shutil.which("claude")
+            )
+        )
+        for item in statuses
+    ):
+        statuses = usage_status(force=True)
+    snapshot = []
+    for item in statuses:
+        result = deepcopy(item)
+        if item.get("provider") in {"claude", "codex"} and _quota_observation_invalid(
+            item, time.time()
+        ):
+            # Le repli diagnostique est une preuve, jamais une capacite
+            # actuelle. None preserve la semantique existante de quota inconnu.
+            result.update(
+                last_observation=dict(item), windows=[], available=None,
+                availability_state="quota_unknown", stale=True,
+                message="Current quota unknown; refresh did not establish valid capacity",
+            )
+            result["limit_observations"] = [
+                {**observation, "governing": False, "reason": "Quota observation is stale"}
+                for observation in item.get("limit_observations", [])
+            ]
+        snapshot.append(result)
+    return apply_cooldowns(snapshot)
 
 
 def record_gemini_usage(
@@ -129,10 +217,10 @@ def _with_last_available(status: dict[str, Any]) -> dict[str, Any]:
             retained = _without_expired_windows(previous[1], time.time())
             if retained.get("available"):
                 age = now - previous[0]
-                retained["stale"] = age > 15 * 60
+                retained["stale"] = age > CLAUDE_STALE_SECONDS
                 retained["message"] = (
                     "Dernière actualisation /usage Claude"
-                    if age <= 15 * 60
+                    if age <= CLAUDE_STALE_SECONDS
                     else "Dernière actualisation /usage Claude · mesure ancienne"
                 )
                 return retained
@@ -166,6 +254,7 @@ def _without_expired_windows(
         return status
     result = dict(status)
     result["windows"] = valid
+    result["refresh_required"] = True
     result["available"] = bool(valid)
     if not valid:
         result["message"] = "Quota expiré · actualisation en attente"
@@ -228,13 +317,17 @@ def admit_route(
         )
         for provider in usage_providers()
     }
+    for provider in (route.primary, route.reviewer):
+        if provider and get_provider_spec(provider).manual_only:
+            capacity[provider] = _provider_capacity(by_provider.get(provider), threshold, timestamp)
     constrained = {
         provider: detail
         for provider, (eligible, _, detail) in capacity.items()
         if eligible is False
     }
     if wait_for_provider and capacity.get(route.primary, (None,))[0] is False:
-        retry_at = _next_quota_reset(
+        retry_at = by_provider.get(route.primary, {}).get("retry_at")
+        retry_at = retry_at if isinstance(retry_at, (int, float)) and retry_at > timestamp else _next_quota_reset(
             [by_provider[route.primary]] if route.primary in by_provider else [],
             threshold=threshold,
             now=timestamp,
@@ -244,11 +337,17 @@ def admit_route(
             "message": (
                 f"{route.primary.capitalize()} est réservé pour ce projet, mais "
                 "sa réserve connue est insuffisante."
+                f" {capacity[route.primary][2]}"
             ),
             "forced": False,
             "blocked": True,
             "retry_at": retry_at,
             "reserved_provider": route.primary,
+            "automatic_retry": not (
+                by_provider.get(route.primary, {}).get("error_kind") in {
+                    "authentication", "insufficient_balance", "rate_limit",
+                } and by_provider.get(route.primary, {}).get("retry_at") is None
+            ),
         }
     if forced_mode:
         relevant = {
@@ -490,6 +589,7 @@ def _provider_capacity(
             "quota_exhausted",
             "temporarily_unavailable",
             "unavailable",
+            "balance_exhausted", "rate_limited", "authentication_required",
         } or any(
             marker in detail.lower()
             for marker in (
@@ -573,10 +673,11 @@ def _claude_status(path: Path | None = None) -> dict[str, Any]:
 
 def _refresh_claude_status(timeout: int = 18) -> dict[str, Any]:
     plan = _local_claude_plan() or _claude_account_plan()
+    started_at = time.time()
     def parse_screen(output: str) -> Any:
         return _parse_claude_usage_screen(output, plan=plan)
 
-    return _refresh_claude_status_impl(
+    status = _refresh_claude_status_impl(
         timeout,
         refresh_via_tmux=_refresh_claude_via_tmux,
         parse_screen=parse_screen,
@@ -585,6 +686,57 @@ def _refresh_claude_status(timeout: int = 18) -> dict[str, Any]:
         os_module=os,
         time_module=time,
     )
+    if not status.get("stale") and status.get("available"):
+        local = _claude_status()
+        observations = local.get("limit_observations", [])
+        status["limit_observations"] = observations
+        if not local.get("stale"):
+            observed_at = local.get("observed_at")
+            if isinstance(observed_at, (int, float)) and observed_at >= started_at:
+                current_windows = local.get("windows") or []
+                # Une reponse structuree obtenue pendant cette actualisation
+                # possede les resets exacts. On remplace ses equivalents rendus
+                # en texte, en gardant les autres lignes et les donnees texte.
+                status["windows"] = [
+                    window for window in status["windows"]
+                    if not any(
+                        claude_unscoped_limit(current.get("scope"))
+                        and (
+                            current.get("source_key") in {"five_hour", "seven_day"}
+                            or current.get("kind") in {"session", "weekly_all"}
+                        )
+                        and current.get("duration_minutes") == window.get("duration_minutes")
+                        for current in current_windows
+                    )
+                ] + current_windows
+                return status
+            # /usage peut enrichir le cache structure de lignes absentes de sa
+            # vue texte. On les conserve dans le meme instantane de routage.
+            for window in local.get("windows") or []:
+                if not window.get("provider_limit"):
+                    continue
+                duplicate = next((existing for existing in status["windows"] if all(
+                    existing.get(key) == window.get(key)
+                    for key in ("scope", "duration_minutes", "remaining_percent", "resets_at")
+                )), None)
+                if duplicate is None:
+                    status["windows"].append(window)
+                else:
+                    duplicate.update({key: value for key, value in window.items() if key != "name"})
+        else:
+            status["limit_observations"] = [
+                {**observation, "governing": False, "reason": "Structured cache is stale"}
+                for observation in observations
+            ]
+            if any(
+                observation.get("applicable")
+                and not claude_unscoped_limit(observation.get("scope"))
+                and isinstance(observation.get("is_active"), bool)
+                for observation in observations
+            ):
+                status["stale"] = True
+                status["message"] = "Claude /usage refreshed; structured limits remain stale"
+    return status
 
 
 def _refresh_claude_via_tmux(timeout: int) -> dict[str, Any] | None:

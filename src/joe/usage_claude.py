@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -12,6 +13,80 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .text_encoding import read_utf8_compatible
+
+
+CLAUDE_STALE_SECONDS = 15 * 60
+
+
+def claude_unscoped_limit(scope: Any) -> bool:
+    """Un modele ou une surface optionnel/nul n'ajoute pas de restriction."""
+    return scope is None or (
+        isinstance(scope, dict)
+        and not (scope.keys() - {"model", "surface"})
+        and scope.get("model") is None
+        and scope.get("surface") is None
+    )
+
+
+def claude_limit_observations(value: Any, now: float) -> list[dict[str, Any]]:
+    """Conserver les lignes serveur sans deduire l'applicabilite du libelle."""
+    if not isinstance(value, list):
+        return []
+    observations = []
+    for row in value:
+        observation: dict[str, Any] = {"provider_limit": row, "governing": False}
+        observations.append(observation)
+        if not isinstance(row, dict):
+            observation["reason"] = "Invalid limit row"
+            continue
+        observation.update({key: row.get(key) for key in (
+            "kind", "group", "scope", "severity", "is_active",
+        )})
+        percent = row.get("percent")
+        reset = iso_timestamp(row.get("resets_at"))
+        if (
+            isinstance(percent, bool)
+            or not isinstance(row.get("kind"), str)
+            or not row["kind"].strip()
+            or not isinstance(percent, (int, float))
+            or not math.isfinite(percent)
+            or not 0 <= percent <= 100
+            or (row.get("resets_at") is not None and reset is None)
+        ):
+            observation["reason"] = "Invalid kind, utilization or reset"
+            continue
+        kind = row.get("kind")
+        scope = row.get("scope")
+        applicable = (
+            claude_unscoped_limit(scope) and kind in {"session", "weekly_all"}
+        ) or (
+            isinstance(scope, dict)
+            and not (scope.keys() - {"model", "surface"})
+            and scope.get("model") is None
+            and isinstance(scope.get("surface"), dict)
+            and scope["surface"].get("display_name") == "Claude Code"
+            and not (scope["surface"].keys() - {"display_name"})
+        )
+        duration = 300 if kind == "session" else 10080 if kind == "weekly_all" else None
+        observation.update({
+            "name": str(kind or "Claude limit"),
+            "used_percent": round(percent, 1),
+            "remaining_percent": round(100 - percent, 1),
+            "resets_at": reset,
+            "duration_minutes": duration,
+            "applicable": applicable,
+        })
+        if reset is not None and reset <= now:
+            observation["reason"] = "Expired limit"
+        elif not isinstance(row.get("is_active"), bool):
+            observation["reason"] = "Invalid headline flag"
+        elif applicable:
+            # is_active designe l'indicateur principal. Une autre ligne peut
+            # tout de meme decrire une fenetre courante et applicable.
+            observation["governing"] = True
+        else:
+            observation["reason"] = "Applicability unknown for Joe's selected model/surface"
+    return observations
 
 
 def claude_status(
@@ -27,10 +102,13 @@ def claude_status(
         cached = payload["cachedUsageUtilization"]
         fetched_at = float(cached["fetchedAtMs"]) / 1000
         utilization = cached["utilization"]
+        if not isinstance(utilization, dict):
+            raise ValueError("Invalid usage cache")
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
         return unavailable("claude", "Quota non encore mis en cache par Claude")
 
     windows = []
+    refresh_required = False
     for name, key, duration in (
         ("5 heures", "five_hour", 300),
         ("7 jours", "seven_day", 10080),
@@ -42,6 +120,7 @@ def claude_status(
             continue
         resets_at = iso_timestamp(item.get("resets_at"))
         if resets_at is not None and resets_at <= now_timestamp:
+            refresh_required = True
             continue
         used = max(0.0, min(100.0, float(item["utilization"])))
         windows.append(
@@ -51,21 +130,55 @@ def claude_status(
                 "remaining_percent": round(100 - used, 1),
                 "resets_at": resets_at,
                 "duration_minutes": duration,
+                "source_key": key,
             }
         )
+    observations = claude_limit_observations(utilization.get("limits"), now_timestamp)
+    for observation in observations:
+        observation["observed_at"] = fetched_at
+    refresh_required = refresh_required or any(
+        observation.get("reason") == "Expired limit"
+        and isinstance(observation.get("is_active"), bool)
+        for observation in observations
+    )
+    for observation in observations:
+        if not observation["governing"]:
+            continue
+        # Une ligne serveur dupliquee enrichit l'observation historique ; des
+        # portees ou des resets differents restent toujours des fenetres a part.
+        duplicate = next((window for window in windows if (
+            claude_unscoped_limit(observation.get("scope"))
+            and observation["duration_minutes"] == window["duration_minutes"]
+            and observation["used_percent"] == window["used_percent"]
+            and observation["resets_at"] == window["resets_at"]
+        )), None)
+        if duplicate is not None:
+            duplicate.update({key: observation[key] for key in (
+                "kind", "group", "scope", "severity", "is_active", "provider_limit", "observed_at",
+            )})
+        else:
+            windows.append(dict(observation))
     age_seconds = now_timestamp - fetched_at
     if age_seconds > stale_usage_seconds:
-        return unavailable(
+        result = unavailable(
             "claude",
             "Données trop anciennes · ouvre /usage dans Claude pour les actualiser",
         )
-    stale = age_seconds > 15 * 60
+        result.update(stale=True, observed_at=fetched_at, limit_observations=[
+            {**observation, "governing": False, "reason": "Structured cache is stale"}
+            for observation in observations
+        ])
+        return result
+    stale = age_seconds > CLAUDE_STALE_SECONDS
     return {
         "provider": "claude",
         "available": bool(windows),
         "stale": stale,
+        "observed_at": fetched_at,
+        "refresh_required": refresh_required,
         "plan": claude_plan(payload),
         "windows": windows,
+        "limit_observations": observations,
         "message": (
             "Dernière mesure connue · ouvre /usage dans Claude pour l’actualiser"
             if windows and stale
@@ -295,6 +408,7 @@ def parse_claude_usage_screen(
         "provider": "claude",
         "available": True,
         "stale": False,
+        "observed_at": current.timestamp(),
         "plan": plan,
         "windows": windows,
         "message": "Actualisé via /usage Claude",

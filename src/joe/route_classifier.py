@@ -13,7 +13,7 @@ from .capabilities import cached_provider_capabilities, select_model
 from .models import Intent, Mode, ProviderResult, Route
 from .provider_health import recent_failure
 from .provider_registry import counterpart
-from .provider_registry import get_provider_names
+from .provider_registry import get_provider_names, get_provider_spec
 from .providers import Provider
 
 CLASSIFIER_TIMEOUT_SECONDS = 6
@@ -170,6 +170,7 @@ def apply_classification(
     provider = (
         classification.provider
         if classification.provider in get_provider_names()
+        and not get_provider_spec(classification.provider).manual_only
         else route.primary
     )
     reviewer = None

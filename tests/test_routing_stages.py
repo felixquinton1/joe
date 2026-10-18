@@ -106,7 +106,7 @@ def test_the_threshold_reads_the_smallest_known_window(monkeypatch):
     """Une fenetre de cinq heures presque vide compte, meme si la semaine va bien."""
     monkeypatch.setattr(
         web_runs,
-        "usage_status",
+        "routing_usage_status",
         lambda force=False: [
             {"provider": "codex", "windows": [
                 {"name": "5 heures", "remaining_percent": 4.0},

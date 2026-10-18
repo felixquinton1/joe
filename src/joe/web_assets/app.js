@@ -122,6 +122,23 @@ function providerMenuItems(providers, selected) {
   });
 }
 
+function updateReviewerMenu(providers) {
+  // Le relecteur doit etre independant : on retire l'agent actuellement
+  // choisi, pour qu'un fournisseur ne puisse pas relire son propre travail.
+  const agent = $("agent").value;
+  const reviewer = $("reviewer").value;
+  const candidates = providers.filter(provider =>
+    (typeof provider === "string" ? provider : provider.id) !== agent
+  );
+  setOptions($("reviewer"), [
+    { id: "", label: t("automatic") }, ...providerMenuItems(candidates, reviewer)
+  ]);
+  if (reviewer && reviewer !== agent) {
+    $("reviewer").value = reviewer;
+  }
+  refreshSelectMenu($("reviewer"));
+}
+
 function updateProviderMenu(providers) {
   // Le statut est relu toutes les cinq secondes. Reconstruire le menu a chaque
   // fois remettait la sélection à zéro puis la restaurait — mais le menu
@@ -142,6 +159,7 @@ function updateProviderMenu(providers) {
   // `setOptions` a rafraîchi le menu visible avant que la valeur ne soit
   // remise : sans ce second passage, l'affichage contredit la sélection.
   refreshSelectMenu($("agent"));
+  updateReviewerMenu(providers);
   // Le modèle dépend de l'agent : si la reconstruction a perdu la sélection,
   // la liste des modèles doit suivre au lieu de rester sur l'ancienne.
   if ($("agent").value !== selected) updateCapabilityMenus();
@@ -625,7 +643,8 @@ function providerRow(provider, interactive) {
   state.textContent = [
     t(providerState(provider).key),
     provider.version || "",
-    provider.runtime_issue || ""
+    provider.runtime_issue || "",
+    provider.last_failure?.message || ""
   ].filter(Boolean).join(" · ");
   head.append(name, state);
   row.appendChild(head);
@@ -672,7 +691,7 @@ function providerRow(provider, interactive) {
   // Personne n'installe cinq CLI : sans savoir a quoi chacune sert, choisir
   // revient a deviner. Le texte reprend la doctrine de routage de Joe.
   const purpose = t(`provider_purpose_${provider.provider.replace(/-/g, "_")}`);
-  if (!provider.installed && purpose) {
+  if ((!provider.installed || provider.manual_only) && purpose) {
     const role = document.createElement("small");
     role.className = "provider-purpose";
     role.textContent = purpose;
@@ -941,6 +960,7 @@ let loadUsage;
 let showQuotaNotice;
 let updateCountdowns;
 let renderUsage;
+let usageDescription;
 
 function shortCommit(value) {
   return value ? value.slice(0, 8) : t("unavailable");
@@ -1095,6 +1115,7 @@ function updateEfforts() {
 function currentSettings() {
   return {
     agent: $("agent").value,
+    reviewer: $("reviewer").value,
     mode: $("mode").value,
     model: $("model").value,
     effort: $("effort").value,
@@ -1109,11 +1130,17 @@ function applySettings(settings) {
     $("model").value = settings.model;
   }
   updateEfforts();
-  $("mode").value = settings.mode || "";
+  // Les options du relecteur excluent encore l'agent de la conversation
+  // précédente : sans reconstruction, un relecteur enregistré absent de cette
+  // liste retombait silencieusement sur « Automatique ».
+  $("reviewer").value = "";
+  updateReviewerMenu(state.providerCatalog || []);
+  $("reviewer").value = settings.reviewer || "";
+  $("mode").value = $("reviewer").value ? "review" : (settings.mode || "");
   $("effort").value = settings.effort || "";
   $("tool-web-access").checked = settings.web_access !== "off";
   for (const select of [
-    $("agent"), $("mode"), $("model"), $("effort")
+    $("agent"), $("reviewer"), $("mode"), $("model"), $("effort")
   ]) {
     refreshSelectMenu(select);
   }
@@ -1501,7 +1528,8 @@ function updateWorkflowFallback(provider, fallback) {
   loadUsage,
   showQuotaNotice,
   updateCountdowns,
-  renderUsage
+  renderUsage,
+  usageDescription
 } = window.createJoeUsage({
   state,
   $,
@@ -1700,13 +1728,19 @@ function handleEvent(conversationId, event, finalBubble) {
     const followOutput = shouldFollow(agent.output);
     agent.output.textContent += event.text;
     scrollIfFollowing(agent.output, followOutput);
+  } else if (event.type === "usage") {
+    const agent = ensureAgent(event.provider);
+    const row = document.createElement("div");
+    row.className = "activity-row";
+    row.textContent = usageDescription(event);
+    agent.activity.appendChild(row);
   } else if (event.type === "workflow_update") {
     renderWorkflowUpdate(event, finalBubble, activeRun?.runId || "");
   } else if (event.type === "provider_end") {
     const agent = ensureAgent(event.provider);
     agent.card.classList.remove("active");
     agent.heartbeat.classList.add("hidden");
-    agent.status.textContent = event.ok ? t("done") : `${t("failed")} · ${event.error || t("unknown")}`;
+    agent.status.textContent = event.ok ? t("done") : `${t("failed")} · ${event.error_message || event.error || t("unknown")}`;
     if (!structuredWorkflow && event.ok) {
       renderWorkflowUpdate({
         mode: activeRun?.mode || "fast",
@@ -1816,6 +1850,7 @@ function currentRunSettings() {
   }
   return {
     agent: $("agent").value,
+    reviewer: $("reviewer").value,
     mode: $("mode").value,
     model,
     effort: $("effort").value,
@@ -2166,13 +2201,27 @@ $("request").addEventListener("keydown", event => {
 });
 $("agent").addEventListener("change", () => {
   updateCapabilityMenus();
+  updateReviewerMenu(state.providerCatalog || []);
   saveSettings();
 });
 $("model").addEventListener("change", () => {
   updateEfforts();
   saveSettings();
 });
-$("mode").addEventListener("change", saveSettings);
+$("reviewer").addEventListener("change", () => {
+  if ($("reviewer").value) {
+    $("mode").value = "review";
+    refreshSelectMenu($("mode"));
+  }
+  saveSettings();
+});
+$("mode").addEventListener("change", () => {
+  if ($("mode").value !== "review") {
+    $("reviewer").value = "";
+    refreshSelectMenu($("reviewer"));
+  }
+  saveSettings();
+});
 $("effort").addEventListener("change", saveSettings);
 $("tool-web-access").addEventListener("change", saveSettings);
 $("task-filter").addEventListener("change", renderTasks);

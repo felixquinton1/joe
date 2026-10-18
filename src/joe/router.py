@@ -213,8 +213,8 @@ def _intent_text(text: str) -> tuple[str, bool]:
             flags=re.IGNORECASE,
         )
         read_only = read_only or bool(count)
-    for pattern in NEGATED_ACTION_CLAUSES:
-        actionable = pattern.sub(" ", actionable)
+    for clause in NEGATED_ACTION_CLAUSES:
+        actionable = clause.sub(" ", actionable)
     return actionable, read_only
 
 
@@ -233,36 +233,51 @@ class Router:
     def __init__(self, available: frozenset[str] | None = None):
         self.available = available
 
-    def _usable(self, name: str | None) -> str | None:
+    def _usable(self, name: str | None, *, allow_manual: bool = False) -> str | None:
         """Le fournisseur demande, ou le premier de ses replis qui existe."""
-        if not name or self.available is None or name in self.available:
+        if not name:
+            return name
+        if allow_manual and get_provider_spec(name).manual_only:
+            return name
+        permitted = allow_manual or not get_provider_spec(name).manual_only
+        if permitted and (self.available is None or name in self.available):
             return name
         for candidate in get_provider_spec(name).fallbacks:
-            if candidate in self.available:
+            if not get_provider_spec(candidate).manual_only and (
+                self.available is None or candidate in self.available
+            ):
                 return candidate
         # Aucun repli declare n'est la. Plutot que de nommer un absent — ce qui
         # fait echouer le run sans rien expliquer — on prend ce qui existe.
         # C'est le cas d'une machine equipee d'un seul fournisseur qui ne
         # figure dans la chaine de personne.
-        return next(iter(sorted(self.available)), name)
+        automatic = sorted(
+            candidate for candidate in (self.available or ())
+            if not get_provider_spec(candidate).manual_only
+        )
+        return next(iter(automatic), name if permitted else "codex")
 
     def _fit(
-        self, intent: Intent, mode: Mode, primary: str, reviewer: str | None
+        self, intent: Intent, mode: Mode, primary: str, reviewer: str | None,
+        *, allow_manual: bool = False,
     ) -> tuple[Mode, str, str | None, str]:
         """Ajuster la decision a ce que la machine peut reellement tenir."""
         if self.available is None:
             return mode, primary, reviewer, ""
-        primary = self._usable(primary) or primary
+        primary = self._usable(primary, allow_manual=allow_manual) or primary
         # `sorted` plutot que l'ordre d'un ensemble : deux machines identiques
         # doivent router pareil.
-        seconds = [name for name in sorted(self.available) if name != primary]
+        seconds = [name for name in sorted(self.available) if name != primary
+                   and not get_provider_spec(name).manual_only]
         # Remplacer le primaire peut l'amener sur le fournisseur qui relisait :
         # un relecteur qui est aussi l'auteur ne relit rien.
-        if reviewer == primary or (reviewer and reviewer not in self.available):
+        if reviewer == primary or (reviewer and (
+            reviewer not in self.available or get_provider_spec(reviewer).manual_only
+        )):
             peers = [
                 peer
                 for peer in get_provider_spec(primary).reviewer_peers
-                if peer in self.available and peer != primary
+                if peer in seconds
             ]
             reviewer = peers[0] if peers else (seconds[0] if seconds else None)
         if mode in (Mode.REVIEW, Mode.CONSENSUS) and not seconds:
@@ -280,8 +295,18 @@ class Router:
         *,
         forced_agent: str | None = None,
         forced_mode: Mode | None = None,
+        forced_reviewer: str | None = None,
         previous_provider: str | None = None,
     ) -> Route:
+        if forced_reviewer:
+            if forced_reviewer not in get_provider_names():
+                raise ValueError("Unknown reviewer")
+            if forced_mode not in (None, Mode.REVIEW):
+                raise ValueError("An explicit reviewer requires REVIEW mode")
+            if self.available is not None and forced_reviewer not in self.available:
+                raise ValueError("The selected reviewer is unavailable; check provider setup")
+            if forced_agent == forced_reviewer:
+                raise ValueError("Executor and reviewer must be different providers")
         routing_text = _routing_text(request)
         lower = routing_text.lower()
         words = _tokens(routing_text)
@@ -293,6 +318,8 @@ class Router:
         explicit_provider = (
             next(iter(named_providers)) if len(named_providers) == 1 else None
         )
+        if explicit_provider and get_provider_spec(explicit_provider).manual_only:
+            explicit_provider = None
         health_check = _is_health_check(routing_text, bool(explicit_provider))
         capability_question = any(
             phrase in lower for phrase in CAPABILITY_QUESTION_PHRASES
@@ -377,7 +404,7 @@ class Router:
         elif explicit_provider and not explicit_workflow_review:
             primary = explicit_provider
         elif follow_up_review:
-            primary = counterpart(previous_provider or "")
+            primary = counterpart(previous_provider or "") or "codex"
         elif any(phrase in lower for phrase in LARGE_CONTEXT_WORDS):
             primary = "antigravity"
         elif words & DOC_WORDS or words & ARCHITECTURE_WORDS:
@@ -404,5 +431,18 @@ class Router:
                 else ""
             )
         )
-        mode, primary, reviewer, adjusted = self._fit(intent, mode, primary, reviewer)
+        if forced_reviewer:
+            primary = self._usable(primary, allow_manual=bool(forced_agent)) or primary
+            if primary == forced_reviewer:
+                candidates = sorted(self.available if self.available is not None else get_provider_names())
+                primary = next((name for name in candidates
+                                if name != forced_reviewer
+                                and not get_provider_spec(name).manual_only), "")
+            if not primary or primary == forced_reviewer:
+                raise ValueError("No independent executor is available for this reviewer")
+            return Route(intent, Mode.REVIEW, primary, forced_reviewer,
+                         reason + "; explicit-reviewer", explicit_reviewer=True)
+        mode, primary, reviewer, adjusted = self._fit(
+            intent, mode, primary, reviewer, allow_manual=bool(forced_agent)
+        )
         return Route(intent, mode, primary, reviewer, reason + adjusted)

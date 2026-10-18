@@ -1885,3 +1885,85 @@ def test_compaction_filters_declared_but_unavailable_providers(monkeypatch):
 
     monkeypatch.setattr(web_runs_module, "disabled_providers", lambda: {"codex"})
     assert _installed_compaction_providers(providers) == {}
+
+
+def test_explicit_reviewer_is_decided_persisted_and_recovered(tmp_path, monkeypatch):
+    recover = RunManager._recover_pending
+    monkeypatch.setattr(RunManager, "_recover_pending", lambda self: None)
+    monkeypatch.setattr(RunManager, "_execute", lambda self, *args: None)
+    manager = RunManager(tmp_path)
+    manager.orchestrator.router.available = frozenset({"codex", "deepseek"})
+    conversation = manager.conversations.create()
+    manager.conversations.update(conversation["id"], {"settings": {"reviewer": "deepseek"}})
+    assert manager.conversations.get(conversation["id"])["settings"]["reviewer"] == "deepseek"
+    run = manager.start("Explain this code", conversation["id"], "codex", "review", None, None, None,
+                        reviewer="deepseek")
+    assert run.requested_reviewer == "deepseek"
+    pending = manager._read_pending()[run.run_id]
+    assert pending["reviewer"] == "deepseek"
+    captured = {}
+    monkeypatch.setattr(manager, "start", lambda *args, **kwargs: captured.update(kwargs))
+    recover(manager)
+    assert captured["reviewer"] == "deepseek"
+    decision = manager.decide("Explain this code", conversation["id"], "codex", "review", reviewer="deepseek")
+    assert decision.route.reviewer == "deepseek"
+    assert decision.route.explicit_reviewer
+
+
+@pytest.mark.parametrize("reviewer,agent,mode,status", [
+    ("deepseek", "codex", "review", 202),
+    ("codex", "codex", "review", 400),
+    ("deepseek", "codex", "fast", 400),
+    ("unknown", "codex", "review", 400),
+])
+def test_web_explicit_reviewer_validation(tmp_path, monkeypatch, reviewer, agent, mode, status):
+    server, thread = start_server(tmp_path)
+    server.manager.orchestrator.router.available = frozenset({"codex", "deepseek"})
+    conversation = server.manager.conversations.create()
+    captured = {}
+    monkeypatch.setattr(server.manager, "start", lambda *args, **kwargs:
+                        captured.update(kwargs) or SimpleNamespace(run_id="review-test"))
+    try:
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port)
+        connection.request("POST", "/api/runs", body=json.dumps({
+            "request": "Explain this code", "conversation_id": conversation["id"],
+            "agent": agent, "mode": mode, "reviewer": reviewer,
+        }), headers={"Content-Type": "application/json"})
+        response = connection.getresponse()
+        assert response.status == status, response.read()
+        response.read()
+        if status == 202:
+            assert captured["reviewer"] == reviewer
+            assert captured["decision"].route.reviewer == reviewer
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_changing_reviewer_requires_a_new_access_approval(tmp_path, monkeypatch):
+    server, thread = build_test_server(tmp_path, ai_access="manual")
+    server.manager.orchestrator.router.available = frozenset({"codex", "claude", "deepseek"})
+    conversation = server.manager.conversations.create("main")
+    monkeypatch.setattr(server.manager, "start", lambda *args, **kwargs:
+                        pytest.fail("An altered review selection must not start"))
+    body = {"request": "Implement this change", "conversation_id": conversation["id"],
+            "agent": "codex", "mode": "review", "reviewer": "deepseek"}
+    try:
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port)
+        connection.request("POST", "/api/runs", body=json.dumps(body),
+                           headers={"Content-Type": "application/json"})
+        response = connection.getresponse()
+        assert response.status == 428
+        approval_id = json.loads(response.read())["approval_id"]
+        server.manager.approvals.decide(approval_id, "approved")
+        connection.request("POST", "/api/runs", body=json.dumps({
+            **body, "reviewer": "claude", "approval_id": approval_id,
+        }), headers={"Content-Type": "application/json"})
+        response = connection.getresponse()
+        assert response.status == 428
+        assert json.loads(response.read())["approval_id"] != approval_id
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)

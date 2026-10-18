@@ -46,6 +46,7 @@ def provider_capabilities(refresh: bool = False) -> dict[str, Any]:
         },
         "antigravity": _antigravity,
         "cursor-agent": _cursor,
+        "deepseek": _deepseek,
     }
     result = {}
     for provider in get_provider_specs():
@@ -169,6 +170,30 @@ def select_model_tier(provider: str, tier: str) -> str | None:
     if len(models) <= 2:
         return str(models[0].get("id"))
     return str(models[len(models) // 2].get("id"))
+
+
+def _deepseek() -> dict[str, Any]:
+    from .deepseek_profile import EFFORTS, MODELS, setup_error
+
+    issue = setup_error()
+    return {
+        "available": bool(resolve_executable("deepseek")) and issue is None,
+        "setup_required": issue,
+        "engine": "codex",
+        "manual_only": True,
+        "models": [
+            {"id": model, "label": "DeepSeek Flash" if model == MODELS[0] else "DeepSeek Pro",
+             "default_effort": "high", "efforts": list(EFFORTS), "metered": True}
+            for model in MODELS
+        ],
+        "efforts": list(EFFORTS),
+        "execution_modes": [
+            _mode("auto", "Automatique"),
+            _mode("read-only", "Lecture seule"),
+            _mode("workspace-write", "Commandes et modifications du projet"),
+            _mode("danger-full-access", "Accès complet — confirmation avant chaque run"),
+        ],
+    }
 
 
 def _codex() -> dict[str, Any]:
